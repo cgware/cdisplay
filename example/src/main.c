@@ -1,4 +1,5 @@
 
+#include "ctime.h"
 #include "display_driver.h"
 #include "fs.h"
 #include "log.h"
@@ -6,8 +7,6 @@
 #include "proc.h"
 #include "sock.h"
 #include "window.h"
-
-#include <unistd.h>
 
 int main()
 {
@@ -45,7 +44,8 @@ int main()
 	window_t wnd2 = {0};
 	window_init(&wnd, &display, 0, 0);
 	window_init(&wnd2, &display, 100, 100);
-	sleep(1);
+
+	c_sleep(1000);
 
 	window_free(&wnd);
 	window_free(&wnd2);
