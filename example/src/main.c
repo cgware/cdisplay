@@ -33,7 +33,7 @@ int main()
 		}
 
 		drv = i->data;
-		if (strv_eq(STRV(drv->name), STRV("X11"))) {
+		if (strv_eq(strv_cstr(drv->name), STRV("X11"))) {
 			break;
 		}
 	}

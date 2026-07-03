@@ -547,4 +547,3 @@ static display_driver_t display_x11 = {
 };
 
 DISPLAY_DRIVER(display_x11, &display_x11);
-// 577 536

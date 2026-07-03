@@ -3,6 +3,7 @@
 #include "test.h"
 
 STEST(display);
+STEST(display_none);
 STEST(display_x11);
 STEST(window);
 
@@ -10,6 +11,7 @@ TEST(cwindow)
 {
 	SSTART;
 	RUN(display);
+	RUN(display_none);
 	RUN(display_x11);
 	RUN(window);
 	SEND;
