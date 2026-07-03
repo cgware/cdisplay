@@ -448,10 +448,6 @@ static int intern_atom(display_t *display, strv_t name, u32 *atom)
 	u8 reply[32]	    = {0};
 	size_t off	    = 0;
 
-	if (name.len > 64) {
-		return 1;
-	}
-
 	cbuf_write_u8le(request, &off, X_INTERN_ATOM);
 	cbuf_write_u8le(request, &off, 0);
 	cbuf_write_u16le(request, &off, (u16)(2 + (name.len + pad4(name.len)) / 4));
@@ -686,11 +682,7 @@ static int display_x11_poll_event(display_t *display, display_event_t *event)
 
 	display_x11_t *dx11 = display->data;
 	int flags;
-	if (sock_get_flags(display->ss, dx11->sock, &flags)) {
-		return 1;
-	}
-
-	if (sock_set_flags(display->ss, dx11->sock, flags | 04000)) {
+	if (sock_get_flags(display->ss, dx11->sock, &flags) || sock_set_flags(display->ss, dx11->sock, flags | 04000)) {
 		return 1;
 	}
 
@@ -699,9 +691,7 @@ static int display_x11_poll_event(display_t *display, display_event_t *event)
 		ret = read_x11_event(display, event);
 	} while (ret == 2);
 
-	if (sock_set_flags(display->ss, dx11->sock, flags)) {
-		return 1;
-	}
+	ret = sock_set_flags(display->ss, dx11->sock, flags) ? 1 : ret;
 
 	return ret;
 }

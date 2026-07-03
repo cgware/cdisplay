@@ -189,29 +189,47 @@ static void t_x11_setup_data(u8 *setup, size_t size, u8 screen_count, u16 vendor
 	}
 }
 
-static void t_x11_script_setup_data(sock_t *ss, void *server, u8 success, const void *setup_data, size_t setup_size)
+static void t_x11_atom_reply(u8 reply[32], u8 success, u32 atom)
+{
+	mem_set(reply, 0, 32);
+	cbuf_set_u8le(reply, 0, success);
+	cbuf_set_u32le(reply, 8, atom);
+}
+
+static void t_x11_default_atom_replies(u8 replies[64])
+{
+	t_x11_atom_reply(replies, 1, 0x000000f0);
+	t_x11_atom_reply(&replies[32], 1, 0x000000f1);
+}
+
+static void t_x11_script_setup_data_atoms(sock_t *ss, void *server, u8 success, const void *setup_data, size_t setup_size,
+					  const void *atom_data, size_t atom_size)
 {
 	buf_t script = {0};
 	u8 header[8] = {0};
-	u8 atom_reply[64] = {0};
 
 	t_x11_setup_header(header, success, setup_size / 4);
 
-	if (success == 1) {
-		cbuf_set_u8le(atom_reply, 0, 1);
-		cbuf_set_u32le(atom_reply, 8, 0x000000f0);
-		cbuf_set_u8le(&atom_reply[32], 0, 1);
-		cbuf_set_u32le(&atom_reply[32], 8, 0x000000f1);
-	}
-
-	buf_init(&script, sizeof(header) + setup_size + (success == 1 ? sizeof(atom_reply) : 0), ALLOC_STD);
+	buf_init(&script, sizeof(header) + setup_size + atom_size, ALLOC_STD);
 	buf_add(&script, sizeof(header), header, NULL);
 	buf_add(&script, setup_size, setup_data, NULL);
-	if (success == 1) {
-		buf_add(&script, sizeof(atom_reply), atom_reply, NULL);
+	if (atom_data != NULL) {
+		buf_add(&script, atom_size, atom_data, NULL);
 	}
 	sock_script(ss, server, script.data, script.used);
 	buf_free(&script);
+}
+
+static void t_x11_script_setup_data(sock_t *ss, void *server, u8 success, const void *setup_data, size_t setup_size)
+{
+	u8 atom_reply[64] = {0};
+
+	if (success == 1) {
+		t_x11_default_atom_replies(atom_reply);
+	}
+
+	t_x11_script_setup_data_atoms(ss, server, success, setup_data, setup_size, success == 1 ? atom_reply : NULL,
+				      success == 1 ? sizeof(atom_reply) : 0);
 }
 
 static void t_x11_script_setup_header(sock_t *ss, void *server, u8 success, u16 extra_words)
@@ -362,6 +380,14 @@ static void t_x11_write_unknown_client_event(sock_t *ss, void *peer, u32 window)
 	sock_write_all(ss, peer, event, sizeof(event));
 }
 
+static void t_x11_write_unknown_event(sock_t *ss, void *peer)
+{
+	u8 event[32] = {0};
+
+	cbuf_set_u8le(event, 0, 99);
+	sock_write_all(ss, peer, event, sizeof(event));
+}
+
 TEST(display_x11_driver_is_registered)
 {
 	START;
@@ -441,6 +467,19 @@ TEST(display_x11_window_free_null_window)
 	display_driver_t *drv = t_x11_driver();
 	EXPECT_NE(drv, NULL);
 	EXPECT_EQ(drv->window_free(NULL), 1);
+
+	END;
+}
+
+TEST(display_x11_window_id_null_data)
+{
+	START;
+
+	display_driver_t *drv = t_x11_driver();
+	window_t window	      = {0};
+
+	EXPECT_NE(drv, NULL);
+	EXPECT_EQ(drv->window_id(&window), 0);
 
 	END;
 }
@@ -576,6 +615,119 @@ TEST(display_x11_poll_event_no_event)
 	EXPECT_EQ(display_poll_event(&display, &event), 1);
 	log_set_quiet(0, 0);
 	EXPECT_EQ(event.type, DISPLAY_EVENT_NONE);
+
+	window_free(&window);
+	display_free(&display);
+	sock_close(&ss, peer);
+	sock_close(&ss, server);
+	t_x11_env_free(&fs, &proc, &ss);
+
+	END;
+}
+
+TEST(display_x11_poll_event_null_display)
+{
+	START;
+
+	display_driver_t *drv  = t_x11_driver();
+	display_event_t event = {0};
+
+	EXPECT_NE(drv, NULL);
+	EXPECT_EQ(drv->poll_event(NULL, &event), 1);
+
+	END;
+}
+
+TEST(display_x11_poll_event_null_event)
+{
+	START;
+
+	display_driver_t *drv = t_x11_driver();
+	display_t display    = {0};
+
+	EXPECT_NE(drv, NULL);
+	EXPECT_EQ(drv->poll_event(&display, NULL), 1);
+
+	END;
+}
+
+TEST(display_x11_poll_event_get_flags_failure)
+{
+	START;
+
+	display_driver_t *drv = t_x11_driver();
+	fs_t fs		      = {0};
+	proc_t proc	      = {0};
+	sock_t ss	      = {0};
+	display_t display     = {0};
+	window_t window	      = {0};
+	void *server	      = NULL;
+	void *peer	      = NULL;
+	sock_t *display_ss    = NULL;
+	display_event_t event = {0};
+
+	t_x11_open_window(drv, &fs, &proc, &ss, &display, &window, &server, &peer);
+	display_ss = display.ss;
+	display.ss = NULL;
+
+	EXPECT_EQ(drv->poll_event(&display, &event), 1);
+
+	display.ss = display_ss;
+	window_free(&window);
+	display_free(&display);
+	sock_close(&ss, peer);
+	sock_close(&ss, server);
+	t_x11_env_free(&fs, &proc, &ss);
+
+	END;
+}
+
+TEST(display_x11_wait_event_null_display)
+{
+	START;
+
+	display_driver_t *drv  = t_x11_driver();
+	display_event_t event = {0};
+
+	EXPECT_NE(drv, NULL);
+	EXPECT_EQ(drv->wait_event(NULL, &event), 1);
+
+	END;
+}
+
+TEST(display_x11_wait_event_null_event)
+{
+	START;
+
+	display_driver_t *drv = t_x11_driver();
+	display_t display    = {0};
+
+	EXPECT_NE(drv, NULL);
+	EXPECT_EQ(drv->wait_event(&display, NULL), 1);
+
+	END;
+}
+
+TEST(display_x11_wait_event_unknown_event)
+{
+	START;
+
+	display_driver_t *drv = t_x11_driver();
+	fs_t fs		      = {0};
+	proc_t proc	      = {0};
+	sock_t ss	      = {0};
+	display_t display     = {0};
+	window_t window	      = {0};
+	void *server	      = NULL;
+	void *peer	      = NULL;
+	display_event_t event = {0};
+
+	t_x11_open_window(drv, &fs, &proc, &ss, &display, &window, &server, &peer);
+	t_x11_write_unknown_event(&ss, peer);
+
+	log_set_quiet(0, 1);
+	EXPECT_EQ(display_wait_event(&display, &event), 1);
+	log_set_quiet(0, 0);
 
 	window_free(&window);
 	display_free(&display);
@@ -1325,6 +1477,97 @@ TEST(display_x11_init_setup_alloc_failure)
 	END;
 }
 
+TEST(display_x11_init_intern_atom_read_failure)
+{
+	START;
+
+	display_driver_t *drv = t_x11_driver();
+	fs_t fs		      = {0};
+	proc_t proc	      = {0};
+	sock_t ss	      = {0};
+	display_t display     = {0};
+	void *server	      = NULL;
+	u8 setup[72]	      = {0};
+
+	t_x11_env_init(&fs, &proc, &ss);
+	t_x11_set_display(&proc, STRV(":0"));
+	t_x11_set_xauthority(&proc);
+	t_x11_write_authority(&fs);
+	t_x11_listen(&ss, &server);
+	t_x11_setup_data(setup, sizeof(setup), 1, 0);
+	t_x11_script_setup_data_atoms(&ss, server, 1, setup, sizeof(setup), NULL, 0);
+	log_set_quiet(0, 1);
+	EXPECT_EQ(display_init(&display, drv, &fs, &proc, &ss, ALLOC_STD), NULL);
+	log_set_quiet(0, 0);
+
+	sock_close(&ss, server);
+	t_x11_env_free(&fs, &proc, &ss);
+
+	END;
+}
+
+TEST(display_x11_init_intern_atom_rejected_reply)
+{
+	START;
+
+	display_driver_t *drv = t_x11_driver();
+	fs_t fs		      = {0};
+	proc_t proc	      = {0};
+	sock_t ss	      = {0};
+	display_t display     = {0};
+	void *server	      = NULL;
+	u8 setup[72]	      = {0};
+	u8 atom_reply[32]     = {0};
+
+	t_x11_env_init(&fs, &proc, &ss);
+	t_x11_set_display(&proc, STRV(":0"));
+	t_x11_set_xauthority(&proc);
+	t_x11_write_authority(&fs);
+	t_x11_listen(&ss, &server);
+	t_x11_setup_data(setup, sizeof(setup), 1, 0);
+	t_x11_atom_reply(atom_reply, 0, 0);
+	t_x11_script_setup_data_atoms(&ss, server, 1, setup, sizeof(setup), atom_reply, sizeof(atom_reply));
+	log_set_quiet(0, 1);
+	EXPECT_EQ(display_init(&display, drv, &fs, &proc, &ss, ALLOC_STD), NULL);
+	log_set_quiet(0, 0);
+
+	sock_close(&ss, server);
+	t_x11_env_free(&fs, &proc, &ss);
+
+	END;
+}
+
+TEST(display_x11_init_intern_atom_missing)
+{
+	START;
+
+	display_driver_t *drv = t_x11_driver();
+	fs_t fs		      = {0};
+	proc_t proc	      = {0};
+	sock_t ss	      = {0};
+	display_t display     = {0};
+	void *server	      = NULL;
+	u8 setup[72]	      = {0};
+	u8 atom_reply[32]     = {0};
+
+	t_x11_env_init(&fs, &proc, &ss);
+	t_x11_set_display(&proc, STRV(":0"));
+	t_x11_set_xauthority(&proc);
+	t_x11_write_authority(&fs);
+	t_x11_listen(&ss, &server);
+	t_x11_setup_data(setup, sizeof(setup), 1, 0);
+	t_x11_atom_reply(atom_reply, 1, 0);
+	t_x11_script_setup_data_atoms(&ss, server, 1, setup, sizeof(setup), atom_reply, sizeof(atom_reply));
+	log_set_quiet(0, 1);
+	EXPECT_EQ(display_init(&display, drv, &fs, &proc, &ss, ALLOC_STD), NULL);
+	log_set_quiet(0, 0);
+
+	sock_close(&ss, server);
+	t_x11_env_free(&fs, &proc, &ss);
+
+	END;
+}
+
 TEST(display_x11_init_socket_open_failure)
 {
 	START;
@@ -1462,6 +1705,47 @@ TEST(display_x11_window_init_map_write_failure)
 	END;
 }
 
+TEST(display_x11_window_init_wm_protocols_write_failure)
+{
+	START;
+
+	display_driver_t *drv = t_x11_driver();
+	fs_t fs		      = {0};
+	proc_t proc	      = {0};
+	sock_t ss	      = {0};
+	display_t display     = {0};
+	window_t window	      = {0};
+	void *server	      = NULL;
+	void *peer	      = NULL;
+	u8 setup_request[48]  = {0};
+	u8 atom_request[20]   = {0};
+	u8 atom_request2[24]  = {0};
+	size_t rcvbuf	      = 44;
+
+	t_x11_env_init(&fs, &proc, &ss);
+	t_x11_set_display(&proc, STRV(":0"));
+	t_x11_set_xauthority(&proc);
+	t_x11_write_authority(&fs);
+	t_x11_listen(&ss, &server);
+	t_x11_script_setup(&ss, server);
+	log_set_quiet(0, 1);
+	display_init(&display, drv, &fs, &proc, &ss, ALLOC_STD);
+	sock_accept(&ss, server, &peer);
+	sock_read_all(&ss, peer, setup_request, sizeof(setup_request));
+	sock_read_all(&ss, peer, atom_request, sizeof(atom_request));
+	sock_read_all(&ss, peer, atom_request2, sizeof(atom_request2));
+	sock_setopt(&ss, peer, SOCK_OPT_RCVBUF, &rcvbuf, sizeof(rcvbuf));
+	EXPECT_EQ(window_init(&window, &display, 0, 0), NULL);
+	log_set_quiet(0, 0);
+
+	display_free(&display);
+	sock_close(&ss, peer);
+	sock_close(&ss, server);
+	t_x11_env_free(&fs, &proc, &ss);
+
+	END;
+}
+
 TEST(display_x11_window_free_destroy_write_failure)
 {
 	START;
@@ -1555,9 +1839,16 @@ STEST(display_x11)
 	RUN(display_x11_window_init_null_window);
 	RUN(display_x11_window_init_alloc_failure);
 	RUN(display_x11_window_free_null_window);
+	RUN(display_x11_window_id_null_data);
 	RUN(display_x11_init_success);
 	RUN(display_x11_window_init_writes_requests);
 	RUN(display_x11_poll_event_no_event);
+	RUN(display_x11_poll_event_null_display);
+	RUN(display_x11_poll_event_null_event);
+	RUN(display_x11_poll_event_get_flags_failure);
+	RUN(display_x11_wait_event_null_display);
+	RUN(display_x11_wait_event_null_event);
+	RUN(display_x11_wait_event_unknown_event);
 	RUN(display_x11_wait_event_configure_notify);
 	RUN(display_x11_wait_event_skips_expose);
 	RUN(display_x11_wait_event_skips_map_notify);
@@ -1583,9 +1874,13 @@ STEST(display_x11)
 	RUN(display_x11_init_setup_without_screens);
 	RUN(display_x11_init_invalid_screen_offset);
 	RUN(display_x11_init_setup_alloc_failure);
+	RUN(display_x11_init_intern_atom_read_failure);
+	RUN(display_x11_init_intern_atom_rejected_reply);
+	RUN(display_x11_init_intern_atom_missing);
 	RUN(display_x11_init_socket_open_failure);
 	RUN(display_x11_window_init_resource_exhausted);
 	RUN(display_x11_window_init_create_write_failure);
+	RUN(display_x11_window_init_wm_protocols_write_failure);
 	RUN(display_x11_window_init_map_write_failure);
 	RUN(display_x11_window_free_destroy_write_failure);
 	RUN(display_x11_init_valid_authority_writes_cookie);
