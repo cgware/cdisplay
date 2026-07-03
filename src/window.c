@@ -29,3 +29,12 @@ void window_free(window_t *wnd)
 	wnd->display = NULL;
 	wnd->data    = NULL;
 }
+
+u32 window_id(window_t *wnd)
+{
+	if (wnd == NULL || wnd->display == NULL || wnd->display->drv == NULL || wnd->display->drv->window_id == NULL) {
+		return 0;
+	}
+
+	return wnd->display->drv->window_id(wnd);
+}

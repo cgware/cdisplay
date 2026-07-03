@@ -11,4 +11,6 @@ typedef struct window_s {
 window_t *window_init(window_t *wnd, display_t *display, u16 x, u16 y);
 void window_free(window_t *wnd);
 
+u32 window_id(window_t *wnd);
+
 #endif

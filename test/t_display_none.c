@@ -59,6 +59,66 @@ TEST(display_none_window_init_null_window)
 	END;
 }
 
+TEST(display_none_poll_event_null_display)
+{
+	START;
+
+	display_driver_t *drv = t_none_driver();
+	display_event_t event = {0};
+
+	EXPECT_NE(drv, NULL);
+	EXPECT_EQ(drv->poll_event(NULL, &event), 1);
+
+	END;
+}
+
+TEST(display_none_poll_event_null_event)
+{
+	START;
+
+	display_driver_t *drv = t_none_driver();
+	display_t display     = {0};
+
+	EXPECT_NE(drv, NULL);
+	EXPECT_EQ(drv->poll_event(&display, NULL), 1);
+
+	END;
+}
+
+TEST(display_none_poll_event_empty)
+{
+	START;
+
+	display_driver_t *drv = t_none_driver();
+	display_t display     = {0};
+	display_event_t event = {
+		.type = DISPLAY_EVENT_CLOSE,
+	};
+
+	EXPECT_NE(drv, NULL);
+	EXPECT_EQ(drv->poll_event(&display, &event), 1);
+	EXPECT_EQ(event.type, DISPLAY_EVENT_NONE);
+
+	END;
+}
+
+TEST(display_none_wait_event_empty)
+{
+	START;
+
+	display_driver_t *drv = t_none_driver();
+	display_t display     = {0};
+	display_event_t event = {
+		.type = DISPLAY_EVENT_CLOSE,
+	};
+
+	EXPECT_NE(drv, NULL);
+	EXPECT_EQ(drv->wait_event(&display, &event), 1);
+	EXPECT_EQ(event.type, DISPLAY_EVENT_NONE);
+
+	END;
+}
+
 TEST(display_none_window_free_null_window)
 {
 	START;
@@ -66,6 +126,30 @@ TEST(display_none_window_free_null_window)
 	display_driver_t *drv = t_none_driver();
 	EXPECT_NE(drv, NULL);
 	EXPECT_EQ(drv->window_free(NULL), 1);
+
+	END;
+}
+
+TEST(display_none_window_id_null_window)
+{
+	START;
+
+	display_driver_t *drv = t_none_driver();
+	EXPECT_NE(drv, NULL);
+	EXPECT_EQ(drv->window_id(NULL), 0);
+
+	END;
+}
+
+TEST(display_none_window_id)
+{
+	START;
+
+	display_driver_t *drv = t_none_driver();
+	window_t window	      = {0};
+
+	EXPECT_NE(drv, NULL);
+	EXPECT_EQ(drv->window_id(&window), 0);
 
 	END;
 }
@@ -114,7 +198,13 @@ STEST(display_none)
 	RUN(display_none_init_null_display);
 	RUN(display_none_free_null_display);
 	RUN(display_none_window_init_null_window);
+	RUN(display_none_poll_event_null_display);
+	RUN(display_none_poll_event_null_event);
+	RUN(display_none_poll_event_empty);
+	RUN(display_none_wait_event_empty);
 	RUN(display_none_window_free_null_window);
+	RUN(display_none_window_id_null_window);
+	RUN(display_none_window_id);
 	RUN(display_none_init_success);
 	RUN(display_none_window_init_success);
 

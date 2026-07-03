@@ -193,12 +193,23 @@ static void t_x11_script_setup_data(sock_t *ss, void *server, u8 success, const 
 {
 	buf_t script = {0};
 	u8 header[8] = {0};
+	u8 atom_reply[64] = {0};
 
 	t_x11_setup_header(header, success, setup_size / 4);
 
-	buf_init(&script, sizeof(header) + setup_size, ALLOC_STD);
+	if (success == 1) {
+		cbuf_set_u8le(atom_reply, 0, 1);
+		cbuf_set_u32le(atom_reply, 8, 0x000000f0);
+		cbuf_set_u8le(&atom_reply[32], 0, 1);
+		cbuf_set_u32le(&atom_reply[32], 8, 0x000000f1);
+	}
+
+	buf_init(&script, sizeof(header) + setup_size + (success == 1 ? sizeof(atom_reply) : 0), ALLOC_STD);
 	buf_add(&script, sizeof(header), header, NULL);
 	buf_add(&script, setup_size, setup_data, NULL);
+	if (success == 1) {
+		buf_add(&script, sizeof(atom_reply), atom_reply, NULL);
+	}
 	sock_script(ss, server, script.data, script.used);
 	buf_free(&script);
 }
@@ -217,6 +228,138 @@ static void t_x11_script_setup(sock_t *ss, void *server)
 
 	t_x11_setup_data(setup, sizeof(setup), 1, 0);
 	t_x11_script_setup_data(ss, server, 1, setup, sizeof(setup));
+}
+
+static void t_x11_open_window(display_driver_t *drv, fs_t *fs, proc_t *proc, sock_t *ss, display_t *display, window_t *window,
+			      void **server, void **peer)
+{
+	t_x11_env_init(fs, proc, ss);
+	t_x11_set_display(proc, STRV(":0"));
+	t_x11_set_xauthority(proc);
+	t_x11_write_authority(fs);
+	t_x11_listen(ss, server);
+	t_x11_script_setup(ss, *server);
+	log_set_quiet(0, 1);
+	display_init(display, drv, fs, proc, ss, ALLOC_STD);
+	window_init(window, display, 0, 0);
+	log_set_quiet(0, 0);
+	sock_accept(ss, *server, peer);
+}
+
+static void t_x11_write_key_event(sock_t *ss, void *peer, u8 type, u8 detail, u32 window, u16 x, u16 y, u16 state)
+{
+	u8 event[32] = {0};
+
+	cbuf_set_u8le(event, 0, type);
+	cbuf_set_u8le(event, 1, detail);
+	cbuf_set_u32le(event, 12, window);
+	cbuf_set_u16le(event, 24, x);
+	cbuf_set_u16le(event, 26, y);
+	cbuf_set_u16le(event, 28, state);
+	sock_write_all(ss, peer, event, sizeof(event));
+}
+
+static void t_x11_write_motion_event(sock_t *ss, void *peer, u32 window, u16 x, u16 y, u16 state)
+{
+	u8 event[32] = {0};
+
+	cbuf_set_u8le(event, 0, 6);
+	cbuf_set_u32le(event, 12, window);
+	cbuf_set_u16le(event, 24, x);
+	cbuf_set_u16le(event, 26, y);
+	cbuf_set_u16le(event, 28, state);
+	sock_write_all(ss, peer, event, sizeof(event));
+}
+
+static void t_x11_write_focus_event(sock_t *ss, void *peer, u8 type, u32 window)
+{
+	u8 event[32] = {0};
+
+	cbuf_set_u8le(event, 0, type);
+	cbuf_set_u32le(event, 4, window);
+	sock_write_all(ss, peer, event, sizeof(event));
+}
+
+static void t_x11_write_expose_event(sock_t *ss, void *peer, u32 window)
+{
+	u8 event[32] = {0};
+
+	cbuf_set_u8le(event, 0, 12);
+	cbuf_set_u32le(event, 4, window);
+	sock_write_all(ss, peer, event, sizeof(event));
+}
+
+static void t_x11_write_destroy_event(sock_t *ss, void *peer, u32 window)
+{
+	u8 event[32] = {0};
+
+	cbuf_set_u8le(event, 0, 17);
+	cbuf_set_u32le(event, 8, window);
+	sock_write_all(ss, peer, event, sizeof(event));
+}
+
+static void t_x11_write_unmap_event(sock_t *ss, void *peer, u32 window)
+{
+	u8 event[32] = {0};
+
+	cbuf_set_u8le(event, 0, 18);
+	cbuf_set_u32le(event, 8, window);
+	sock_write_all(ss, peer, event, sizeof(event));
+}
+
+static void t_x11_write_reparent_event(sock_t *ss, void *peer, u32 window)
+{
+	u8 event[32] = {0};
+
+	cbuf_set_u8le(event, 0, 21);
+	cbuf_set_u32le(event, 8, window);
+	sock_write_all(ss, peer, event, sizeof(event));
+}
+
+static void t_x11_write_map_event(sock_t *ss, void *peer, u32 window)
+{
+	u8 event[32] = {0};
+
+	cbuf_set_u8le(event, 0, 19);
+	cbuf_set_u32le(event, 8, window);
+	sock_write_all(ss, peer, event, sizeof(event));
+}
+
+static void t_x11_write_configure_event(sock_t *ss, void *peer, u32 window, u16 x, u16 y, u16 width, u16 height)
+{
+	u8 event[32] = {0};
+
+	cbuf_set_u8le(event, 0, 22);
+	cbuf_set_u32le(event, 8, window);
+	cbuf_set_u16le(event, 16, x);
+	cbuf_set_u16le(event, 18, y);
+	cbuf_set_u16le(event, 20, width);
+	cbuf_set_u16le(event, 22, height);
+	sock_write_all(ss, peer, event, sizeof(event));
+}
+
+static void t_x11_write_client_event(sock_t *ss, void *peer, u32 window)
+{
+	u8 event[32] = {0};
+
+	cbuf_set_u8le(event, 0, 33);
+	cbuf_set_u8le(event, 1, 32);
+	cbuf_set_u32le(event, 4, window);
+	cbuf_set_u32le(event, 8, 0x000000f0);
+	cbuf_set_u32le(event, 12, 0x000000f1);
+	sock_write_all(ss, peer, event, sizeof(event));
+}
+
+static void t_x11_write_unknown_client_event(sock_t *ss, void *peer, u32 window)
+{
+	u8 event[32] = {0};
+
+	cbuf_set_u8le(event, 0, 33);
+	cbuf_set_u8le(event, 1, 32);
+	cbuf_set_u32le(event, 4, window);
+	cbuf_set_u32le(event, 8, 0x000000f0);
+	cbuf_set_u32le(event, 12, 0x000000ff);
+	sock_write_all(ss, peer, event, sizeof(event));
 }
 
 TEST(display_x11_driver_is_registered)
@@ -343,10 +486,17 @@ TEST(display_x11_window_init_writes_requests)
 	void *server	      = NULL;
 	void *peer	      = NULL;
 	u8 setup_request[48]  = {0};
+	u8 atom_request[20]   = {0};
+	u8 atom_request2[24]  = {0};
 	u8 create_request[44] = {0};
+	u8 property_request[28] = {0};
 	u8 map_request[8]     = {0};
-	u32 window_id	      = 0;
+	u32 x11_window_id     = 0;
 	u32 parent	      = 0;
+	u32 event_mask	      = 0;
+	u32 property	      = 0;
+	u32 property_type     = 0;
+	u32 property_data     = 0;
 	u16 x		      = 0;
 	u16 y		      = 0;
 
@@ -363,19 +513,403 @@ TEST(display_x11_window_init_writes_requests)
 
 	sock_accept(&ss, server, &peer);
 	sock_read_all(&ss, peer, setup_request, sizeof(setup_request));
+	sock_read_all(&ss, peer, atom_request, sizeof(atom_request));
+	sock_read_all(&ss, peer, atom_request2, sizeof(atom_request2));
 	sock_read_all(&ss, peer, create_request, sizeof(create_request));
+	sock_read_all(&ss, peer, property_request, sizeof(property_request));
 	sock_read_all(&ss, peer, map_request, sizeof(map_request));
 
-	cbuf_get_u32le(create_request, 4, &window_id);
+	EXPECT_EQ(atom_request[0], 16);
+	EXPECT_EQ(atom_request2[0], 16);
+
+	cbuf_get_u32le(create_request, 4, &x11_window_id);
 	cbuf_get_u32le(create_request, 8, &parent);
 	cbuf_get_u16le(create_request, 12, &x);
 	cbuf_get_u16le(create_request, 14, &y);
+	cbuf_get_u32le(create_request, 40, &event_mask);
 	EXPECT_EQ(create_request[0], 1);
-	EXPECT_EQ(window_id, 0x00100000);
+	EXPECT_EQ(x11_window_id, 0x00100000);
+	EXPECT_EQ(window_id(&window), 0x00100000);
 	EXPECT_EQ(parent, 0x00000040);
 	EXPECT_EQ(x, 11);
 	EXPECT_EQ(y, 22);
+	EXPECT_EQ(event_mask, (1u << 0) | (1u << 1) | (1u << 2) | (1u << 3) | (1u << 6) | (1u << 15) | (1u << 17) |
+				      (1u << 21));
+
+	cbuf_get_u32le(property_request, 8, &property);
+	cbuf_get_u32le(property_request, 12, &property_type);
+	cbuf_get_u32le(property_request, 24, &property_data);
+	EXPECT_EQ(property_request[0], 18);
+	EXPECT_EQ(property, 0x000000f0);
+	EXPECT_EQ(property_type, 4);
+	EXPECT_EQ(property_request[16], 32);
+	EXPECT_EQ(property_data, 0x000000f1);
 	EXPECT_EQ(map_request[0], 8);
+
+	window_free(&window);
+	display_free(&display);
+	sock_close(&ss, peer);
+	sock_close(&ss, server);
+	t_x11_env_free(&fs, &proc, &ss);
+
+	END;
+}
+
+TEST(display_x11_poll_event_no_event)
+{
+	START;
+
+	display_driver_t *drv = t_x11_driver();
+	fs_t fs		      = {0};
+	proc_t proc	      = {0};
+	sock_t ss	      = {0};
+	display_t display     = {0};
+	window_t window	      = {0};
+	void *server	      = NULL;
+	void *peer	      = NULL;
+	display_event_t event = {
+		.type = DISPLAY_EVENT_CLOSE,
+	};
+
+	t_x11_open_window(drv, &fs, &proc, &ss, &display, &window, &server, &peer);
+	log_set_quiet(0, 1);
+	EXPECT_EQ(display_poll_event(&display, &event), 1);
+	log_set_quiet(0, 0);
+	EXPECT_EQ(event.type, DISPLAY_EVENT_NONE);
+
+	window_free(&window);
+	display_free(&display);
+	sock_close(&ss, peer);
+	sock_close(&ss, server);
+	t_x11_env_free(&fs, &proc, &ss);
+
+	END;
+}
+
+TEST(display_x11_wait_event_configure_notify)
+{
+	START;
+
+	display_driver_t *drv = t_x11_driver();
+	fs_t fs		      = {0};
+	proc_t proc	      = {0};
+	sock_t ss	      = {0};
+	display_t display     = {0};
+	window_t window	      = {0};
+	void *server	      = NULL;
+	void *peer	      = NULL;
+	display_event_t event = {0};
+
+	t_x11_open_window(drv, &fs, &proc, &ss, &display, &window, &server, &peer);
+	t_x11_write_configure_event(&ss, peer, 0x00100000, 10, 20, 640, 480);
+
+	EXPECT_EQ(display_wait_event(&display, &event), 0);
+	EXPECT_EQ(event.type, DISPLAY_EVENT_RESIZE);
+	EXPECT_EQ(event.window, 0x00100000);
+	EXPECT_EQ(event.x, 10);
+	EXPECT_EQ(event.y, 20);
+	EXPECT_EQ(event.width, 640);
+	EXPECT_EQ(event.height, 480);
+
+	window_free(&window);
+	display_free(&display);
+	sock_close(&ss, peer);
+	sock_close(&ss, server);
+	t_x11_env_free(&fs, &proc, &ss);
+
+	END;
+}
+
+TEST(display_x11_wait_event_skips_expose)
+{
+	START;
+
+	display_driver_t *drv = t_x11_driver();
+	fs_t fs		      = {0};
+	proc_t proc	      = {0};
+	sock_t ss	      = {0};
+	display_t display     = {0};
+	window_t window	      = {0};
+	void *server	      = NULL;
+	void *peer	      = NULL;
+	display_event_t event = {0};
+
+	t_x11_open_window(drv, &fs, &proc, &ss, &display, &window, &server, &peer);
+	t_x11_write_expose_event(&ss, peer, 0x00100000);
+	t_x11_write_configure_event(&ss, peer, 0x00100000, 10, 20, 640, 480);
+
+	EXPECT_EQ(display_wait_event(&display, &event), 0);
+	EXPECT_EQ(event.type, DISPLAY_EVENT_RESIZE);
+	EXPECT_EQ(event.window, 0x00100000);
+	EXPECT_EQ(event.x, 10);
+	EXPECT_EQ(event.y, 20);
+	EXPECT_EQ(event.width, 640);
+	EXPECT_EQ(event.height, 480);
+
+	window_free(&window);
+	display_free(&display);
+	sock_close(&ss, peer);
+	sock_close(&ss, server);
+	t_x11_env_free(&fs, &proc, &ss);
+
+	END;
+}
+
+TEST(display_x11_wait_event_skips_map_notify)
+{
+	START;
+
+	display_driver_t *drv = t_x11_driver();
+	fs_t fs		      = {0};
+	proc_t proc	      = {0};
+	sock_t ss	      = {0};
+	display_t display     = {0};
+	window_t window	      = {0};
+	void *server	      = NULL;
+	void *peer	      = NULL;
+	display_event_t event = {0};
+
+	t_x11_open_window(drv, &fs, &proc, &ss, &display, &window, &server, &peer);
+	t_x11_write_map_event(&ss, peer, 0x00100000);
+	t_x11_write_configure_event(&ss, peer, 0x00100000, 10, 20, 640, 480);
+
+	EXPECT_EQ(display_wait_event(&display, &event), 0);
+	EXPECT_EQ(event.type, DISPLAY_EVENT_RESIZE);
+	EXPECT_EQ(event.window, 0x00100000);
+	EXPECT_EQ(event.x, 10);
+	EXPECT_EQ(event.y, 20);
+	EXPECT_EQ(event.width, 640);
+	EXPECT_EQ(event.height, 480);
+
+	window_free(&window);
+	display_free(&display);
+	sock_close(&ss, peer);
+	sock_close(&ss, server);
+	t_x11_env_free(&fs, &proc, &ss);
+
+	END;
+}
+
+TEST(display_x11_wait_event_skips_unmap_notify)
+{
+	START;
+
+	display_driver_t *drv = t_x11_driver();
+	fs_t fs		      = {0};
+	proc_t proc	      = {0};
+	sock_t ss	      = {0};
+	display_t display     = {0};
+	window_t window	      = {0};
+	void *server	      = NULL;
+	void *peer	      = NULL;
+	display_event_t event = {0};
+
+	t_x11_open_window(drv, &fs, &proc, &ss, &display, &window, &server, &peer);
+	t_x11_write_unmap_event(&ss, peer, 0x00100000);
+	t_x11_write_configure_event(&ss, peer, 0x00100000, 10, 20, 640, 480);
+
+	EXPECT_EQ(display_wait_event(&display, &event), 0);
+	EXPECT_EQ(event.type, DISPLAY_EVENT_RESIZE);
+	EXPECT_EQ(event.window, 0x00100000);
+	EXPECT_EQ(event.x, 10);
+	EXPECT_EQ(event.y, 20);
+	EXPECT_EQ(event.width, 640);
+	EXPECT_EQ(event.height, 480);
+
+	window_free(&window);
+	display_free(&display);
+	sock_close(&ss, peer);
+	sock_close(&ss, server);
+	t_x11_env_free(&fs, &proc, &ss);
+
+	END;
+}
+
+TEST(display_x11_wait_event_skips_reparent_notify)
+{
+	START;
+
+	display_driver_t *drv = t_x11_driver();
+	fs_t fs		      = {0};
+	proc_t proc	      = {0};
+	sock_t ss	      = {0};
+	display_t display     = {0};
+	window_t window	      = {0};
+	void *server	      = NULL;
+	void *peer	      = NULL;
+	display_event_t event = {0};
+
+	t_x11_open_window(drv, &fs, &proc, &ss, &display, &window, &server, &peer);
+	t_x11_write_reparent_event(&ss, peer, 0x00100000);
+	t_x11_write_configure_event(&ss, peer, 0x00100000, 10, 20, 640, 480);
+
+	EXPECT_EQ(display_wait_event(&display, &event), 0);
+	EXPECT_EQ(event.type, DISPLAY_EVENT_RESIZE);
+	EXPECT_EQ(event.window, 0x00100000);
+	EXPECT_EQ(event.x, 10);
+	EXPECT_EQ(event.y, 20);
+	EXPECT_EQ(event.width, 640);
+	EXPECT_EQ(event.height, 480);
+
+	window_free(&window);
+	display_free(&display);
+	sock_close(&ss, peer);
+	sock_close(&ss, server);
+	t_x11_env_free(&fs, &proc, &ss);
+
+	END;
+}
+
+TEST(display_x11_wait_event_client_message_close)
+{
+	START;
+
+	display_driver_t *drv = t_x11_driver();
+	fs_t fs		      = {0};
+	proc_t proc	      = {0};
+	sock_t ss	      = {0};
+	display_t display     = {0};
+	window_t window	      = {0};
+	void *server	      = NULL;
+	void *peer	      = NULL;
+	display_event_t event = {0};
+
+	t_x11_open_window(drv, &fs, &proc, &ss, &display, &window, &server, &peer);
+	t_x11_write_client_event(&ss, peer, 0x00100000);
+
+	EXPECT_EQ(display_wait_event(&display, &event), 0);
+	EXPECT_EQ(event.type, DISPLAY_EVENT_CLOSE);
+	EXPECT_EQ(event.window, 0x00100000);
+
+	window_free(&window);
+	display_free(&display);
+	sock_close(&ss, peer);
+	sock_close(&ss, server);
+	t_x11_env_free(&fs, &proc, &ss);
+
+	END;
+}
+
+TEST(display_x11_wait_event_skips_unknown_client_message)
+{
+	START;
+
+	display_driver_t *drv = t_x11_driver();
+	fs_t fs		      = {0};
+	proc_t proc	      = {0};
+	sock_t ss	      = {0};
+	display_t display     = {0};
+	window_t window	      = {0};
+	void *server	      = NULL;
+	void *peer	      = NULL;
+	display_event_t event = {0};
+
+	t_x11_open_window(drv, &fs, &proc, &ss, &display, &window, &server, &peer);
+	t_x11_write_unknown_client_event(&ss, peer, 0x00100000);
+	t_x11_write_configure_event(&ss, peer, 0x00100000, 10, 20, 640, 480);
+
+	EXPECT_EQ(display_wait_event(&display, &event), 0);
+	EXPECT_EQ(event.type, DISPLAY_EVENT_RESIZE);
+	EXPECT_EQ(event.window, 0x00100000);
+
+	window_free(&window);
+	display_free(&display);
+	sock_close(&ss, peer);
+	sock_close(&ss, server);
+	t_x11_env_free(&fs, &proc, &ss);
+
+	END;
+}
+
+TEST(display_x11_wait_event_inputs)
+{
+	START;
+
+	display_driver_t *drv = t_x11_driver();
+	fs_t fs		      = {0};
+	proc_t proc	      = {0};
+	sock_t ss	      = {0};
+	display_t display     = {0};
+	window_t window	      = {0};
+	void *server	      = NULL;
+	void *peer	      = NULL;
+	display_event_t event = {0};
+
+	t_x11_open_window(drv, &fs, &proc, &ss, &display, &window, &server, &peer);
+	t_x11_write_key_event(&ss, peer, 2, 38, 0x00100000, 11, 22, 1);
+	t_x11_write_key_event(&ss, peer, 3, 38, 0x00100000, 12, 23, 2);
+	t_x11_write_key_event(&ss, peer, 4, 1, 0x00100000, 13, 24, 4);
+	t_x11_write_key_event(&ss, peer, 5, 1, 0x00100000, 14, 25, 8);
+	t_x11_write_motion_event(&ss, peer, 0x00100000, 15, 26, 16);
+
+	EXPECT_EQ(display_wait_event(&display, &event), 0);
+	EXPECT_EQ(event.type, DISPLAY_EVENT_KEY_DOWN);
+	EXPECT_EQ(event.window, 0x00100000);
+	EXPECT_EQ(event.key, 38);
+	EXPECT_EQ(event.x, 11);
+	EXPECT_EQ(event.y, 22);
+	EXPECT_EQ(event.modifiers, 1);
+
+	EXPECT_EQ(display_wait_event(&display, &event), 0);
+	EXPECT_EQ(event.type, DISPLAY_EVENT_KEY_UP);
+	EXPECT_EQ(event.key, 38);
+	EXPECT_EQ(event.modifiers, 2);
+
+	EXPECT_EQ(display_wait_event(&display, &event), 0);
+	EXPECT_EQ(event.type, DISPLAY_EVENT_MOUSE_DOWN);
+	EXPECT_EQ(event.button, 1);
+	EXPECT_EQ(event.modifiers, 4);
+
+	EXPECT_EQ(display_wait_event(&display, &event), 0);
+	EXPECT_EQ(event.type, DISPLAY_EVENT_MOUSE_UP);
+	EXPECT_EQ(event.button, 1);
+	EXPECT_EQ(event.modifiers, 8);
+
+	EXPECT_EQ(display_wait_event(&display, &event), 0);
+	EXPECT_EQ(event.type, DISPLAY_EVENT_MOUSE_MOVE);
+	EXPECT_EQ(event.x, 15);
+	EXPECT_EQ(event.y, 26);
+	EXPECT_EQ(event.modifiers, 16);
+
+	window_free(&window);
+	display_free(&display);
+	sock_close(&ss, peer);
+	sock_close(&ss, server);
+	t_x11_env_free(&fs, &proc, &ss);
+
+	END;
+}
+
+TEST(display_x11_wait_event_focus_and_close)
+{
+	START;
+
+	display_driver_t *drv = t_x11_driver();
+	fs_t fs		      = {0};
+	proc_t proc	      = {0};
+	sock_t ss	      = {0};
+	display_t display     = {0};
+	window_t window	      = {0};
+	void *server	      = NULL;
+	void *peer	      = NULL;
+	display_event_t event = {0};
+
+	t_x11_open_window(drv, &fs, &proc, &ss, &display, &window, &server, &peer);
+	t_x11_write_focus_event(&ss, peer, 9, 0x00100000);
+	t_x11_write_focus_event(&ss, peer, 10, 0x00100000);
+	t_x11_write_destroy_event(&ss, peer, 0x00100000);
+
+	EXPECT_EQ(display_wait_event(&display, &event), 0);
+	EXPECT_EQ(event.type, DISPLAY_EVENT_FOCUS_GAINED);
+	EXPECT_EQ(event.window, 0x00100000);
+
+	EXPECT_EQ(display_wait_event(&display, &event), 0);
+	EXPECT_EQ(event.type, DISPLAY_EVENT_FOCUS_LOST);
+	EXPECT_EQ(event.window, 0x00100000);
+
+	EXPECT_EQ(display_wait_event(&display, &event), 0);
+	EXPECT_EQ(event.type, DISPLAY_EVENT_CLOSE);
+	EXPECT_EQ(event.window, 0x00100000);
 
 	window_free(&window);
 	display_free(&display);
@@ -900,7 +1434,9 @@ TEST(display_x11_window_init_map_write_failure)
 	void *server	      = NULL;
 	void *peer	      = NULL;
 	u8 setup_request[48]  = {0};
-	size_t rcvbuf	      = 44;
+	u8 atom_request[20]   = {0};
+	u8 atom_request2[24]  = {0};
+	size_t rcvbuf	      = 44 + 28;
 
 	t_x11_env_init(&fs, &proc, &ss);
 	t_x11_set_display(&proc, STRV(":0"));
@@ -912,6 +1448,8 @@ TEST(display_x11_window_init_map_write_failure)
 	display_init(&display, drv, &fs, &proc, &ss, ALLOC_STD);
 	sock_accept(&ss, server, &peer);
 	sock_read_all(&ss, peer, setup_request, sizeof(setup_request));
+	sock_read_all(&ss, peer, atom_request, sizeof(atom_request));
+	sock_read_all(&ss, peer, atom_request2, sizeof(atom_request2));
 	sock_setopt(&ss, peer, SOCK_OPT_RCVBUF, &rcvbuf, sizeof(rcvbuf));
 	EXPECT_EQ(window_init(&window, &display, 0, 0), NULL);
 	log_set_quiet(0, 0);
@@ -1019,6 +1557,16 @@ STEST(display_x11)
 	RUN(display_x11_window_free_null_window);
 	RUN(display_x11_init_success);
 	RUN(display_x11_window_init_writes_requests);
+	RUN(display_x11_poll_event_no_event);
+	RUN(display_x11_wait_event_configure_notify);
+	RUN(display_x11_wait_event_skips_expose);
+	RUN(display_x11_wait_event_skips_map_notify);
+	RUN(display_x11_wait_event_skips_unmap_notify);
+	RUN(display_x11_wait_event_skips_reparent_notify);
+	RUN(display_x11_wait_event_client_message_close);
+	RUN(display_x11_wait_event_skips_unknown_client_message);
+	RUN(display_x11_wait_event_inputs);
+	RUN(display_x11_wait_event_focus_and_close);
 	RUN(display_x11_init_wild_authority);
 	RUN(display_x11_init_unknown_authority_family);
 	RUN(display_x11_init_missing_display_env);

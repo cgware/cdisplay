@@ -13,6 +13,8 @@ typedef struct display_x11_s {
 	u32 root;
 	u32 white_pixel;
 	u32 black_pixel;
+	u32 wm_protocols;
+	u32 wm_delete_window;
 } display_x11_t;
 
 typedef struct window_x11_s {
@@ -317,6 +319,29 @@ enum {
 	X_CREATE_WINDOW	 = 1,
 	X_DESTROY_WINDOW = 4,
 	X_MAP_WINDOW	 = 8,
+	X_INTERN_ATOM	 = 16,
+	X_CHANGE_PROPERTY = 18,
+};
+
+enum {
+	XA_ATOM = 4,
+};
+
+enum {
+	X_EVENT_KEY_PRESS	= 2,
+	X_EVENT_KEY_RELEASE	= 3,
+	X_EVENT_BUTTON_PRESS	= 4,
+	X_EVENT_BUTTON_RELEASE	= 5,
+	X_EVENT_MOTION_NOTIFY	= 6,
+	X_EVENT_FOCUS_IN	= 9,
+	X_EVENT_FOCUS_OUT	= 10,
+	X_EVENT_EXPOSE		= 12,
+	X_EVENT_DESTROY_NOTIFY	= 17,
+	X_EVENT_UNMAP_NOTIFY	= 18,
+	X_EVENT_MAP_NOTIFY	= 19,
+	X_EVENT_REPARENT_NOTIFY = 21,
+	X_EVENT_CONFIGURE_NOTIFY = 22,
+	X_EVENT_CLIENT_MESSAGE	= 33,
 };
 
 static int create_window(window_t *wnd, u16 x, u16 y)
@@ -334,7 +359,7 @@ static int create_window(window_t *wnd, u16 x, u16 y)
 	u32 background_pixel = dx11->white_pixel;
 	u32 border_pixel     = dx11->black_pixel;
 
-	u32 event_mask = (1u << 15) | (1u << 17);
+	u32 event_mask = (1u << 0) | (1u << 1) | (1u << 2) | (1u << 3) | (1u << 6) | (1u << 15) | (1u << 17) | (1u << 21);
 
 	values[value_count++] = background_pixel;
 	values[value_count++] = border_pixel;
@@ -417,6 +442,199 @@ static int create_window(window_t *wnd, u16 x, u16 y)
 	return 0;
 }
 
+static int intern_atom(display_t *display, strv_t name, u32 *atom)
+{
+	u8 request[8 + 64] = {0};
+	u8 reply[32]	    = {0};
+	size_t off	    = 0;
+
+	if (name.len > 64) {
+		return 1;
+	}
+
+	cbuf_write_u8le(request, &off, X_INTERN_ATOM);
+	cbuf_write_u8le(request, &off, 0);
+	cbuf_write_u16le(request, &off, (u16)(2 + (name.len + pad4(name.len)) / 4));
+	cbuf_write_u16le(request, &off, name.len);
+	cbuf_write_u16le(request, &off, 0);
+	mem_copy(&request[off], sizeof(request) - off, name.data, name.len);
+	off += name.len + pad4(name.len);
+
+	display_x11_t *dx11 = display->data;
+	if (sock_write_all(display->ss, dx11->sock, request, off) || sock_read_all(display->ss, dx11->sock, reply, sizeof(reply))) {
+		log_error("cwindow", "display_x11", NULL, "failed to intern atom: %.*s", name.len, name.data);
+		return 1;
+	}
+
+	if (reply[0] != 1) {
+		log_error("cwindow", "display_x11", NULL, "failed to intern atom: %.*s", name.len, name.data);
+		return 1;
+	}
+
+	cbuf_get_u32le(reply, 8, atom);
+	if (*atom == 0) {
+		log_error("cwindow", "display_x11", NULL, "atom not found: %.*s", name.len, name.data);
+		return 1;
+	}
+
+	return 0;
+}
+
+static int init_atoms(display_t *display)
+{
+	display_x11_t *dx11 = display->data;
+
+	if (intern_atom(display, STRV("WM_PROTOCOLS"), &dx11->wm_protocols) ||
+	    intern_atom(display, STRV("WM_DELETE_WINDOW"), &dx11->wm_delete_window)) {
+		return 1;
+	}
+
+	return 0;
+}
+
+static int set_wm_protocols(window_t *wnd)
+{
+	u8 request[28] = {0};
+	size_t off     = 0;
+
+	window_x11_t *wx11 = wnd->data;
+	display_x11_t *dx11 = wnd->display->data;
+
+	cbuf_write_u8le(request, &off, X_CHANGE_PROPERTY);
+	cbuf_write_u8le(request, &off, 0);
+	cbuf_write_u16le(request, &off, 7);
+	cbuf_write_u32le(request, &off, wx11->id);
+	cbuf_write_u32le(request, &off, dx11->wm_protocols);
+	cbuf_write_u32le(request, &off, XA_ATOM);
+	cbuf_write_u8le(request, &off, 32);
+	cbuf_write_u8le(request, &off, 0);
+	cbuf_write_u8le(request, &off, 0);
+	cbuf_write_u8le(request, &off, 0);
+	cbuf_write_u32le(request, &off, 1);
+	cbuf_write_u32le(request, &off, dx11->wm_delete_window);
+
+	if (sock_write_all(wnd->display->ss, dx11->sock, request, sizeof(request))) {
+		log_error("cwindow", "display_x11", NULL, "failed to set WM protocols");
+		return 1;
+	}
+
+	return 0;
+}
+
+static int read_x11_event(display_t *display, display_event_t *event)
+{
+	u8 data[32] = {0};
+	display_x11_t *dx11 = display->data;
+
+	*event = (display_event_t){0};
+
+	if (sock_read_all(display->ss, dx11->sock, data, sizeof(data))) {
+		return 1;
+	}
+
+	u8 type = data[0] & 0x7f;
+	size_t off;
+	u32 id;
+
+	switch (type) {
+	case X_EVENT_KEY_PRESS:
+	case X_EVENT_KEY_RELEASE:
+	case X_EVENT_BUTTON_PRESS:
+	case X_EVENT_BUTTON_RELEASE: {
+		u16 modifiers;
+		off = 12;
+		cbuf_read_u32le(data, &off, &id);
+		event->window = id;
+		off	      = 24;
+		cbuf_read_u16le(data, &off, &event->x);
+		cbuf_read_u16le(data, &off, &event->y);
+		off = 28;
+		cbuf_read_u16le(data, &off, &modifiers);
+		event->modifiers = modifiers;
+		if (type == X_EVENT_KEY_PRESS || type == X_EVENT_KEY_RELEASE) {
+			event->type = type == X_EVENT_KEY_PRESS ? DISPLAY_EVENT_KEY_DOWN : DISPLAY_EVENT_KEY_UP;
+			event->key  = data[1];
+		} else {
+			event->type   = type == X_EVENT_BUTTON_PRESS ? DISPLAY_EVENT_MOUSE_DOWN : DISPLAY_EVENT_MOUSE_UP;
+			event->button = data[1];
+		}
+		return 0;
+	}
+	case X_EVENT_MOTION_NOTIFY: {
+		u16 modifiers;
+		off = 12;
+		cbuf_read_u32le(data, &off, &id);
+		event->window = id;
+		off	      = 24;
+		cbuf_read_u16le(data, &off, &event->x);
+		cbuf_read_u16le(data, &off, &event->y);
+		off = 28;
+		cbuf_read_u16le(data, &off, &modifiers);
+		event->modifiers = modifiers;
+		event->type = DISPLAY_EVENT_MOUSE_MOVE;
+		return 0;
+	}
+	case X_EVENT_FOCUS_IN:
+	case X_EVENT_FOCUS_OUT: {
+		off = 4;
+		cbuf_read_u32le(data, &off, &id);
+		event->window = id;
+		event->type   = type == X_EVENT_FOCUS_IN ? DISPLAY_EVENT_FOCUS_GAINED : DISPLAY_EVENT_FOCUS_LOST;
+		return 0;
+	}
+	case X_EVENT_EXPOSE: {
+		return 2;
+	}
+	case X_EVENT_DESTROY_NOTIFY: {
+		off = 8;
+		cbuf_read_u32le(data, &off, &id);
+		event->window = id;
+		event->type   = DISPLAY_EVENT_CLOSE;
+		return 0;
+	}
+	case X_EVENT_UNMAP_NOTIFY: {
+		return 2;
+	}
+	case X_EVENT_MAP_NOTIFY: {
+		return 2;
+	}
+	case X_EVENT_REPARENT_NOTIFY: {
+		return 2;
+	}
+	case X_EVENT_CONFIGURE_NOTIFY: {
+		off = 8;
+		cbuf_read_u32le(data, &off, &id);
+		event->window = id;
+		off	      = 16;
+		cbuf_read_u16le(data, &off, &event->x);
+		cbuf_read_u16le(data, &off, &event->y);
+		cbuf_read_u16le(data, &off, &event->width);
+		cbuf_read_u16le(data, &off, &event->height);
+		event->type = DISPLAY_EVENT_RESIZE;
+		return 0;
+	}
+	case X_EVENT_CLIENT_MESSAGE: {
+		off = 4;
+		cbuf_read_u32le(data, &off, &id);
+		u32 message_type;
+		cbuf_read_u32le(data, &off, &message_type);
+		off = 12;
+		u32 message;
+		cbuf_read_u32le(data, &off, &message);
+		if (data[1] == 32 && message_type == dx11->wm_protocols && message == dx11->wm_delete_window) {
+			event->window = id;
+			event->type   = DISPLAY_EVENT_CLOSE;
+			return 0;
+		}
+		return 2;
+	}
+	default: {
+		log_error("cwindow", "display_x11", NULL, "unsupported X11 event: %u", type);
+		return 1;
+	}
+	}
+}
+
 static int destroy_window(window_t *wnd)
 {
 	u8 request[8] = {0};
@@ -460,6 +678,48 @@ static int map_window(window_t *wnd)
 	return 0;
 }
 
+static int display_x11_poll_event(display_t *display, display_event_t *event)
+{
+	if (display == NULL || event == NULL) {
+		return 1;
+	}
+
+	display_x11_t *dx11 = display->data;
+	int flags;
+	if (sock_get_flags(display->ss, dx11->sock, &flags)) {
+		return 1;
+	}
+
+	if (sock_set_flags(display->ss, dx11->sock, flags | 04000)) {
+		return 1;
+	}
+
+	int ret;
+	do {
+		ret = read_x11_event(display, event);
+	} while (ret == 2);
+
+	if (sock_set_flags(display->ss, dx11->sock, flags)) {
+		return 1;
+	}
+
+	return ret;
+}
+
+static int display_x11_wait_event(display_t *display, display_event_t *event)
+{
+	if (display == NULL || event == NULL) {
+		return 1;
+	}
+
+	int ret;
+	do {
+		ret = read_x11_event(display, event);
+	} while (ret == 2);
+
+	return ret;
+}
+
 static int display_x11_init(display_t *display)
 {
 	if (display == NULL) {
@@ -474,6 +734,14 @@ static int display_x11_init(display_t *display)
 	}
 
 	if (open_display(display)) {
+		mem_free(display->data, sizeof(display_x11_t));
+		display->data = NULL;
+		return 1;
+	}
+
+	if (init_atoms(display)) {
+		display_x11_t *dx11 = display->data;
+		sock_close(display->ss, dx11->sock);
 		mem_free(display->data, sizeof(display_x11_t));
 		display->data = NULL;
 		return 1;
@@ -515,6 +783,13 @@ static int display_x11_window_init(window_t *wnd, u16 x, u16 y)
 		return 1;
 	}
 
+	if (set_wm_protocols(wnd)) {
+		destroy_window(wnd);
+		mem_free(wnd->data, sizeof(window_x11_t));
+		wnd->data = NULL;
+		return 1;
+	}
+
 	if (map_window(wnd)) {
 		destroy_window(wnd);
 		mem_free(wnd->data, sizeof(window_x11_t));
@@ -532,18 +807,30 @@ static int display_x11_window_free(window_t *wnd)
 	}
 
 	destroy_window(wnd);
-
 	mem_free(wnd->data, sizeof(window_x11_t));
 
 	return 0;
+}
+
+static u32 display_x11_window_id(window_t *wnd)
+{
+	if (wnd == NULL || wnd->data == NULL) {
+		return 0;
+	}
+
+	window_x11_t *wx11 = wnd->data;
+	return wx11->id;
 }
 
 static display_driver_t display_x11 = {
 	.name	     = "X11",
 	.init	     = display_x11_init,
 	.free	     = display_x11_free,
+	.poll_event  = display_x11_poll_event,
+	.wait_event  = display_x11_wait_event,
 	.window_init = display_x11_window_init,
 	.window_free = display_x11_window_free,
+	.window_id   = display_x11_window_id,
 };
 
 DISPLAY_DRIVER(display_x11, &display_x11);

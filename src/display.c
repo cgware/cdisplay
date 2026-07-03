@@ -41,3 +41,21 @@ void display_free(display_t *display)
 	display->alloc = (alloc_t){0};
 	display->data  = NULL;
 }
+
+int display_poll_event(display_t *display, display_event_t *event)
+{
+	if (display == NULL || display->drv == NULL || display->drv->poll_event == NULL || event == NULL) {
+		return 1;
+	}
+
+	return display->drv->poll_event(display, event);
+}
+
+int display_wait_event(display_t *display, display_event_t *event)
+{
+	if (display == NULL || display->drv == NULL || display->drv->wait_event == NULL || event == NULL) {
+		return 1;
+	}
+
+	return display->drv->wait_event(display, event);
+}

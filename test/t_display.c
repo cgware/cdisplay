@@ -5,7 +5,11 @@
 
 static int t_display_init_calls;
 static int t_display_free_calls;
+static int t_display_poll_event_calls;
+static int t_display_wait_event_calls;
 static int t_display_init_ret;
+static int t_display_poll_event_ret;
+static int t_display_wait_event_ret;
 
 static int t_display_driver_init(display_t *display)
 {
@@ -19,6 +23,22 @@ static int t_display_driver_free(display_t *display)
 	t_display_free_calls++;
 	display->data = NULL;
 	return 0;
+}
+
+static int t_display_poll_event(display_t *display, display_event_t *event)
+{
+	(void)display;
+	t_display_poll_event_calls++;
+	event->type = DISPLAY_EVENT_CLOSE;
+	return t_display_poll_event_ret;
+}
+
+static int t_display_wait_event(display_t *display, display_event_t *event)
+{
+	(void)display;
+	t_display_wait_event_calls++;
+	event->type = DISPLAY_EVENT_RESIZE;
+	return t_display_wait_event_ret;
 }
 
 static int t_display_window_init(window_t *window, u16 x, u16 y)
@@ -39,15 +59,21 @@ static display_driver_t t_display_driver = {
 	.name	     = "test",
 	.init	     = t_display_driver_init,
 	.free	     = t_display_driver_free,
+	.poll_event  = t_display_poll_event,
+	.wait_event  = t_display_wait_event,
 	.window_init = t_display_window_init,
 	.window_free = t_display_window_free,
 };
 
 static void t_display_reset(void)
 {
-	t_display_init_calls = 0;
-	t_display_free_calls = 0;
-	t_display_init_ret   = 0;
+	t_display_init_calls	   = 0;
+	t_display_free_calls	   = 0;
+	t_display_poll_event_calls = 0;
+	t_display_wait_event_calls = 0;
+	t_display_init_ret	   = 0;
+	t_display_poll_event_ret   = 0;
+	t_display_wait_event_ret   = 0;
 }
 
 TEST(display_init_null_display)
@@ -251,6 +277,144 @@ TEST(display_free_clears_fields)
 	END;
 }
 
+TEST(display_poll_event_null_display)
+{
+	START;
+
+	display_event_t event = {0};
+
+	EXPECT_EQ(display_poll_event(NULL, &event), 1);
+
+	END;
+}
+
+TEST(display_poll_event_null_event)
+{
+	START;
+
+	display_t display = {
+		.drv = &t_display_driver,
+	};
+
+	EXPECT_EQ(display_poll_event(&display, NULL), 1);
+
+	END;
+}
+
+TEST(display_poll_event_without_driver)
+{
+	START;
+
+	display_t display     = {0};
+	display_event_t event = {0};
+
+	EXPECT_EQ(display_poll_event(&display, &event), 1);
+
+	END;
+}
+
+TEST(display_poll_event_calls_driver)
+{
+	START;
+
+	t_display_reset();
+	display_t display = {
+		.drv = &t_display_driver,
+	};
+	display_event_t event = {0};
+
+	EXPECT_EQ(display_poll_event(&display, &event), 0);
+	EXPECT_EQ(t_display_poll_event_calls, 1);
+	EXPECT_EQ(event.type, DISPLAY_EVENT_CLOSE);
+
+	END;
+}
+
+TEST(display_poll_event_returns_driver_result)
+{
+	START;
+
+	t_display_reset();
+	t_display_poll_event_ret = 1;
+	display_t display	 = {
+		       .drv = &t_display_driver,
+	       };
+	display_event_t event = {0};
+
+	EXPECT_EQ(display_poll_event(&display, &event), 1);
+
+	END;
+}
+
+TEST(display_wait_event_null_display)
+{
+	START;
+
+	display_event_t event = {0};
+
+	EXPECT_EQ(display_wait_event(NULL, &event), 1);
+
+	END;
+}
+
+TEST(display_wait_event_null_event)
+{
+	START;
+
+	display_t display = {
+		.drv = &t_display_driver,
+	};
+
+	EXPECT_EQ(display_wait_event(&display, NULL), 1);
+
+	END;
+}
+
+TEST(display_wait_event_without_driver)
+{
+	START;
+
+	display_t display     = {0};
+	display_event_t event = {0};
+
+	EXPECT_EQ(display_wait_event(&display, &event), 1);
+
+	END;
+}
+
+TEST(display_wait_event_calls_driver)
+{
+	START;
+
+	t_display_reset();
+	display_t display = {
+		.drv = &t_display_driver,
+	};
+	display_event_t event = {0};
+
+	EXPECT_EQ(display_wait_event(&display, &event), 0);
+	EXPECT_EQ(t_display_wait_event_calls, 1);
+	EXPECT_EQ(event.type, DISPLAY_EVENT_RESIZE);
+
+	END;
+}
+
+TEST(display_wait_event_returns_driver_result)
+{
+	START;
+
+	t_display_reset();
+	t_display_wait_event_ret = 1;
+	display_t display	 = {
+		       .drv = &t_display_driver,
+	       };
+	display_event_t event = {0};
+
+	EXPECT_EQ(display_wait_event(&display, &event), 1);
+
+	END;
+}
+
 STEST(display)
 {
 	SSTART;
@@ -268,6 +432,16 @@ STEST(display)
 	RUN(display_free_without_driver);
 	RUN(display_free_calls_driver);
 	RUN(display_free_clears_fields);
+	RUN(display_poll_event_null_display);
+	RUN(display_poll_event_null_event);
+	RUN(display_poll_event_without_driver);
+	RUN(display_poll_event_calls_driver);
+	RUN(display_poll_event_returns_driver_result);
+	RUN(display_wait_event_null_display);
+	RUN(display_wait_event_null_event);
+	RUN(display_wait_event_without_driver);
+	RUN(display_wait_event_calls_driver);
+	RUN(display_wait_event_returns_driver_result);
 
 	SEND;
 }

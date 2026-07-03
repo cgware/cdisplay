@@ -6,6 +6,7 @@
 static int t_window_init_calls;
 static int t_window_free_calls;
 static int t_window_init_ret;
+static u32 t_window_id_ret;
 static u16 t_window_x;
 static u16 t_window_y;
 
@@ -19,6 +20,20 @@ static int t_window_display_free(display_t *display)
 {
 	(void)display;
 	return 0;
+}
+
+static int t_window_poll_event(display_t *display, display_event_t *event)
+{
+	(void)display;
+	(void)event;
+	return 1;
+}
+
+static int t_window_wait_event(display_t *display, display_event_t *event)
+{
+	(void)display;
+	(void)event;
+	return 1;
 }
 
 static int t_window_driver_init(window_t *window, u16 x, u16 y)
@@ -37,12 +52,21 @@ static int t_window_driver_free(window_t *window)
 	return 0;
 }
 
+static u32 t_window_driver_id(window_t *window)
+{
+	(void)window;
+	return t_window_id_ret;
+}
+
 static display_driver_t t_window_driver = {
 	.name	     = "test",
 	.init	     = t_window_display_init,
 	.free	     = t_window_display_free,
+	.poll_event  = t_window_poll_event,
+	.wait_event  = t_window_wait_event,
 	.window_init = t_window_driver_init,
 	.window_free = t_window_driver_free,
+	.window_id   = t_window_driver_id,
 };
 
 static void t_window_reset(void)
@@ -50,6 +74,7 @@ static void t_window_reset(void)
 	t_window_init_calls = 0;
 	t_window_free_calls = 0;
 	t_window_init_ret   = 0;
+	t_window_id_ret	    = 0;
 	t_window_x	    = 0;
 	t_window_y	    = 0;
 }
@@ -83,7 +108,7 @@ TEST(window_init_display_without_driver)
 	START;
 
 	display_t display = {0};
-	window_t window   = {0};
+	window_t window	  = {0};
 
 	EXPECT_EQ(window_init(&window, &display, 0, 0), NULL);
 
@@ -202,9 +227,9 @@ TEST(window_free_display_without_driver)
 	START;
 
 	display_t display = {0};
-	window_t window   = {
+	window_t window	  = {
 		  .display = &display,
-	};
+	  };
 
 	window_free(&window);
 
@@ -252,6 +277,59 @@ TEST(window_free_clears_fields)
 	END;
 }
 
+TEST(window_id_null_window)
+{
+	START;
+
+	EXPECT_EQ(window_id(NULL), 0);
+
+	END;
+}
+
+TEST(window_id_without_display)
+{
+	START;
+
+	window_t window = {0};
+
+	EXPECT_EQ(window_id(&window), 0);
+
+	END;
+}
+
+TEST(window_id_display_without_driver)
+{
+	START;
+
+	display_t display = {0};
+	window_t window	  = {
+		  .display = &display,
+	  };
+
+	EXPECT_EQ(window_id(&window), 0);
+
+	END;
+}
+
+TEST(window_id_calls_driver)
+{
+	START;
+
+	t_window_reset();
+	t_window_id_ret = 0x12345678;
+	display_t display = {
+		.drv = &t_window_driver,
+	};
+	window_t window = {
+		.display = &display,
+		.data	 = (void *)0x5678,
+	};
+
+	EXPECT_EQ(window_id(&window), 0x12345678);
+
+	END;
+}
+
 STEST(window)
 {
 	SSTART;
@@ -269,6 +347,10 @@ STEST(window)
 	RUN(window_free_display_without_driver);
 	RUN(window_free_calls_driver);
 	RUN(window_free_clears_fields);
+	RUN(window_id_null_window);
+	RUN(window_id_without_display);
+	RUN(window_id_display_without_driver);
+	RUN(window_id_calls_driver);
 
 	SEND;
 }
