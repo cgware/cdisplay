@@ -153,7 +153,8 @@ int main()
 		return 1;
 	}
 
-	if (window_init(&windows[0].wnd, &display, 0, 0) == NULL || window_init(&windows[1].wnd, &display, 100, 100) == NULL) {
+	if (window_init(&windows[0].wnd, &display, 0, 0, 640, 480) == NULL ||
+	    window_init(&windows[1].wnd, &display, 100, 100, 640, 480) == NULL) {
 		c_printf("failed to create windows\n");
 		cleanup(&display, windows, 2, &fs, &proc, &ss);
 		mem_print(DST_STD());

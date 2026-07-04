@@ -41,11 +41,13 @@ static int t_display_wait_event(display_t *display, display_event_t *event)
 	return t_display_wait_event_ret;
 }
 
-static int t_display_window_init(window_t *window, u16 x, u16 y)
+static int t_display_window_init(window_t *window, u16 x, u16 y, u16 width, u16 height)
 {
 	(void)window;
 	(void)x;
 	(void)y;
+	(void)width;
+	(void)height;
 	return 0;
 }
 

@@ -2,7 +2,7 @@
 
 #include "display_driver.h"
 
-window_t *window_init(window_t *wnd, display_t *display, u16 x, u16 y)
+window_t *window_init(window_t *wnd, display_t *display, u16 x, u16 y, u16 width, u16 height)
 {
 	if (wnd == NULL || display == NULL || display->drv == NULL) {
 		return NULL;
@@ -10,7 +10,7 @@ window_t *window_init(window_t *wnd, display_t *display, u16 x, u16 y)
 
 	wnd->display = display;
 
-	if (wnd->display->drv->window_init(wnd, x, y)) {
+	if (wnd->display->drv->window_init(wnd, x, y, width, height)) {
 		wnd->display = NULL;
 		wnd->data    = NULL;
 		return NULL;

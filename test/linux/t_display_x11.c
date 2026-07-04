@@ -10,8 +10,22 @@
 #define T_X11_PATH   "/tmp/.X11-unix/X0"
 
 static const u8 t_x11_cookie[] = {
-	0xcf, 0x22, 0x17, 0x5a, 0xea, 0x39, 0x0a, 0xd7,
-	0xb4, 0xb6, 0x47, 0xd3, 0x65, 0xac, 0xa0, 0x81,
+	0xcf,
+	0x22,
+	0x17,
+	0x5a,
+	0xea,
+	0x39,
+	0x0a,
+	0xd7,
+	0xb4,
+	0xb6,
+	0x47,
+	0xd3,
+	0x65,
+	0xac,
+	0xa0,
+	0x81,
 };
 
 typedef struct t_alloc_s {
@@ -155,8 +169,8 @@ static void t_x11_write_authority_family(fs_t *fs, u16 family)
 	buf_t auth = {0};
 	buf_init(&auth, 128, ALLOC_STD);
 
-	t_x11_add_authority(&auth, family, STRV("host"), STRV(""), STRV("MIT-MAGIC-COOKIE-1"),
-			    STRVN((const char *)t_x11_cookie, sizeof(t_x11_cookie)));
+	t_x11_add_authority(
+		&auth, family, STRV("host"), STRV(""), STRV("MIT-MAGIC-COOKIE-1"), STRVN((const char *)t_x11_cookie, sizeof(t_x11_cookie)));
 
 	t_x11_write_file(fs, STRV(T_XAUTHORITY), auth.data, auth.used);
 	buf_free(&auth);
@@ -228,8 +242,8 @@ static void t_x11_script_setup_data(sock_t *ss, void *server, u8 success, const 
 		t_x11_default_atom_replies(atom_reply);
 	}
 
-	t_x11_script_setup_data_atoms(ss, server, success, setup_data, setup_size, success == 1 ? atom_reply : NULL,
-				      success == 1 ? sizeof(atom_reply) : 0);
+	t_x11_script_setup_data_atoms(
+		ss, server, success, setup_data, setup_size, success == 1 ? atom_reply : NULL, success == 1 ? sizeof(atom_reply) : 0);
 }
 
 static void t_x11_script_setup_header(sock_t *ss, void *server, u8 success, u16 extra_words)
@@ -259,7 +273,7 @@ static void t_x11_open_window(display_driver_t *drv, fs_t *fs, proc_t *proc, soc
 	t_x11_script_setup(ss, *server);
 	log_set_quiet(0, 1);
 	display_init(display, drv, fs, proc, ss, ALLOC_STD);
-	window_init(window, display, 0, 0);
+	window_init(window, display, 0, 0, 640, 480);
 	log_set_quiet(0, 0);
 	sock_accept(ss, *server, peer);
 }
@@ -440,7 +454,7 @@ TEST(display_x11_window_init_null_window)
 
 	display_driver_t *drv = t_x11_driver();
 	EXPECT_NE(drv, NULL);
-	EXPECT_EQ(drv->window_init(NULL, 0, 0), 1);
+	EXPECT_EQ(drv->window_init(NULL, 0, 0, 640, 480), 1);
 
 	END;
 }
@@ -454,7 +468,7 @@ TEST(display_x11_window_init_alloc_failure)
 
 	EXPECT_NE(drv, NULL);
 	mem_oom(1);
-	EXPECT_EQ(drv->window_init(&wnd, 0, 0), 1);
+	EXPECT_EQ(drv->window_init(&wnd, 0, 0, 640, 480), 1);
 	mem_oom(0);
 
 	END;
@@ -516,28 +530,30 @@ TEST(display_x11_window_init_writes_requests)
 {
 	START;
 
-	display_driver_t *drv = t_x11_driver();
-	fs_t fs		      = {0};
-	proc_t proc	      = {0};
-	sock_t ss	      = {0};
-	display_t display     = {0};
-	window_t window	      = {0};
-	void *server	      = NULL;
-	void *peer	      = NULL;
-	u8 setup_request[48]  = {0};
-	u8 atom_request[20]   = {0};
-	u8 atom_request2[24]  = {0};
-	u8 create_request[44] = {0};
+	display_driver_t *drv	= t_x11_driver();
+	fs_t fs			= {0};
+	proc_t proc		= {0};
+	sock_t ss		= {0};
+	display_t display	= {0};
+	window_t window		= {0};
+	void *server		= NULL;
+	void *peer		= NULL;
+	u8 setup_request[48]	= {0};
+	u8 atom_request[20]	= {0};
+	u8 atom_request2[24]	= {0};
+	u8 create_request[44]	= {0};
 	u8 property_request[28] = {0};
-	u8 map_request[8]     = {0};
-	u32 x11_window_id     = 0;
-	u32 parent	      = 0;
-	u32 event_mask	      = 0;
-	u32 property	      = 0;
-	u32 property_type     = 0;
-	u32 property_data     = 0;
-	u16 x		      = 0;
-	u16 y		      = 0;
+	u8 map_request[8]	= {0};
+	u32 x11_window_id	= 0;
+	u32 parent		= 0;
+	u32 event_mask		= 0;
+	u32 property		= 0;
+	u32 property_type	= 0;
+	u32 property_data	= 0;
+	u16 x			= 0;
+	u16 y			= 0;
+	u16 width		= 0;
+	u16 height		= 0;
 
 	t_x11_env_init(&fs, &proc, &ss);
 	t_x11_set_display(&proc, STRV(":0"));
@@ -547,7 +563,7 @@ TEST(display_x11_window_init_writes_requests)
 	t_x11_script_setup(&ss, server);
 	log_set_quiet(0, 1);
 	display_init(&display, drv, &fs, &proc, &ss, ALLOC_STD);
-	EXPECT_EQ(window_init(&window, &display, 11, 22), &window);
+	EXPECT_EQ(window_init(&window, &display, 11, 22, 333, 444), &window);
 	log_set_quiet(0, 0);
 
 	sock_accept(&ss, server, &peer);
@@ -565,6 +581,8 @@ TEST(display_x11_window_init_writes_requests)
 	cbuf_get_u32le(create_request, 8, &parent);
 	cbuf_get_u16le(create_request, 12, &x);
 	cbuf_get_u16le(create_request, 14, &y);
+	cbuf_get_u16le(create_request, 16, &width);
+	cbuf_get_u16le(create_request, 18, &height);
 	cbuf_get_u32le(create_request, 40, &event_mask);
 	EXPECT_EQ(create_request[0], 1);
 	EXPECT_EQ(x11_window_id, 0x00100000);
@@ -572,8 +590,9 @@ TEST(display_x11_window_init_writes_requests)
 	EXPECT_EQ(parent, 0x00000040);
 	EXPECT_EQ(x, 11);
 	EXPECT_EQ(y, 22);
-	EXPECT_EQ(event_mask, (1u << 0) | (1u << 1) | (1u << 2) | (1u << 3) | (1u << 6) | (1u << 15) | (1u << 17) |
-				      (1u << 21));
+	EXPECT_EQ(width, 333);
+	EXPECT_EQ(height, 444);
+	EXPECT_EQ(event_mask, (1u << 0) | (1u << 1) | (1u << 2) | (1u << 3) | (1u << 6) | (1u << 15) | (1u << 17) | (1u << 21));
 
 	cbuf_get_u32le(property_request, 8, &property);
 	cbuf_get_u32le(property_request, 12, &property_type);
@@ -629,7 +648,7 @@ TEST(display_x11_poll_event_null_display)
 {
 	START;
 
-	display_driver_t *drv  = t_x11_driver();
+	display_driver_t *drv = t_x11_driver();
 	display_event_t event = {0};
 
 	EXPECT_NE(drv, NULL);
@@ -643,7 +662,7 @@ TEST(display_x11_poll_event_null_event)
 	START;
 
 	display_driver_t *drv = t_x11_driver();
-	display_t display    = {0};
+	display_t display     = {0};
 
 	EXPECT_NE(drv, NULL);
 	EXPECT_EQ(drv->poll_event(&display, NULL), 1);
@@ -686,7 +705,7 @@ TEST(display_x11_wait_event_null_display)
 {
 	START;
 
-	display_driver_t *drv  = t_x11_driver();
+	display_driver_t *drv = t_x11_driver();
 	display_event_t event = {0};
 
 	EXPECT_NE(drv, NULL);
@@ -700,7 +719,7 @@ TEST(display_x11_wait_event_null_event)
 	START;
 
 	display_driver_t *drv = t_x11_driver();
-	display_t display    = {0};
+	display_t display     = {0};
 
 	EXPECT_NE(drv, NULL);
 	EXPECT_EQ(drv->wait_event(&display, NULL), 1);
@@ -1459,7 +1478,7 @@ TEST(display_x11_init_setup_alloc_failure)
 	display_t display     = {0};
 	void *server	      = NULL;
 	u8 setup[72]	      = {0};
-	t_alloc_t state       = {.fail_realloc = 1};
+	t_alloc_t state	      = {.fail_realloc = 1};
 
 	t_x11_env_init(&fs, &proc, &ss);
 	t_x11_set_display(&proc, STRV(":0"));
@@ -1577,7 +1596,7 @@ TEST(display_x11_init_socket_open_failure)
 	proc_t proc	      = {0};
 	sock_t ss	      = {0};
 	display_t display     = {0};
-	t_alloc_t state       = {.fail_realloc = 1};
+	t_alloc_t state	      = {.fail_realloc = 1};
 
 	log_set_quiet(0, 1);
 	fs_init(&fs, 8, 1, ALLOC_STD);
@@ -1617,9 +1636,9 @@ TEST(display_x11_window_init_resource_exhausted)
 	t_x11_script_setup_data(&ss, server, 1, setup, sizeof(setup));
 	log_set_quiet(0, 1);
 	display_init(&display, drv, &fs, &proc, &ss, ALLOC_STD);
-	window_init(&first, &display, 0, 0);
-	window_init(&second, &display, 0, 0);
-	EXPECT_EQ(window_init(&third, &display, 0, 0), NULL);
+	window_init(&first, &display, 0, 0, 640, 480);
+	window_init(&second, &display, 0, 0, 640, 480);
+	EXPECT_EQ(window_init(&third, &display, 0, 0, 640, 480), NULL);
 	log_set_quiet(0, 0);
 
 	window_free(&second);
@@ -1654,7 +1673,7 @@ TEST(display_x11_window_init_create_write_failure)
 	display_init(&display, drv, &fs, &proc, &ss, ALLOC_STD);
 	sock_accept(&ss, server, &peer);
 	sock_close(&ss, peer);
-	EXPECT_EQ(window_init(&window, &display, 0, 0), NULL);
+	EXPECT_EQ(window_init(&window, &display, 0, 0, 640, 480), NULL);
 	log_set_quiet(0, 0);
 
 	display_free(&display);
@@ -1694,7 +1713,7 @@ TEST(display_x11_window_init_map_write_failure)
 	sock_read_all(&ss, peer, atom_request, sizeof(atom_request));
 	sock_read_all(&ss, peer, atom_request2, sizeof(atom_request2));
 	sock_setopt(&ss, peer, SOCK_OPT_RCVBUF, &rcvbuf, sizeof(rcvbuf));
-	EXPECT_EQ(window_init(&window, &display, 0, 0), NULL);
+	EXPECT_EQ(window_init(&window, &display, 0, 0, 640, 480), NULL);
 	log_set_quiet(0, 0);
 
 	display_free(&display);
@@ -1735,7 +1754,7 @@ TEST(display_x11_window_init_wm_protocols_write_failure)
 	sock_read_all(&ss, peer, atom_request, sizeof(atom_request));
 	sock_read_all(&ss, peer, atom_request2, sizeof(atom_request2));
 	sock_setopt(&ss, peer, SOCK_OPT_RCVBUF, &rcvbuf, sizeof(rcvbuf));
-	EXPECT_EQ(window_init(&window, &display, 0, 0), NULL);
+	EXPECT_EQ(window_init(&window, &display, 0, 0, 640, 480), NULL);
 	log_set_quiet(0, 0);
 
 	display_free(&display);
@@ -1767,7 +1786,7 @@ TEST(display_x11_window_free_destroy_write_failure)
 	t_x11_script_setup(&ss, server);
 	log_set_quiet(0, 1);
 	display_init(&display, drv, &fs, &proc, &ss, ALLOC_STD);
-	window_init(&window, &display, 0, 0);
+	window_init(&window, &display, 0, 0, 640, 480);
 	sock_accept(&ss, server, &peer);
 	sock_close(&ss, peer);
 	window_free(&window);

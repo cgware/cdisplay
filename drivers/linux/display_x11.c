@@ -21,6 +21,48 @@ typedef struct window_x11_s {
 	u32 id;
 } window_x11_t;
 
+enum {
+	X11_PAD_SIZE		    = 4,
+	X11_CONNECTION_SETUP_SIZE   = 12,
+	X11_SETUP_REPLY_HEADER_SIZE = 8,
+	X11_SETUP_MIN_SIZE	    = 32,
+	X11_FORMAT_SIZE		    = 8,
+	X11_SCREEN_MIN_SIZE	    = 40,
+	X11_REPLY_SIZE		    = 32,
+	X11_EVENT_SIZE		    = 32,
+	X11_EVENT_TYPE_MASK	    = 0x7f,
+	X11_SOCKET_NONBLOCK	    = 04000,
+	X11_EVENT_IGNORED	    = 2,
+};
+
+enum {
+	X11_PROTOCOL_MAJOR = 11,
+	X11_PROTOCOL_MINOR = 0,
+	X11_REPLY_SUCCESS  = 1,
+};
+
+enum {
+	X11_SETUP_RESOURCE_ID_BASE_OFFSET = 4,
+	X11_SETUP_PROTOCOL_MAJOR_OFFSET	  = 2,
+	X11_SETUP_VENDOR_LENGTH_OFFSET	  = 16,
+	X11_SETUP_SCREEN_COUNT_OFFSET	  = 20,
+	X11_SETUP_FORMAT_COUNT_OFFSET	  = 21,
+	X11_SETUP_SCREEN_LIST_OFFSET	  = 32,
+	X11_SCREEN_DEFAULT_COLORMAP_SIZE  = 4,
+};
+
+enum {
+	XAUTH_FAMILY_LOCAL = 256,
+	XAUTH_FAMILY_WILD  = 65535,
+};
+
+enum {
+	XAUTH_SCORE_NO_MATCH   = -1,
+	XAUTH_SCORE_WILD       = 10,
+	XAUTH_SCORE_LOCAL      = 50,
+	XAUTH_SCORE_LOCAL_HOST = 100,
+};
+
 static int buf_read_blob(const buf_t *buf, u8 const **data, u16 *length, size_t *off)
 {
 	if (buf_read_u16be(buf, off, length)) {
@@ -53,7 +95,7 @@ static int bytes_eq(const void *l, size_t l_size, const void *r, size_t r_size)
 
 static size_t pad4(size_t length)
 {
-	return (4 - (length & 3)) & 3;
+	return (X11_PAD_SIZE - (length & (X11_PAD_SIZE - 1))) & (X11_PAD_SIZE - 1);
 }
 
 static int open_display(display_t *d)
@@ -125,7 +167,7 @@ static int open_display(display_t *d)
 
 	size_t off = 0;
 
-	int best_score	  = -1;
+	int best_score	  = XAUTH_SCORE_NO_MATCH;
 	const u8 *cookie  = NULL;
 	u16 cookie_length = 0;
 
@@ -154,22 +196,18 @@ static int open_display(display_t *d)
 			break;
 		}
 
-		enum {
-			XAUTH_FAMILY_LOCAL = 256,
-			XAUTH_FAMILY_WILD  = 65535,
-		};
-
-		int score = -1;
+		int score = XAUTH_SCORE_NO_MATCH;
 		if (data_length > 0 &&
 		    (number_length == 0 || bytes_eq(number, number_length, display_number_str.data, display_number_str.len)) &&
 		    bytes_eq(name, name_length, mit_magic_cookie.data, mit_magic_cookie.len)) {
 			switch (family) {
 			case XAUTH_FAMILY_LOCAL: {
-				score = bytes_eq(address, address_length, hostname.data, hostname.len) ? 100 : 50;
+				score = bytes_eq(address, address_length, hostname.data, hostname.len) ? XAUTH_SCORE_LOCAL_HOST
+												       : XAUTH_SCORE_LOCAL;
 				break;
 			}
 			case XAUTH_FAMILY_WILD: {
-				score = 10;
+				score = XAUTH_SCORE_WILD;
 				break;
 			}
 			default: {
@@ -193,22 +231,23 @@ static int open_display(display_t *d)
 	}
 
 	buf_t b = {0};
-	buf_init(&b, 12, d->alloc);
+	buf_init(&b, X11_CONNECTION_SETUP_SIZE, d->alloc);
 	strv_t byte_order = STRV("l\0");
 	buf_add_str(&b, byte_order, NULL);
-	u8 padding[] = {0, 0, 0};
+	u8 padding[X11_PAD_SIZE - 1] = {0};
 
 	strv_t auth_name = cookie ? mit_magic_cookie : STRV("");
 
-	buf_write_u16le(&b, 11);
-	buf_write_u16le(&b, 0);
+	buf_write_u16le(&b, X11_PROTOCOL_MAJOR);
+	buf_write_u16le(&b, X11_PROTOCOL_MINOR);
 	buf_write_u16le(&b, auth_name.len);
 	buf_write_u16le(&b, cookie_length);
 	buf_write_u16le(&b, 0);
 
 	if (sock_write_all(d->ss, dx11->sock, b.data, b.used) || sock_write_all(d->ss, dx11->sock, auth_name.data, auth_name.len) ||
 	    sock_write_all(d->ss, dx11->sock, padding, pad4(auth_name.len)) || sock_write_all(d->ss, dx11->sock, cookie, cookie_length) ||
-	    sock_write_all(d->ss, dx11->sock, padding, pad4(cookie_length)) || sock_read_all(d->ss, dx11->sock, b.data, 8)) {
+	    sock_write_all(d->ss, dx11->sock, padding, pad4(cookie_length)) ||
+	    sock_read_all(d->ss, dx11->sock, b.data, X11_SETUP_REPLY_HEADER_SIZE)) {
 		log_error("cwindow", "awindow_x11", NULL, "failed to send request");
 		buf_free(&b);
 		buf_free(&xauthority);
@@ -221,14 +260,14 @@ static int open_display(display_t *d)
 	off = 0;
 	u8 success;
 	buf_read_u8le(&b, &off, &success);
-	if (success != 1) {
+	if (success != X11_REPLY_SUCCESS) {
 		log_error("cwindow", "awindow_x11", NULL, "connection setup was not successful");
 		buf_free(&b);
 		sock_close(d->ss, dx11->sock);
 		return 1;
 	}
 
-	off = 2;
+	off = X11_SETUP_PROTOCOL_MAJOR_OFFSET;
 	u16 major_version;
 	buf_read_u16le(&b, &off, &major_version);
 	u16 minor_version;
@@ -237,9 +276,9 @@ static int open_display(display_t *d)
 
 	u16 extra_words;
 	buf_read_u16le(&b, &off, &extra_words);
-	size_t setup_length = (size_t)extra_words * 4;
+	size_t setup_length = (size_t)extra_words * X11_PAD_SIZE;
 
-	if (setup_length < 32) {
+	if (setup_length < X11_SETUP_MIN_SIZE) {
 		log_error("cwindow", "awindow_x11", NULL, "invalid setup length: %zu", setup_length);
 		buf_free(&b);
 		sock_close(d->ss, dx11->sock);
@@ -261,20 +300,21 @@ static int open_display(display_t *d)
 	}
 	b.used = setup_length;
 
-	off = 4;
+	off = X11_SETUP_RESOURCE_ID_BASE_OFFSET;
 	buf_read_u32le(&b, &off, &dx11->resource_id_base);
 	buf_read_u32le(&b, &off, &dx11->resource_id_mask);
 
-	off = 16;
+	off = X11_SETUP_VENDOR_LENGTH_OFFSET;
 	u16 vendor_length;
 	buf_read_u16le(&b, &off, &vendor_length);
-	off = 20;
+	off = X11_SETUP_SCREEN_COUNT_OFFSET;
 	u8 screen_count;
 	buf_read_u8le(&b, &off, &screen_count);
+	off = X11_SETUP_FORMAT_COUNT_OFFSET;
 	u8 format_count;
 	buf_read_u8le(&b, &off, &format_count);
 
-	size_t screen_offset = 32 + vendor_length + pad4(vendor_length) + (size_t)format_count * 8;
+	size_t screen_offset = X11_SETUP_SCREEN_LIST_OFFSET + vendor_length + pad4(vendor_length) + (size_t)format_count * X11_FORMAT_SIZE;
 
 	if (screen_count == 0) {
 		log_error("cwindow", "awindow_x11", NULL, "no screens found");
@@ -283,7 +323,7 @@ static int open_display(display_t *d)
 		return 1;
 	}
 
-	if (screen_offset + 40 > setup_length) {
+	if (screen_offset + X11_SCREEN_MIN_SIZE > setup_length) {
 		log_error("cwindow", "awindow_x11", NULL, "invalid screen offset: %zu", screen_offset);
 		buf_free(&b);
 		sock_close(d->ss, dx11->sock);
@@ -292,7 +332,7 @@ static int open_display(display_t *d)
 
 	off = screen_offset;
 	buf_read_u32le(&b, &off, &dx11->root);
-	off += 4;
+	off += X11_SCREEN_DEFAULT_COLORMAP_SIZE;
 	buf_read_u32le(&b, &off, &dx11->white_pixel);
 	buf_read_u32le(&b, &off, &dx11->black_pixel);
 
@@ -316,10 +356,10 @@ static unsigned ctz32(uint32_t value)
 }
 
 enum {
-	X_CREATE_WINDOW	 = 1,
-	X_DESTROY_WINDOW = 4,
-	X_MAP_WINDOW	 = 8,
-	X_INTERN_ATOM	 = 16,
+	X_CREATE_WINDOW	  = 1,
+	X_DESTROY_WINDOW  = 4,
+	X_MAP_WINDOW	  = 8,
+	X_INTERN_ATOM	  = 16,
 	X_CHANGE_PROPERTY = 18,
 };
 
@@ -328,38 +368,106 @@ enum {
 };
 
 enum {
-	X_EVENT_KEY_PRESS	= 2,
-	X_EVENT_KEY_RELEASE	= 3,
-	X_EVENT_BUTTON_PRESS	= 4,
-	X_EVENT_BUTTON_RELEASE	= 5,
-	X_EVENT_MOTION_NOTIFY	= 6,
-	X_EVENT_FOCUS_IN	= 9,
-	X_EVENT_FOCUS_OUT	= 10,
-	X_EVENT_EXPOSE		= 12,
-	X_EVENT_DESTROY_NOTIFY	= 17,
-	X_EVENT_UNMAP_NOTIFY	= 18,
-	X_EVENT_MAP_NOTIFY	= 19,
-	X_EVENT_REPARENT_NOTIFY = 21,
-	X_EVENT_CONFIGURE_NOTIFY = 22,
-	X_EVENT_CLIENT_MESSAGE	= 33,
+	X_COPY_FROM_PARENT = 0,
+	X_INPUT_OUTPUT	   = 1,
 };
 
-static int create_window(window_t *wnd, u16 x, u16 y)
-{
-	enum {
-		MAX_VALUES = 15,
-	};
+enum {
+	X_CHANGE_PROPERTY_MODE_REPLACE = 0,
+	X_PROPERTY_FORMAT_32	       = 32,
+};
 
-	u8 request[32 + MAX_VALUES * 4] = {0};
-	u32 values[MAX_VALUES]		= {0};
-	size_t value_count		= 0;
+enum {
+	X_CW_BACK_PIXEL	  = 1u << 1,
+	X_CW_BORDER_PIXEL = 1u << 3,
+	X_CW_EVENT_MASK	  = 1u << 11,
+};
+
+enum {
+	X_EVENT_MASK_KEY_PRESS	    = 1u << 0,
+	X_EVENT_MASK_KEY_RELEASE    = 1u << 1,
+	X_EVENT_MASK_BUTTON_PRESS   = 1u << 2,
+	X_EVENT_MASK_BUTTON_RELEASE = 1u << 3,
+	X_EVENT_MASK_POINTER_MOTION = 1u << 6,
+	X_EVENT_MASK_EXPOSURE	    = 1u << 15,
+	X_EVENT_MASK_STRUCTURE	    = 1u << 17,
+	X_EVENT_MASK_FOCUS_CHANGE   = 1u << 21,
+};
+
+enum {
+	X_EVENT_KEY_PRESS	 = 2,
+	X_EVENT_KEY_RELEASE	 = 3,
+	X_EVENT_BUTTON_PRESS	 = 4,
+	X_EVENT_BUTTON_RELEASE	 = 5,
+	X_EVENT_MOTION_NOTIFY	 = 6,
+	X_EVENT_FOCUS_IN	 = 9,
+	X_EVENT_FOCUS_OUT	 = 10,
+	X_EVENT_EXPOSE		 = 12,
+	X_EVENT_DESTROY_NOTIFY	 = 17,
+	X_EVENT_UNMAP_NOTIFY	 = 18,
+	X_EVENT_MAP_NOTIFY	 = 19,
+	X_EVENT_REPARENT_NOTIFY	 = 21,
+	X_EVENT_CONFIGURE_NOTIFY = 22,
+	X_EVENT_CLIENT_MESSAGE	 = 33,
+};
+
+enum {
+	X_CREATE_WINDOW_REQUEST_SIZE	= 32,
+	X_CREATE_WINDOW_REQUEST_WORDS	= X_CREATE_WINDOW_REQUEST_SIZE / X11_PAD_SIZE,
+	X_CREATE_WINDOW_MAX_VALUE_COUNT = 15,
+	X_DEFAULT_WINDOW_BORDER_WIDTH	= 1,
+};
+
+enum {
+	X_INTERN_ATOM_REQUEST_SIZE	= 8,
+	X_INTERN_ATOM_NAME_MAX		= 64,
+	X_INTERN_ATOM_REPLY_ATOM_OFFSET = 8,
+};
+
+enum {
+	X_CHANGE_PROPERTY_REQUEST_SIZE	= 28,
+	X_CHANGE_PROPERTY_REQUEST_WORDS = X_CHANGE_PROPERTY_REQUEST_SIZE / X11_PAD_SIZE,
+	X_CHANGE_PROPERTY_ITEM_COUNT	= 1,
+};
+
+enum {
+	X_WINDOW_ID_REQUEST_SIZE  = 8,
+	X_WINDOW_ID_REQUEST_WORDS = X_WINDOW_ID_REQUEST_SIZE / X11_PAD_SIZE,
+};
+
+enum {
+	X_KEY_BUTTON_EVENT_DETAIL_OFFSET   = 1,
+	X_KEY_BUTTON_EVENT_WINDOW_OFFSET   = 12,
+	X_KEY_BUTTON_EVENT_POSITION_OFFSET = 24,
+	X_KEY_BUTTON_EVENT_STATE_OFFSET	   = 28,
+
+	X_MOTION_EVENT_WINDOW_OFFSET   = 12,
+	X_MOTION_EVENT_POSITION_OFFSET = 24,
+	X_MOTION_EVENT_STATE_OFFSET    = 28,
+
+	X_FOCUS_EVENT_WINDOW_OFFSET	  = 4,
+	X_DESTROY_EVENT_WINDOW_OFFSET	  = 8,
+	X_CONFIGURE_EVENT_WINDOW_OFFSET	  = 8,
+	X_CONFIGURE_EVENT_GEOMETRY_OFFSET = 16,
+
+	X_CLIENT_MESSAGE_FORMAT_OFFSET = 1,
+	X_CLIENT_MESSAGE_WINDOW_OFFSET = 4,
+	X_CLIENT_MESSAGE_DATA_OFFSET   = 12,
+};
+
+static int create_window(window_t *wnd, u16 x, u16 y, u16 width, u16 height)
+{
+	u8 request[X_CREATE_WINDOW_REQUEST_SIZE + X_CREATE_WINDOW_MAX_VALUE_COUNT * X11_PAD_SIZE] = {0};
+	u32 values[X_CREATE_WINDOW_MAX_VALUE_COUNT]						  = {0};
+	size_t value_count									  = 0;
 
 	display_x11_t *dx11 = wnd->display->data;
 
 	u32 background_pixel = dx11->white_pixel;
 	u32 border_pixel     = dx11->black_pixel;
 
-	u32 event_mask = (1u << 0) | (1u << 1) | (1u << 2) | (1u << 3) | (1u << 6) | (1u << 15) | (1u << 17) | (1u << 21);
+	u32 event_mask = X_EVENT_MASK_KEY_PRESS | X_EVENT_MASK_KEY_RELEASE | X_EVENT_MASK_BUTTON_PRESS | X_EVENT_MASK_BUTTON_RELEASE |
+			 X_EVENT_MASK_POINTER_MOTION | X_EVENT_MASK_EXPOSURE | X_EVENT_MASK_STRUCTURE | X_EVENT_MASK_FOCUS_CHANGE;
 
 	values[value_count++] = background_pixel;
 	values[value_count++] = border_pixel;
@@ -381,17 +489,13 @@ static int create_window(window_t *wnd, u16 x, u16 y)
 
 	dx11->next_resource++;
 
-	enum {
-		COPY_FROM_PARENT = 0,
-	};
-
-	u8 depth = COPY_FROM_PARENT;
+	u8 depth = X_COPY_FROM_PARENT;
 
 	size_t off = 0;
 	cbuf_write_u8le(request, &off, X_CREATE_WINDOW);
 	cbuf_write_u8le(request, &off, depth);
 
-	u16 length = 8 + value_count;
+	u16 length = X_CREATE_WINDOW_REQUEST_WORDS + value_count;
 	cbuf_write_u16le(request, &off, length);
 	cbuf_write_u32le(request, &off, wx11->id);
 
@@ -401,38 +505,26 @@ static int create_window(window_t *wnd, u16 x, u16 y)
 	cbuf_write_u16le(request, &off, x);
 	cbuf_write_u16le(request, &off, y);
 
-	u16 width  = 800;
-	u16 height = 600;
 	cbuf_write_u16le(request, &off, width);
 	cbuf_write_u16le(request, &off, height);
 
-	u16 border_width = 1;
+	u16 border_width = X_DEFAULT_WINDOW_BORDER_WIDTH;
 	cbuf_write_u16le(request, &off, border_width);
 
-	enum {
-		INPUT_OUTPUT = 1,
-	};
-
-	u16 window_class = INPUT_OUTPUT;
+	u16 window_class = X_INPUT_OUTPUT;
 	cbuf_write_u16le(request, &off, window_class);
 
-	u32 visual = 0;
+	u32 visual = X_COPY_FROM_PARENT;
 	cbuf_write_u32le(request, &off, visual);
 
-	enum {
-		CW_BACK_PIXEL	= 1u << 1,
-		CW_BORDER_PIXEL = 1u << 3,
-		CW_EVENT_MASK	= 1u << 11,
-	};
-
-	u32 value_mask = CW_BACK_PIXEL | CW_BORDER_PIXEL | CW_EVENT_MASK;
+	u32 value_mask = X_CW_BACK_PIXEL | X_CW_BORDER_PIXEL | X_CW_EVENT_MASK;
 	cbuf_write_u32le(request, &off, value_mask);
 
 	for (size_t i = 0; i < value_count; i++) {
 		cbuf_write_u32le(request, &off, values[i]);
 	}
 
-	size_t request_size = 32 + value_count * 4;
+	size_t request_size = X_CREATE_WINDOW_REQUEST_SIZE + value_count * X11_PAD_SIZE;
 
 	if (sock_write_all(wnd->display->ss, dx11->sock, request, request_size)) {
 		log_error("cwindow", "awindow_x11", NULL, "failed to create window");
@@ -444,13 +536,18 @@ static int create_window(window_t *wnd, u16 x, u16 y)
 
 static int intern_atom(display_t *display, strv_t name, u32 *atom)
 {
-	u8 request[8 + 64] = {0};
-	u8 reply[32]	    = {0};
-	size_t off	    = 0;
+	u8 request[X_INTERN_ATOM_REQUEST_SIZE + X_INTERN_ATOM_NAME_MAX] = {0};
+	u8 reply[X11_REPLY_SIZE]					= {0};
+	size_t off							= 0;
+
+	if (name.len + pad4(name.len) > X_INTERN_ATOM_NAME_MAX) {
+		log_error("cwindow", "display_x11", NULL, "atom name is too long: %.*s", name.len, name.data);
+		return 1;
+	}
 
 	cbuf_write_u8le(request, &off, X_INTERN_ATOM);
 	cbuf_write_u8le(request, &off, 0);
-	cbuf_write_u16le(request, &off, (u16)(2 + (name.len + pad4(name.len)) / 4));
+	cbuf_write_u16le(request, &off, (u16)(X_INTERN_ATOM_REQUEST_SIZE / X11_PAD_SIZE + (name.len + pad4(name.len)) / X11_PAD_SIZE));
 	cbuf_write_u16le(request, &off, name.len);
 	cbuf_write_u16le(request, &off, 0);
 	mem_copy(&request[off], sizeof(request) - off, name.data, name.len);
@@ -462,12 +559,12 @@ static int intern_atom(display_t *display, strv_t name, u32 *atom)
 		return 1;
 	}
 
-	if (reply[0] != 1) {
+	if (reply[0] != X11_REPLY_SUCCESS) {
 		log_error("cwindow", "display_x11", NULL, "failed to intern atom: %.*s", name.len, name.data);
 		return 1;
 	}
 
-	cbuf_get_u32le(reply, 8, atom);
+	cbuf_get_u32le(reply, X_INTERN_ATOM_REPLY_ATOM_OFFSET, atom);
 	if (*atom == 0) {
 		log_error("cwindow", "display_x11", NULL, "atom not found: %.*s", name.len, name.data);
 		return 1;
@@ -490,23 +587,23 @@ static int init_atoms(display_t *display)
 
 static int set_wm_protocols(window_t *wnd)
 {
-	u8 request[28] = {0};
-	size_t off     = 0;
+	u8 request[X_CHANGE_PROPERTY_REQUEST_SIZE] = {0};
+	size_t off				   = 0;
 
-	window_x11_t *wx11 = wnd->data;
+	window_x11_t *wx11  = wnd->data;
 	display_x11_t *dx11 = wnd->display->data;
 
 	cbuf_write_u8le(request, &off, X_CHANGE_PROPERTY);
-	cbuf_write_u8le(request, &off, 0);
-	cbuf_write_u16le(request, &off, 7);
+	cbuf_write_u8le(request, &off, X_CHANGE_PROPERTY_MODE_REPLACE);
+	cbuf_write_u16le(request, &off, X_CHANGE_PROPERTY_REQUEST_WORDS);
 	cbuf_write_u32le(request, &off, wx11->id);
 	cbuf_write_u32le(request, &off, dx11->wm_protocols);
 	cbuf_write_u32le(request, &off, XA_ATOM);
-	cbuf_write_u8le(request, &off, 32);
+	cbuf_write_u8le(request, &off, X_PROPERTY_FORMAT_32);
 	cbuf_write_u8le(request, &off, 0);
 	cbuf_write_u8le(request, &off, 0);
 	cbuf_write_u8le(request, &off, 0);
-	cbuf_write_u32le(request, &off, 1);
+	cbuf_write_u32le(request, &off, X_CHANGE_PROPERTY_ITEM_COUNT);
 	cbuf_write_u32le(request, &off, dx11->wm_delete_window);
 
 	if (sock_write_all(wnd->display->ss, dx11->sock, request, sizeof(request))) {
@@ -519,8 +616,8 @@ static int set_wm_protocols(window_t *wnd)
 
 static int read_x11_event(display_t *display, display_event_t *event)
 {
-	u8 data[32] = {0};
-	display_x11_t *dx11 = display->data;
+	u8 data[X11_EVENT_SIZE] = {0};
+	display_x11_t *dx11	= display->data;
 
 	*event = (display_event_t){0};
 
@@ -528,7 +625,7 @@ static int read_x11_event(display_t *display, display_event_t *event)
 		return 1;
 	}
 
-	u8 type = data[0] & 0x7f;
+	u8 type = data[0] & X11_EVENT_TYPE_MASK;
 	size_t off;
 	u32 id;
 
@@ -538,70 +635,70 @@ static int read_x11_event(display_t *display, display_event_t *event)
 	case X_EVENT_BUTTON_PRESS:
 	case X_EVENT_BUTTON_RELEASE: {
 		u16 modifiers;
-		off = 12;
+		off = X_KEY_BUTTON_EVENT_WINDOW_OFFSET;
 		cbuf_read_u32le(data, &off, &id);
 		event->window = id;
-		off	      = 24;
+		off	      = X_KEY_BUTTON_EVENT_POSITION_OFFSET;
 		cbuf_read_u16le(data, &off, &event->x);
 		cbuf_read_u16le(data, &off, &event->y);
-		off = 28;
+		off = X_KEY_BUTTON_EVENT_STATE_OFFSET;
 		cbuf_read_u16le(data, &off, &modifiers);
 		event->modifiers = modifiers;
 		if (type == X_EVENT_KEY_PRESS || type == X_EVENT_KEY_RELEASE) {
 			event->type = type == X_EVENT_KEY_PRESS ? DISPLAY_EVENT_KEY_DOWN : DISPLAY_EVENT_KEY_UP;
-			event->key  = data[1];
+			event->key  = data[X_KEY_BUTTON_EVENT_DETAIL_OFFSET];
 		} else {
 			event->type   = type == X_EVENT_BUTTON_PRESS ? DISPLAY_EVENT_MOUSE_DOWN : DISPLAY_EVENT_MOUSE_UP;
-			event->button = data[1];
+			event->button = data[X_KEY_BUTTON_EVENT_DETAIL_OFFSET];
 		}
 		return 0;
 	}
 	case X_EVENT_MOTION_NOTIFY: {
 		u16 modifiers;
-		off = 12;
+		off = X_MOTION_EVENT_WINDOW_OFFSET;
 		cbuf_read_u32le(data, &off, &id);
 		event->window = id;
-		off	      = 24;
+		off	      = X_MOTION_EVENT_POSITION_OFFSET;
 		cbuf_read_u16le(data, &off, &event->x);
 		cbuf_read_u16le(data, &off, &event->y);
-		off = 28;
+		off = X_MOTION_EVENT_STATE_OFFSET;
 		cbuf_read_u16le(data, &off, &modifiers);
 		event->modifiers = modifiers;
-		event->type = DISPLAY_EVENT_MOUSE_MOVE;
+		event->type	 = DISPLAY_EVENT_MOUSE_MOVE;
 		return 0;
 	}
 	case X_EVENT_FOCUS_IN:
 	case X_EVENT_FOCUS_OUT: {
-		off = 4;
+		off = X_FOCUS_EVENT_WINDOW_OFFSET;
 		cbuf_read_u32le(data, &off, &id);
 		event->window = id;
 		event->type   = type == X_EVENT_FOCUS_IN ? DISPLAY_EVENT_FOCUS_GAINED : DISPLAY_EVENT_FOCUS_LOST;
 		return 0;
 	}
 	case X_EVENT_EXPOSE: {
-		return 2;
+		return X11_EVENT_IGNORED;
 	}
 	case X_EVENT_DESTROY_NOTIFY: {
-		off = 8;
+		off = X_DESTROY_EVENT_WINDOW_OFFSET;
 		cbuf_read_u32le(data, &off, &id);
 		event->window = id;
 		event->type   = DISPLAY_EVENT_CLOSE;
 		return 0;
 	}
 	case X_EVENT_UNMAP_NOTIFY: {
-		return 2;
+		return X11_EVENT_IGNORED;
 	}
 	case X_EVENT_MAP_NOTIFY: {
-		return 2;
+		return X11_EVENT_IGNORED;
 	}
 	case X_EVENT_REPARENT_NOTIFY: {
-		return 2;
+		return X11_EVENT_IGNORED;
 	}
 	case X_EVENT_CONFIGURE_NOTIFY: {
-		off = 8;
+		off = X_CONFIGURE_EVENT_WINDOW_OFFSET;
 		cbuf_read_u32le(data, &off, &id);
 		event->window = id;
-		off	      = 16;
+		off	      = X_CONFIGURE_EVENT_GEOMETRY_OFFSET;
 		cbuf_read_u16le(data, &off, &event->x);
 		cbuf_read_u16le(data, &off, &event->y);
 		cbuf_read_u16le(data, &off, &event->width);
@@ -610,19 +707,20 @@ static int read_x11_event(display_t *display, display_event_t *event)
 		return 0;
 	}
 	case X_EVENT_CLIENT_MESSAGE: {
-		off = 4;
+		off = X_CLIENT_MESSAGE_WINDOW_OFFSET;
 		cbuf_read_u32le(data, &off, &id);
 		u32 message_type;
 		cbuf_read_u32le(data, &off, &message_type);
-		off = 12;
+		off = X_CLIENT_MESSAGE_DATA_OFFSET;
 		u32 message;
 		cbuf_read_u32le(data, &off, &message);
-		if (data[1] == 32 && message_type == dx11->wm_protocols && message == dx11->wm_delete_window) {
+		if (data[X_CLIENT_MESSAGE_FORMAT_OFFSET] == X_PROPERTY_FORMAT_32 && message_type == dx11->wm_protocols &&
+		    message == dx11->wm_delete_window) {
 			event->window = id;
 			event->type   = DISPLAY_EVENT_CLOSE;
 			return 0;
 		}
-		return 2;
+		return X11_EVENT_IGNORED;
 	}
 	default: {
 		log_error("cwindow", "display_x11", NULL, "unsupported X11 event: %u", type);
@@ -633,14 +731,14 @@ static int read_x11_event(display_t *display, display_event_t *event)
 
 static int destroy_window(window_t *wnd)
 {
-	u8 request[8] = {0};
+	u8 request[X_WINDOW_ID_REQUEST_SIZE] = {0};
 
 	window_x11_t *wx11 = wnd->data;
 
 	size_t off = 0;
 	cbuf_write_u8le(request, &off, X_DESTROY_WINDOW);
 	cbuf_write_u8le(request, &off, 0);
-	cbuf_write_u16le(request, &off, 2);
+	cbuf_write_u16le(request, &off, X_WINDOW_ID_REQUEST_WORDS);
 	cbuf_write_u32le(request, &off, wx11->id);
 
 	const display_x11_t *dx11 = wnd->display->data;
@@ -657,11 +755,11 @@ static int map_window(window_t *wnd)
 {
 	window_x11_t *wx11 = wnd->data;
 
-	u8 request[8] = {0};
-	size_t off    = 0;
+	u8 request[X_WINDOW_ID_REQUEST_SIZE] = {0};
+	size_t off			     = 0;
 	cbuf_write_u8le(request, &off, X_MAP_WINDOW);
 	cbuf_write_u8le(request, &off, 0);
-	cbuf_write_u16le(request, &off, 2);
+	cbuf_write_u16le(request, &off, X_WINDOW_ID_REQUEST_WORDS);
 	cbuf_write_u32le(request, &off, wx11->id);
 
 	const display_x11_t *dx11 = wnd->display->data;
@@ -682,14 +780,14 @@ static int display_x11_poll_event(display_t *display, display_event_t *event)
 
 	display_x11_t *dx11 = display->data;
 	int flags;
-	if (sock_get_flags(display->ss, dx11->sock, &flags) || sock_set_flags(display->ss, dx11->sock, flags | 04000)) {
+	if (sock_get_flags(display->ss, dx11->sock, &flags) || sock_set_flags(display->ss, dx11->sock, flags | X11_SOCKET_NONBLOCK)) {
 		return 1;
 	}
 
 	int ret;
 	do {
 		ret = read_x11_event(display, event);
-	} while (ret == 2);
+	} while (ret == X11_EVENT_IGNORED);
 
 	ret = sock_set_flags(display->ss, dx11->sock, flags) ? 1 : ret;
 
@@ -705,7 +803,7 @@ static int display_x11_wait_event(display_t *display, display_event_t *event)
 	int ret;
 	do {
 		ret = read_x11_event(display, event);
-	} while (ret == 2);
+	} while (ret == X11_EVENT_IGNORED);
 
 	return ret;
 }
@@ -756,7 +854,7 @@ static int display_x11_free(display_t *display)
 	return 0;
 }
 
-static int display_x11_window_init(window_t *wnd, u16 x, u16 y)
+static int display_x11_window_init(window_t *wnd, u16 x, u16 y, u16 width, u16 height)
 {
 	if (wnd == NULL) {
 		return 1;
@@ -767,7 +865,7 @@ static int display_x11_window_init(window_t *wnd, u16 x, u16 y)
 		return 1;
 	}
 
-	if (create_window(wnd, x, y)) {
+	if (create_window(wnd, x, y, width, height)) {
 		mem_free(wnd->data, sizeof(window_x11_t));
 		wnd->data = NULL;
 		return 1;

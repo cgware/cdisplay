@@ -9,6 +9,8 @@ static int t_window_init_ret;
 static u32 t_window_id_ret;
 static u16 t_window_x;
 static u16 t_window_y;
+static u16 t_window_width;
+static u16 t_window_height;
 
 static int t_window_display_init(display_t *display)
 {
@@ -36,12 +38,14 @@ static int t_window_wait_event(display_t *display, display_event_t *event)
 	return 1;
 }
 
-static int t_window_driver_init(window_t *window, u16 x, u16 y)
+static int t_window_driver_init(window_t *window, u16 x, u16 y, u16 width, u16 height)
 {
 	t_window_init_calls++;
-	t_window_x   = x;
-	t_window_y   = y;
-	window->data = (void *)0x5678;
+	t_window_x	= x;
+	t_window_y	= y;
+	t_window_width	= width;
+	t_window_height = height;
+	window->data	= (void *)0x5678;
 	return t_window_init_ret;
 }
 
@@ -77,6 +81,8 @@ static void t_window_reset(void)
 	t_window_id_ret	    = 0;
 	t_window_x	    = 0;
 	t_window_y	    = 0;
+	t_window_width	    = 0;
+	t_window_height	    = 0;
 }
 
 TEST(window_init_null_window)
@@ -87,7 +93,7 @@ TEST(window_init_null_window)
 		.drv = &t_window_driver,
 	};
 
-	EXPECT_EQ(window_init(NULL, &display, 0, 0), NULL);
+	EXPECT_EQ(window_init(NULL, &display, 0, 0, 640, 480), NULL);
 
 	END;
 }
@@ -98,7 +104,7 @@ TEST(window_init_null_display)
 
 	window_t window = {0};
 
-	EXPECT_EQ(window_init(&window, NULL, 0, 0), NULL);
+	EXPECT_EQ(window_init(&window, NULL, 0, 0, 640, 480), NULL);
 
 	END;
 }
@@ -110,7 +116,7 @@ TEST(window_init_display_without_driver)
 	display_t display = {0};
 	window_t window	  = {0};
 
-	EXPECT_EQ(window_init(&window, &display, 0, 0), NULL);
+	EXPECT_EQ(window_init(&window, &display, 0, 0, 640, 480), NULL);
 
 	END;
 }
@@ -125,13 +131,13 @@ TEST(window_init_calls_driver)
 	};
 	window_t window = {0};
 
-	EXPECT_EQ(window_init(&window, &display, 11, 22), &window);
+	EXPECT_EQ(window_init(&window, &display, 11, 22, 640, 480), &window);
 	EXPECT_EQ(t_window_init_calls, 1);
 
 	END;
 }
 
-TEST(window_init_passes_position)
+TEST(window_init_passes_geometry)
 {
 	START;
 
@@ -141,10 +147,12 @@ TEST(window_init_passes_position)
 	};
 	window_t window = {0};
 
-	window_init(&window, &display, 11, 22);
+	window_init(&window, &display, 11, 22, 333, 444);
 
 	EXPECT_EQ(t_window_x, 11);
 	EXPECT_EQ(t_window_y, 22);
+	EXPECT_EQ(t_window_width, 333);
+	EXPECT_EQ(t_window_height, 444);
 
 	END;
 }
@@ -159,7 +167,7 @@ TEST(window_init_sets_fields)
 	};
 	window_t window = {0};
 
-	window_init(&window, &display, 0, 0);
+	window_init(&window, &display, 0, 0, 640, 480);
 
 	EXPECT_EQ(window.display, &display);
 	EXPECT_EQ(window.data, (void *)0x5678);
@@ -178,7 +186,7 @@ TEST(window_init_failure_returns_null)
 	};
 	window_t window = {0};
 
-	EXPECT_EQ(window_init(&window, &display, 0, 0), NULL);
+	EXPECT_EQ(window_init(&window, &display, 0, 0, 640, 480), NULL);
 
 	END;
 }
@@ -194,7 +202,7 @@ TEST(window_init_failure_clears_fields)
 	};
 	window_t window = {0};
 
-	window_init(&window, &display, 0, 0);
+	window_init(&window, &display, 0, 0, 640, 480);
 
 	EXPECT_EQ(window.display, NULL);
 	EXPECT_EQ(window.data, NULL);
@@ -316,7 +324,7 @@ TEST(window_id_calls_driver)
 	START;
 
 	t_window_reset();
-	t_window_id_ret = 0x12345678;
+	t_window_id_ret	  = 0x12345678;
 	display_t display = {
 		.drv = &t_window_driver,
 	};
@@ -338,7 +346,7 @@ STEST(window)
 	RUN(window_init_null_display);
 	RUN(window_init_display_without_driver);
 	RUN(window_init_calls_driver);
-	RUN(window_init_passes_position);
+	RUN(window_init_passes_geometry);
 	RUN(window_init_sets_fields);
 	RUN(window_init_failure_returns_null);
 	RUN(window_init_failure_clears_fields);
