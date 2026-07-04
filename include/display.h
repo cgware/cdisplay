@@ -87,6 +87,19 @@ typedef enum display_key_e {
 	DISPLAY_KEY_F12,
 } display_key_t;
 
+typedef enum display_mouse_e {
+	DISPLAY_MOUSE_UNKNOWN,
+	DISPLAY_MOUSE_LEFT,
+	DISPLAY_MOUSE_MIDDLE,
+	DISPLAY_MOUSE_RIGHT,
+	DISPLAY_MOUSE_WHEEL_UP,
+	DISPLAY_MOUSE_WHEEL_DOWN,
+	DISPLAY_MOUSE_WHEEL_LEFT,
+	DISPLAY_MOUSE_WHEEL_RIGHT,
+	DISPLAY_MOUSE_BACK,
+	DISPLAY_MOUSE_FORWARD,
+} display_mouse_t;
+
 typedef struct display_event_s {
 	display_event_type_t type;
 	u32 window;
@@ -95,7 +108,7 @@ typedef struct display_event_s {
 	u16 width;
 	u16 height;
 	display_key_t key;
-	u32 button;
+	display_mouse_t button;
 	u32 modifiers;
 } display_event_t;
 

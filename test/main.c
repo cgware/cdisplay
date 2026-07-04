@@ -7,7 +7,7 @@ STEST(display_none);
 STEST(display_x11);
 STEST(window);
 
-TEST(cwindow)
+TEST(cdisplay)
 {
 	SSTART;
 	RUN(display);
@@ -27,7 +27,7 @@ int main()
 
 	t_init();
 
-	t_run(test_cwindow, 1);
+	t_run(test_cdisplay, 1);
 
 	int ret = t_finish();
 

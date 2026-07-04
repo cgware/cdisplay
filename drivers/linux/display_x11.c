@@ -116,26 +116,26 @@ static int open_display(display_t *d)
 
 	strv_t name = proc_getenv(d->proc, STRV("DISPLAY"));
 	if (name.data == NULL) {
-		log_error("cwindow", "awindow_x11", NULL, "failed to get display name");
+		log_error("cdisplay", "awindow_x11", NULL, "failed to get display name");
 		return 1;
 	}
 
 	if (name.data[0] != ':') {
-		log_error("cwindow", "awindow_x11", NULL, "invalid display name: %.*s", name.len, name.data);
+		log_error("cdisplay", "awindow_x11", NULL, "invalid display name: %.*s", name.len, name.data);
 		return 1;
 	}
 
 	strv_t display_name = STRVN(&name.data[1], name.len - 1);
 	strv_t display_number_str;
 	if (strv_lsplit(display_name, '.', &display_number_str, NULL) || strv_to_int(display_number_str, NULL)) {
-		log_error("cwindow", "awindow_x11", NULL, "invalid display number: %.*s", display_number_str.len, display_number_str.data);
+		log_error("cdisplay", "awindow_x11", NULL, "invalid display number: %.*s", display_number_str.len, display_number_str.data);
 		return 1;
 	}
 
 	cerr_t err = sock_open(d->ss, SOCK_FAMILY_UNIX, SOCK_TYPE_STREAM, 0, &dx11->sock);
 
 	if (err != CERR_OK) {
-		log_error("cwindow", "awindow_x11", NULL, "failed to open unix socket");
+		log_error("cdisplay", "awindow_x11", NULL, "failed to open unix socket");
 		return 1;
 	}
 
@@ -146,7 +146,7 @@ static int open_display(display_t *d)
 
 	err = sock_connect(d->ss, dx11->sock, SOCK_FAMILY_UNIX, path.data, path.len + 1);
 	if (err != CERR_OK) {
-		log_error("cwindow", "awindow_x11", NULL, "failed to connect to unix socket");
+		log_error("cdisplay", "awindow_x11", NULL, "failed to connect to unix socket");
 		sock_close(d->ss, dx11->sock);
 		return 1;
 	}
@@ -161,7 +161,7 @@ static int open_display(display_t *d)
 	buf_init(&xauthority, 256, d->alloc);
 
 	if (fs_readb(d->fs, xauthority_path, &xauthority)) {
-		log_error("cwindow", "awindow_x11", NULL, "failed to read xauthority");
+		log_error("cdisplay", "awindow_x11", NULL, "failed to read xauthority");
 		buf_free(&xauthority);
 		sock_close(d->ss, dx11->sock);
 		return 1;
@@ -169,7 +169,7 @@ static int open_display(display_t *d)
 
 	char hostname_buf[256] = {0};
 	if (proc_gethostname(d->proc, hostname_buf, sizeof(hostname_buf) - 1)) {
-		log_error("cwindow", "awindow_x11", NULL, "failed to get hostname");
+		log_error("cdisplay", "awindow_x11", NULL, "failed to get hostname");
 		buf_free(&xauthority);
 		sock_close(d->ss, dx11->sock);
 		return 1;
@@ -236,7 +236,7 @@ static int open_display(display_t *d)
 	}
 
 	if (ret) {
-		log_error("cwindow", "awindow_x11", NULL, "malformed authority");
+		log_error("cdisplay", "awindow_x11", NULL, "malformed authority");
 		buf_free(&xauthority);
 		sock_close(d->ss, dx11->sock);
 		return 1;
@@ -260,7 +260,7 @@ static int open_display(display_t *d)
 	    sock_write_all(d->ss, dx11->sock, padding, pad4(auth_name.len)) || sock_write_all(d->ss, dx11->sock, cookie, cookie_length) ||
 	    sock_write_all(d->ss, dx11->sock, padding, pad4(cookie_length)) ||
 	    sock_read_all(d->ss, dx11->sock, b.data, X11_SETUP_REPLY_HEADER_SIZE)) {
-		log_error("cwindow", "awindow_x11", NULL, "failed to send request");
+		log_error("cdisplay", "awindow_x11", NULL, "failed to send request");
 		buf_free(&b);
 		buf_free(&xauthority);
 		sock_close(d->ss, dx11->sock);
@@ -273,7 +273,7 @@ static int open_display(display_t *d)
 	u8 success;
 	buf_read_u8le(&b, &off, &success);
 	if (success != X11_REPLY_SUCCESS) {
-		log_error("cwindow", "awindow_x11", NULL, "connection setup was not successful");
+		log_error("cdisplay", "awindow_x11", NULL, "connection setup was not successful");
 		buf_free(&b);
 		sock_close(d->ss, dx11->sock);
 		return 1;
@@ -284,28 +284,28 @@ static int open_display(display_t *d)
 	buf_read_u16le(&b, &off, &major_version);
 	u16 minor_version;
 	buf_read_u16le(&b, &off, &minor_version);
-	log_info("cwindow", "awindow_x11", NULL, "X11 protocol version: %u.%u", major_version, minor_version);
+	log_info("cdisplay", "awindow_x11", NULL, "X11 protocol version: %u.%u", major_version, minor_version);
 
 	u16 extra_words;
 	buf_read_u16le(&b, &off, &extra_words);
 	size_t setup_length = (size_t)extra_words * X11_PAD_SIZE;
 
 	if (setup_length < X11_SETUP_MIN_SIZE) {
-		log_error("cwindow", "awindow_x11", NULL, "invalid setup length: %zu", setup_length);
+		log_error("cdisplay", "awindow_x11", NULL, "invalid setup length: %zu", setup_length);
 		buf_free(&b);
 		sock_close(d->ss, dx11->sock);
 		return 1;
 	}
 
 	if (buf_resize(&b, setup_length)) {
-		log_error("cwindow", "awindow_x11", NULL, "failed to allocate setup");
+		log_error("cdisplay", "awindow_x11", NULL, "failed to allocate setup");
 		buf_free(&b);
 		sock_close(d->ss, dx11->sock);
 		return 1;
 	}
 
 	if (sock_read_all(d->ss, dx11->sock, b.data, setup_length)) {
-		log_error("cwindow", "awindow_x11", NULL, "failed to read setup");
+		log_error("cdisplay", "awindow_x11", NULL, "failed to read setup");
 		buf_free(&b);
 		sock_close(d->ss, dx11->sock);
 		return 1;
@@ -333,14 +333,14 @@ static int open_display(display_t *d)
 	size_t screen_offset = X11_SETUP_SCREEN_LIST_OFFSET + vendor_length + pad4(vendor_length) + (size_t)format_count * X11_FORMAT_SIZE;
 
 	if (screen_count == 0) {
-		log_error("cwindow", "awindow_x11", NULL, "no screens found");
+		log_error("cdisplay", "awindow_x11", NULL, "no screens found");
 		buf_free(&b);
 		sock_close(d->ss, dx11->sock);
 		return 1;
 	}
 
 	if (screen_offset + X11_SCREEN_MIN_SIZE > setup_length) {
-		log_error("cwindow", "awindow_x11", NULL, "invalid screen offset: %zu", screen_offset);
+		log_error("cdisplay", "awindow_x11", NULL, "invalid screen offset: %zu", screen_offset);
 		buf_free(&b);
 		sock_close(d->ss, dx11->sock);
 		return 1;
@@ -567,7 +567,7 @@ static int create_window(window_t *wnd, u16 x, u16 y, u16 width, u16 height)
 	u32 capacity = dx11->resource_id_mask >> shift;
 
 	if (capacity < dx11->next_resource) {
-		log_error("cwindow", "awindow_x11", NULL, "failed to allocate resource");
+		log_error("cdisplay", "awindow_x11", NULL, "failed to allocate resource");
 		return 1;
 	}
 
@@ -617,7 +617,7 @@ static int create_window(window_t *wnd, u16 x, u16 y, u16 width, u16 height)
 	size_t request_size = X_CREATE_WINDOW_REQUEST_SIZE + value_count * X11_PAD_SIZE;
 
 	if (sock_write_all(wnd->display->ss, dx11->sock, request, request_size)) {
-		log_error("cwindow", "awindow_x11", NULL, "failed to create window");
+		log_error("cdisplay", "awindow_x11", NULL, "failed to create window");
 		return 1;
 	}
 
@@ -640,18 +640,18 @@ static int intern_atom(display_t *display, strv_t name, u32 *atom)
 
 	display_x11_t *dx11 = display->data;
 	if (sock_write_all(display->ss, dx11->sock, request, off) || sock_read_all(display->ss, dx11->sock, reply, sizeof(reply))) {
-		log_error("cwindow", "display_x11", NULL, "failed to intern atom: %.*s", name.len, name.data);
+		log_error("cdisplay", "display_x11", NULL, "failed to intern atom: %.*s", name.len, name.data);
 		return 1;
 	}
 
 	if (reply[0] != X11_REPLY_SUCCESS) {
-		log_error("cwindow", "display_x11", NULL, "failed to intern atom: %.*s", name.len, name.data);
+		log_error("cdisplay", "display_x11", NULL, "failed to intern atom: %.*s", name.len, name.data);
 		return 1;
 	}
 
 	cbuf_get_u32le(reply, X_INTERN_ATOM_REPLY_ATOM_OFFSET, atom);
 	if (*atom == 0) {
-		log_error("cwindow", "display_x11", NULL, "atom not found: %.*s", name.len, name.data);
+		log_error("cdisplay", "display_x11", NULL, "atom not found: %.*s", name.len, name.data);
 		return 1;
 	}
 
@@ -682,7 +682,7 @@ static int set_property_text(window_t *wnd, u32 property, u32 type, strv_t text)
 	}
 
 	if (text.len > X_CHANGE_PROPERTY_MAX_DATA_SIZE) {
-		log_error("cwindow", "display_x11", NULL, "property text is too long");
+		log_error("cdisplay", "display_x11", NULL, "property text is too long");
 		return 1;
 	}
 
@@ -720,7 +720,7 @@ static int set_property_text(window_t *wnd, u32 property, u32 type, strv_t text)
 	mem_free(request, request_size);
 
 	if (ret) {
-		log_error("cwindow", "display_x11", NULL, "failed to set window text property");
+		log_error("cdisplay", "display_x11", NULL, "failed to set window text property");
 		return 1;
 	}
 
@@ -759,7 +759,7 @@ static int set_property_u32(window_t *wnd, u32 property, u32 type, const u32 *va
 	int ret		    = sock_write_all(wnd->display->ss, dx11->sock, request, request_size);
 
 	if (ret) {
-		log_error("cwindow", "display_x11", NULL, "failed to set window property");
+		log_error("cdisplay", "display_x11", NULL, "failed to set window property");
 		return 1;
 	}
 
@@ -813,7 +813,7 @@ static int send_fullscreen_message(window_t *wnd, int fullscreen)
 	cbuf_write_u32le(request, &off, 0);
 
 	if (sock_write_all(wnd->display->ss, dx11->sock, request, sizeof(request))) {
-		log_error("cwindow", "display_x11", NULL, "failed to set fullscreen state");
+		log_error("cdisplay", "display_x11", NULL, "failed to set fullscreen state");
 		return 1;
 	}
 
@@ -837,7 +837,7 @@ static int set_wm_protocols(window_t *wnd)
 	u32 protocols[]	    = {dx11->wm_delete_window};
 
 	if (set_property_u32(wnd, dx11->wm_protocols, XA_ATOM, protocols, X_CHANGE_PROPERTY_ITEM_COUNT)) {
-		log_error("cwindow", "display_x11", NULL, "failed to set WM protocols");
+		log_error("cdisplay", "display_x11", NULL, "failed to set WM protocols");
 		return 1;
 	}
 
@@ -902,12 +902,39 @@ static display_key_t key_from_keysym(u32 keysym)
 	}
 }
 
+static display_mouse_t mouse_from_button(u8 button)
+{
+	switch (button) {
+	case 1:
+		return DISPLAY_MOUSE_LEFT;
+	case 2:
+		return DISPLAY_MOUSE_MIDDLE;
+	case 3:
+		return DISPLAY_MOUSE_RIGHT;
+	case 4:
+		return DISPLAY_MOUSE_WHEEL_UP;
+	case 5:
+		return DISPLAY_MOUSE_WHEEL_DOWN;
+	case 6:
+		return DISPLAY_MOUSE_WHEEL_LEFT;
+	case 7:
+		return DISPLAY_MOUSE_WHEEL_RIGHT;
+	case 8:
+		return DISPLAY_MOUSE_BACK;
+	case 9:
+		return DISPLAY_MOUSE_FORWARD;
+	default:
+		log_error("cdisplay", "display_x11", NULL, "unsupported X11 mouse button: %u", button);
+		return DISPLAY_MOUSE_UNKNOWN;
+	}
+}
+
 static int init_keys(display_t *display)
 {
 	display_x11_t *dx11 = display->data;
 
 	if (dx11->min_keycode > dx11->max_keycode) {
-		log_error("cwindow", "display_x11", NULL, "invalid keycode range");
+		log_error("cdisplay", "display_x11", NULL, "invalid keycode range");
 		return 1;
 	}
 
@@ -925,12 +952,12 @@ static int init_keys(display_t *display)
 	u8 reply[X11_REPLY_SIZE] = {0};
 	if (sock_write_all(display->ss, dx11->sock, request, sizeof(request)) ||
 	    sock_read_all(display->ss, dx11->sock, reply, sizeof(reply))) {
-		log_error("cwindow", "display_x11", NULL, "failed to get keyboard mapping");
+		log_error("cdisplay", "display_x11", NULL, "failed to get keyboard mapping");
 		return 1;
 	}
 
 	if (reply[0] != X11_REPLY_SUCCESS) {
-		log_error("cwindow", "display_x11", NULL, "failed to get keyboard mapping");
+		log_error("cdisplay", "display_x11", NULL, "failed to get keyboard mapping");
 		return 1;
 	}
 
@@ -940,7 +967,7 @@ static int init_keys(display_t *display)
 	size_t keysyms_size  = (size_t)reply_words * X11_PAD_SIZE;
 	size_t expected_size = (size_t)keycode_count * keysyms_per_keycode * sizeof(u32);
 	if (keysyms_size != expected_size || keysyms_per_keycode == 0) {
-		log_error("cwindow", "display_x11", NULL, "invalid keyboard mapping");
+		log_error("cdisplay", "display_x11", NULL, "invalid keyboard mapping");
 		return 1;
 	}
 
@@ -950,7 +977,7 @@ static int init_keys(display_t *display)
 	}
 
 	if (sock_read_all(display->ss, dx11->sock, data, keysyms_size)) {
-		log_error("cwindow", "display_x11", NULL, "failed to read keyboard mapping");
+		log_error("cdisplay", "display_x11", NULL, "failed to read keyboard mapping");
 		alloc_free(&display->alloc, data, keysyms_size);
 		return 1;
 	}
@@ -1007,7 +1034,7 @@ static int read_x11_event(display_t *display, display_event_t *event)
 			event->key  = dx11->keys[data[X_KEY_BUTTON_EVENT_DETAIL_OFFSET]];
 		} else {
 			event->type   = type == X_EVENT_BUTTON_PRESS ? DISPLAY_EVENT_MOUSE_DOWN : DISPLAY_EVENT_MOUSE_UP;
-			event->button = data[X_KEY_BUTTON_EVENT_DETAIL_OFFSET];
+			event->button = mouse_from_button(data[X_KEY_BUTTON_EVENT_DETAIL_OFFSET]);
 		}
 		return 0;
 	}
@@ -1084,7 +1111,7 @@ static int read_x11_event(display_t *display, display_event_t *event)
 		return X11_EVENT_IGNORED;
 	}
 	default: {
-		log_error("cwindow", "display_x11", NULL, "unsupported X11 event: %u", type);
+		log_error("cdisplay", "display_x11", NULL, "unsupported X11 event: %u", type);
 		return 1;
 	}
 	}
@@ -1105,7 +1132,7 @@ static int destroy_window(window_t *wnd)
 	const display_x11_t *dx11 = wnd->display->data;
 
 	if (sock_write_all(wnd->display->ss, dx11->sock, request, sizeof(request))) {
-		log_error("cwindow", "awindow_x11", NULL, "failed to destroy window");
+		log_error("cdisplay", "awindow_x11", NULL, "failed to destroy window");
 		return 1;
 	}
 
@@ -1126,7 +1153,7 @@ static int map_window(window_t *wnd)
 	const display_x11_t *dx11 = wnd->display->data;
 
 	if (sock_write_all(wnd->display->ss, dx11->sock, request, sizeof(request))) {
-		log_error("cwindow", "awindow_x11", NULL, "failed to map window");
+		log_error("cdisplay", "awindow_x11", NULL, "failed to map window");
 		return 1;
 	}
 
@@ -1147,7 +1174,7 @@ static int unmap_window(window_t *wnd)
 	const display_x11_t *dx11 = wnd->display->data;
 
 	if (sock_write_all(wnd->display->ss, dx11->sock, request, sizeof(request))) {
-		log_error("cwindow", "awindow_x11", NULL, "failed to unmap window");
+		log_error("cdisplay", "awindow_x11", NULL, "failed to unmap window");
 		return 1;
 	}
 
@@ -1174,7 +1201,7 @@ static int configure_window(window_t *wnd, u32 value_mask, const u32 *values, si
 	const display_x11_t *dx11 = wnd->display->data;
 
 	if (sock_write_all(wnd->display->ss, dx11->sock, request, X_CONFIGURE_WINDOW_REQUEST_SIZE + value_count * X11_PAD_SIZE)) {
-		log_error("cwindow", "display_x11", NULL, "failed to configure window");
+		log_error("cdisplay", "display_x11", NULL, "failed to configure window");
 		return 1;
 	}
 
@@ -1223,7 +1250,7 @@ static int display_x11_init(display_t *display)
 		return 1;
 	}
 
-	log_info("cwindow", "awindow_x11", NULL, "Initializing X11...\n");
+	log_info("cdisplay", "awindow_x11", NULL, "Initializing X11...\n");
 
 	display->data = mem_alloc(sizeof(display_x11_t));
 	if (display->data == NULL) {
@@ -1256,7 +1283,7 @@ static int display_x11_free(display_t *display)
 
 	display_x11_t *dx11 = display->data;
 
-	log_info("cwindow", "display_x11", NULL, "Freeing X11...\n");
+	log_info("cdisplay", "display_x11", NULL, "Freeing X11...\n");
 	sock_close(display->ss, dx11->sock);
 
 	mem_free(display->data, sizeof(display_x11_t));

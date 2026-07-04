@@ -1923,12 +1923,12 @@ TEST(display_x11_wait_event_inputs)
 
 	EXPECT_EQ(display_wait_event(&display, &event), 0);
 	EXPECT_EQ(event.type, DISPLAY_EVENT_MOUSE_DOWN);
-	EXPECT_EQ(event.button, 1);
+	EXPECT_EQ(event.button, DISPLAY_MOUSE_LEFT);
 	EXPECT_EQ(event.modifiers, 4);
 
 	EXPECT_EQ(display_wait_event(&display, &event), 0);
 	EXPECT_EQ(event.type, DISPLAY_EVENT_MOUSE_UP);
-	EXPECT_EQ(event.button, 1);
+	EXPECT_EQ(event.button, DISPLAY_MOUSE_LEFT);
 	EXPECT_EQ(event.modifiers, 8);
 
 	EXPECT_EQ(display_wait_event(&display, &event), 0);
@@ -1936,6 +1936,76 @@ TEST(display_x11_wait_event_inputs)
 	EXPECT_EQ(event.x, 15);
 	EXPECT_EQ(event.y, 26);
 	EXPECT_EQ(event.modifiers, 16);
+
+	window_free(&window);
+	display_free(&display);
+	sock_close(&ss, peer);
+	sock_close(&ss, server);
+	t_x11_env_free(&fs, &proc, &ss);
+
+	END;
+}
+
+TEST(display_x11_wait_event_mouse_buttons)
+{
+	START;
+
+	display_driver_t *drv = t_x11_driver();
+	fs_t fs		      = {0};
+	proc_t proc	      = {0};
+	sock_t ss	      = {0};
+	display_t display     = {0};
+	window_t window	      = {0};
+	void *server	      = NULL;
+	void *peer	      = NULL;
+	display_event_t event = {0};
+
+	t_x11_open_window(drv, &fs, &proc, &ss, &display, &window, &server, &peer);
+	t_x11_write_key_event(&ss, peer, 4, 2, 0x00100000, 10, 20, 1);
+	t_x11_write_key_event(&ss, peer, 4, 3, 0x00100000, 11, 21, 2);
+	t_x11_write_key_event(&ss, peer, 4, 4, 0x00100000, 12, 22, 3);
+	t_x11_write_key_event(&ss, peer, 4, 5, 0x00100000, 13, 23, 4);
+	t_x11_write_key_event(&ss, peer, 4, 6, 0x00100000, 14, 24, 5);
+	t_x11_write_key_event(&ss, peer, 4, 7, 0x00100000, 15, 25, 6);
+	t_x11_write_key_event(&ss, peer, 4, 8, 0x00100000, 16, 26, 7);
+	t_x11_write_key_event(&ss, peer, 4, 9, 0x00100000, 17, 27, 8);
+	t_x11_write_key_event(&ss, peer, 4, 10, 0x00100000, 18, 28, 9);
+
+	EXPECT_EQ(display_wait_event(&display, &event), 0);
+	EXPECT_EQ(event.type, DISPLAY_EVENT_MOUSE_DOWN);
+	EXPECT_EQ(event.button, DISPLAY_MOUSE_MIDDLE);
+
+	EXPECT_EQ(display_wait_event(&display, &event), 0);
+	EXPECT_EQ(event.type, DISPLAY_EVENT_MOUSE_DOWN);
+	EXPECT_EQ(event.button, DISPLAY_MOUSE_RIGHT);
+
+	EXPECT_EQ(display_wait_event(&display, &event), 0);
+	EXPECT_EQ(event.type, DISPLAY_EVENT_MOUSE_DOWN);
+	EXPECT_EQ(event.button, DISPLAY_MOUSE_WHEEL_UP);
+
+	EXPECT_EQ(display_wait_event(&display, &event), 0);
+	EXPECT_EQ(event.type, DISPLAY_EVENT_MOUSE_DOWN);
+	EXPECT_EQ(event.button, DISPLAY_MOUSE_WHEEL_DOWN);
+
+	EXPECT_EQ(display_wait_event(&display, &event), 0);
+	EXPECT_EQ(event.type, DISPLAY_EVENT_MOUSE_DOWN);
+	EXPECT_EQ(event.button, DISPLAY_MOUSE_WHEEL_LEFT);
+
+	EXPECT_EQ(display_wait_event(&display, &event), 0);
+	EXPECT_EQ(event.type, DISPLAY_EVENT_MOUSE_DOWN);
+	EXPECT_EQ(event.button, DISPLAY_MOUSE_WHEEL_RIGHT);
+
+	EXPECT_EQ(display_wait_event(&display, &event), 0);
+	EXPECT_EQ(event.type, DISPLAY_EVENT_MOUSE_DOWN);
+	EXPECT_EQ(event.button, DISPLAY_MOUSE_BACK);
+
+	EXPECT_EQ(display_wait_event(&display, &event), 0);
+	EXPECT_EQ(event.type, DISPLAY_EVENT_MOUSE_DOWN);
+	EXPECT_EQ(event.button, DISPLAY_MOUSE_FORWARD);
+
+	EXPECT_EQ(display_wait_event(&display, &event), 0);
+	EXPECT_EQ(event.type, DISPLAY_EVENT_MOUSE_DOWN);
+	EXPECT_EQ(event.button, DISPLAY_MOUSE_UNKNOWN);
 
 	window_free(&window);
 	display_free(&display);
@@ -2980,6 +3050,7 @@ STEST(display_x11)
 	RUN(display_x11_wait_event_client_message_close);
 	RUN(display_x11_wait_event_skips_unknown_client_message);
 	RUN(display_x11_wait_event_inputs);
+	RUN(display_x11_wait_event_mouse_buttons);
 	RUN(display_x11_wait_event_focus_and_close);
 	RUN(display_x11_init_wild_authority);
 	RUN(display_x11_init_unknown_authority_family);
