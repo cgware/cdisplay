@@ -61,6 +61,8 @@ typedef enum display_key_e {
 	DISPLAY_KEY_TAB,
 	DISPLAY_KEY_BACKSPACE,
 	DISPLAY_KEY_SPACE,
+	DISPLAY_KEY_CAPS_LOCK,
+	DISPLAY_KEY_NUM_LOCK,
 	DISPLAY_KEY_LEFT,
 	DISPLAY_KEY_RIGHT,
 	DISPLAY_KEY_UP,
@@ -100,6 +102,21 @@ typedef enum display_mouse_e {
 	DISPLAY_MOUSE_FORWARD,
 } display_mouse_t;
 
+typedef enum display_modifier_e {
+	DISPLAY_MOD_NONE		= 0,
+	DISPLAY_MOD_SHIFT		= 1u << 0,
+	DISPLAY_MOD_CAPS_LOCK		= 1u << 1,
+	DISPLAY_MOD_CONTROL		= 1u << 2,
+	DISPLAY_MOD_ALT			= 1u << 3,
+	DISPLAY_MOD_NUM_LOCK		= 1u << 4,
+	DISPLAY_MOD_SUPER		= 1u << 5,
+	DISPLAY_MOD_MOUSE_LEFT		= 1u << 6,
+	DISPLAY_MOD_MOUSE_MIDDLE		= 1u << 7,
+	DISPLAY_MOD_MOUSE_RIGHT		= 1u << 8,
+	DISPLAY_MOD_MOUSE_WHEEL_UP	= 1u << 9,
+	DISPLAY_MOD_MOUSE_WHEEL_DOWN	= 1u << 10,
+} display_modifier_t;
+
 typedef struct display_event_s {
 	display_event_type_t type;
 	u32 window;
@@ -109,7 +126,7 @@ typedef struct display_event_s {
 	u16 height;
 	display_key_t key;
 	display_mouse_t button;
-	u32 modifiers;
+	display_modifier_t modifiers;
 } display_event_t;
 
 typedef struct display_s {
@@ -128,6 +145,8 @@ int display_wait_event(display_t *display, display_event_t *event);
 const char *display_event_type_name(display_event_type_t type);
 const char *display_key_name(display_key_t key);
 const char *display_mouse_name(display_mouse_t button);
+const char *display_modifier_name(display_modifier_t modifier);
+void display_modifiers_format(display_modifier_t modifiers, char *buf, size_t size);
 void display_event_log(const display_event_t *event);
 
 #endif

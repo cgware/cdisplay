@@ -1,4 +1,3 @@
-#include "print.h"
 #include "test.h"
 
 #include "display.h"
@@ -513,6 +512,8 @@ TEST(display_key_name_values)
 	EXPECT_STR(display_key_name(DISPLAY_KEY_TAB), "tab");
 	EXPECT_STR(display_key_name(DISPLAY_KEY_BACKSPACE), "backspace");
 	EXPECT_STR(display_key_name(DISPLAY_KEY_SPACE), "space");
+	EXPECT_STR(display_key_name(DISPLAY_KEY_CAPS_LOCK), "caps lock");
+	EXPECT_STR(display_key_name(DISPLAY_KEY_NUM_LOCK), "num lock");
 	EXPECT_STR(display_key_name(DISPLAY_KEY_LEFT), "left");
 	EXPECT_STR(display_key_name(DISPLAY_KEY_RIGHT), "right");
 	EXPECT_STR(display_key_name(DISPLAY_KEY_UP), "up");
@@ -557,6 +558,94 @@ TEST(display_mouse_name_values)
 	EXPECT_STR(display_mouse_name(DISPLAY_MOUSE_BACK), "back");
 	EXPECT_STR(display_mouse_name(DISPLAY_MOUSE_FORWARD), "forward");
 	EXPECT_STR(display_mouse_name((display_mouse_t)99), "unknown");
+
+	END;
+}
+
+TEST(display_modifier_name_values)
+{
+	START;
+
+	EXPECT_STR(display_modifier_name(DISPLAY_MOD_NONE), "none");
+	EXPECT_STR(display_modifier_name(DISPLAY_MOD_SHIFT), "shift");
+	EXPECT_STR(display_modifier_name(DISPLAY_MOD_CAPS_LOCK), "caps lock");
+	EXPECT_STR(display_modifier_name(DISPLAY_MOD_CONTROL), "control");
+	EXPECT_STR(display_modifier_name(DISPLAY_MOD_ALT), "alt");
+	EXPECT_STR(display_modifier_name(DISPLAY_MOD_NUM_LOCK), "num lock");
+	EXPECT_STR(display_modifier_name(DISPLAY_MOD_SUPER), "super");
+	EXPECT_STR(display_modifier_name(DISPLAY_MOD_MOUSE_LEFT), "mouse left");
+	EXPECT_STR(display_modifier_name(DISPLAY_MOD_MOUSE_MIDDLE), "mouse middle");
+	EXPECT_STR(display_modifier_name(DISPLAY_MOD_MOUSE_RIGHT), "mouse right");
+	EXPECT_STR(display_modifier_name(DISPLAY_MOD_MOUSE_WHEEL_UP), "mouse wheel up");
+	EXPECT_STR(display_modifier_name(DISPLAY_MOD_MOUSE_WHEEL_DOWN), "mouse wheel down");
+	EXPECT_STR(display_modifier_name((display_modifier_t)0x80000000u), "unknown");
+
+	END;
+}
+
+TEST(display_modifiers_format_null_buffer)
+{
+	START;
+
+	display_modifiers_format(DISPLAY_MOD_SHIFT, NULL, 32);
+
+	END;
+}
+
+TEST(display_modifiers_format_zero_size)
+{
+	START;
+
+	char modifiers[1] = {0};
+
+	display_modifiers_format(DISPLAY_MOD_SHIFT, modifiers, 0);
+
+	EXPECT_EQ(modifiers[0], 0);
+
+	END;
+}
+
+TEST(display_modifiers_format_none)
+{
+	START;
+
+	char modifiers[32] = {0};
+
+	display_modifiers_format(DISPLAY_MOD_NONE, modifiers, sizeof(modifiers));
+
+	EXPECT_STR(modifiers, "none");
+
+	END;
+}
+
+TEST(display_modifiers_format_values)
+{
+	START;
+
+	char modifiers[256] = {0};
+
+	display_modifiers_format(DISPLAY_MOD_SHIFT | DISPLAY_MOD_CAPS_LOCK | DISPLAY_MOD_CONTROL | DISPLAY_MOD_ALT |
+					 DISPLAY_MOD_NUM_LOCK | DISPLAY_MOD_SUPER | DISPLAY_MOD_MOUSE_LEFT |
+					 DISPLAY_MOD_MOUSE_MIDDLE | DISPLAY_MOD_MOUSE_RIGHT | DISPLAY_MOD_MOUSE_WHEEL_UP |
+					 DISPLAY_MOD_MOUSE_WHEEL_DOWN,
+				 modifiers,
+				 sizeof(modifiers));
+
+	EXPECT_STR(modifiers,
+		   "shift|caps lock|control|alt|num lock|super|mouse left|mouse middle|mouse right|mouse wheel up|mouse wheel down");
+
+	END;
+}
+
+TEST(display_modifiers_format_unknown)
+{
+	START;
+
+	char modifiers[32] = {0};
+
+	display_modifiers_format((display_modifier_t)0x80000000u, modifiers, sizeof(modifiers));
+
+	EXPECT_STR(modifiers, "unknown");
 
 	END;
 }
@@ -627,18 +716,18 @@ TEST(display_event_log_key)
 		.x	   = 3,
 		.y	   = 4,
 		.key	   = DISPLAY_KEY_ESCAPE,
-		.modifiers = 16,
+		.modifiers = DISPLAY_MOD_NUM_LOCK,
 	};
 
 	display_event_log(&event);
 
-	EXPECT_STR(t_display_log_message, "event=key down window=42 key=escape pos=3,4 mods=16");
+	EXPECT_STR(t_display_log_message, "event=key down window=42 key=escape pos=3,4 mods=num lock");
 
 	event.type = DISPLAY_EVENT_KEY_UP;
 	event.key  = DISPLAY_KEY_F11;
 	display_event_log(&event);
 
-	EXPECT_STR(t_display_log_message, "event=key up window=42 key=f11 pos=3,4 mods=16");
+	EXPECT_STR(t_display_log_message, "event=key up window=42 key=f11 pos=3,4 mods=num lock");
 
 	END;
 }
@@ -653,12 +742,12 @@ TEST(display_event_log_mouse_move)
 		.window	   = 42,
 		.x	   = 5,
 		.y	   = 6,
-		.modifiers = 8,
+		.modifiers = DISPLAY_MOD_ALT,
 	};
 
 	display_event_log(&event);
 
-	EXPECT_STR(t_display_log_message, "event=mouse move window=42 pos=5,6 mods=8");
+	EXPECT_STR(t_display_log_message, "event=mouse move window=42 pos=5,6 mods=alt");
 
 	END;
 }
@@ -674,18 +763,18 @@ TEST(display_event_log_mouse_button)
 		.x	   = 7,
 		.y	   = 8,
 		.button	   = DISPLAY_MOUSE_BACK,
-		.modifiers = 4,
+		.modifiers = DISPLAY_MOD_CONTROL,
 	};
 
 	display_event_log(&event);
 
-	EXPECT_STR(t_display_log_message, "event=mouse down window=42 button=back pos=7,8 mods=4");
+	EXPECT_STR(t_display_log_message, "event=mouse down window=42 button=back pos=7,8 mods=control");
 
 	event.type   = DISPLAY_EVENT_MOUSE_UP;
 	event.button = DISPLAY_MOUSE_FORWARD;
 	display_event_log(&event);
 
-	EXPECT_STR(t_display_log_message, "event=mouse up window=42 button=forward pos=7,8 mods=4");
+	EXPECT_STR(t_display_log_message, "event=mouse up window=42 button=forward pos=7,8 mods=control");
 
 	END;
 }
@@ -720,6 +809,12 @@ STEST(display)
 	RUN(display_event_type_name_values);
 	RUN(display_key_name_values);
 	RUN(display_mouse_name_values);
+	RUN(display_modifier_name_values);
+	RUN(display_modifiers_format_null_buffer);
+	RUN(display_modifiers_format_zero_size);
+	RUN(display_modifiers_format_none);
+	RUN(display_modifiers_format_values);
+	RUN(display_modifiers_format_unknown);
 	RUN(display_event_log_null_event);
 	RUN(display_event_log_close);
 	RUN(display_event_log_resize);

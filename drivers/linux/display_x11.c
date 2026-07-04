@@ -24,6 +24,7 @@ typedef struct display_x11_s {
 	u8 min_keycode;
 	u8 max_keycode;
 	display_key_t keys[256];
+	display_modifier_t modifiers[8];
 } display_x11_t;
 
 typedef struct window_x11_s {
@@ -495,6 +496,15 @@ enum {
 };
 
 enum {
+	X_GET_MODIFIER_MAPPING			    = 119,
+	X_GET_MODIFIER_MAPPING_REQUEST_SIZE	    = 4,
+	X_GET_MODIFIER_MAPPING_REQUEST_WORDS	    = X_GET_MODIFIER_MAPPING_REQUEST_SIZE / X11_PAD_SIZE,
+	X_GET_MODIFIER_MAPPING_KEYCODE_COUNT_OFFSET = 1,
+	X_GET_MODIFIER_MAPPING_LENGTH_OFFSET	    = 4,
+	X_MODIFIER_COUNT			    = 8,
+};
+
+enum {
 	XK_BACKSPACE = 0xff08,
 	XK_TAB	     = 0xff09,
 	XK_RETURN    = 0xff0d,
@@ -519,10 +529,20 @@ enum {
 	XK_SHIFT_R   = 0xffe2,
 	XK_CONTROL_L = 0xffe3,
 	XK_CONTROL_R = 0xffe4,
+	XK_CAPS_LOCK = 0xffe5,
+	XK_NUM_LOCK  = 0xff7f,
 	XK_ALT_L     = 0xffe9,
 	XK_ALT_R     = 0xffea,
 	XK_SUPER_L   = 0xffeb,
 	XK_SUPER_R   = 0xffec,
+};
+
+enum {
+	X_MODIFIER_BUTTON1 = 1u << 8,
+	X_MODIFIER_BUTTON2 = 1u << 9,
+	X_MODIFIER_BUTTON3 = 1u << 10,
+	X_MODIFIER_BUTTON4 = 1u << 11,
+	X_MODIFIER_BUTTON5 = 1u << 12,
 };
 
 enum {
@@ -873,6 +893,10 @@ static display_key_t key_from_keysym(u32 keysym)
 		return DISPLAY_KEY_BACKSPACE;
 	case ' ':
 		return DISPLAY_KEY_SPACE;
+	case XK_CAPS_LOCK:
+		return DISPLAY_KEY_CAPS_LOCK;
+	case XK_NUM_LOCK:
+		return DISPLAY_KEY_NUM_LOCK;
 	case XK_LEFT:
 		return DISPLAY_KEY_LEFT;
 	case XK_RIGHT:
@@ -902,6 +926,30 @@ static display_key_t key_from_keysym(u32 keysym)
 	}
 }
 
+static display_modifier_t modifier_from_key(display_key_t key)
+{
+	switch (key) {
+	case DISPLAY_KEY_LEFT_SHIFT:
+	case DISPLAY_KEY_RIGHT_SHIFT:
+		return DISPLAY_MOD_SHIFT;
+	case DISPLAY_KEY_CAPS_LOCK:
+		return DISPLAY_MOD_CAPS_LOCK;
+	case DISPLAY_KEY_LEFT_CONTROL:
+	case DISPLAY_KEY_RIGHT_CONTROL:
+		return DISPLAY_MOD_CONTROL;
+	case DISPLAY_KEY_LEFT_ALT:
+	case DISPLAY_KEY_RIGHT_ALT:
+		return DISPLAY_MOD_ALT;
+	case DISPLAY_KEY_NUM_LOCK:
+		return DISPLAY_MOD_NUM_LOCK;
+	case DISPLAY_KEY_LEFT_SUPER:
+	case DISPLAY_KEY_RIGHT_SUPER:
+		return DISPLAY_MOD_SUPER;
+	default:
+		return DISPLAY_MOD_NONE;
+	}
+}
+
 static display_mouse_t mouse_from_button(u8 button)
 {
 	switch (button) {
@@ -927,6 +975,35 @@ static display_mouse_t mouse_from_button(u8 button)
 		log_error("cdisplay", "display_x11", NULL, "unsupported X11 mouse button: %u", button);
 		return DISPLAY_MOUSE_UNKNOWN;
 	}
+}
+
+static display_modifier_t modifiers_from_state(display_x11_t *dx11, u16 state)
+{
+	display_modifier_t modifiers = DISPLAY_MOD_NONE;
+
+	for (u8 i = 0; i < X_MODIFIER_COUNT; i++) {
+		if (state & (1u << i)) {
+			modifiers = (display_modifier_t)(modifiers | dx11->modifiers[i]);
+		}
+	}
+
+	if (state & X_MODIFIER_BUTTON1) {
+		modifiers = (display_modifier_t)(modifiers | DISPLAY_MOD_MOUSE_LEFT);
+	}
+	if (state & X_MODIFIER_BUTTON2) {
+		modifiers = (display_modifier_t)(modifiers | DISPLAY_MOD_MOUSE_MIDDLE);
+	}
+	if (state & X_MODIFIER_BUTTON3) {
+		modifiers = (display_modifier_t)(modifiers | DISPLAY_MOD_MOUSE_RIGHT);
+	}
+	if (state & X_MODIFIER_BUTTON4) {
+		modifiers = (display_modifier_t)(modifiers | DISPLAY_MOD_MOUSE_WHEEL_UP);
+	}
+	if (state & X_MODIFIER_BUTTON5) {
+		modifiers = (display_modifier_t)(modifiers | DISPLAY_MOD_MOUSE_WHEEL_DOWN);
+	}
+
+	return modifiers;
 }
 
 static int init_keys(display_t *display)
@@ -999,6 +1076,68 @@ static int init_keys(display_t *display)
 	return 0;
 }
 
+static int init_modifiers(display_t *display)
+{
+	display_x11_t *dx11				= display->data;
+	u8 request[X_GET_MODIFIER_MAPPING_REQUEST_SIZE] = {0};
+
+	size_t off = 0;
+	cbuf_write_u8le(request, &off, X_GET_MODIFIER_MAPPING);
+	cbuf_write_u8le(request, &off, 0);
+	cbuf_write_u16le(request, &off, X_GET_MODIFIER_MAPPING_REQUEST_WORDS);
+
+	u8 reply[X11_REPLY_SIZE] = {0};
+	if (sock_write_all(display->ss, dx11->sock, request, sizeof(request)) ||
+	    sock_read_all(display->ss, dx11->sock, reply, sizeof(reply))) {
+		log_error("cdisplay", "display_x11", NULL, "failed to get modifier mapping");
+		return 1;
+	}
+
+	if (reply[0] != X11_REPLY_SUCCESS) {
+		log_error("cdisplay", "display_x11", NULL, "failed to get modifier mapping");
+		return 1;
+	}
+
+	u8 keycodes_per_modifier = reply[X_GET_MODIFIER_MAPPING_KEYCODE_COUNT_OFFSET];
+	u32 reply_words;
+	cbuf_get_u32le(reply, X_GET_MODIFIER_MAPPING_LENGTH_OFFSET, &reply_words);
+	size_t keycodes_size = (size_t)reply_words * X11_PAD_SIZE;
+	size_t expected_size = (size_t)X_MODIFIER_COUNT * keycodes_per_modifier;
+	if (keycodes_size != expected_size) {
+		log_error("cdisplay", "display_x11", NULL, "invalid modifier mapping");
+		return 1;
+	}
+
+	if (keycodes_size == 0) {
+		return 0;
+	}
+
+	u8 *keycodes = alloc_alloc(&display->alloc, keycodes_size);
+	if (keycodes == NULL) {
+		return 1;
+	}
+
+	if (sock_read_all(display->ss, dx11->sock, keycodes, keycodes_size)) {
+		log_error("cdisplay", "display_x11", NULL, "failed to read modifier mapping");
+		alloc_free(&display->alloc, keycodes, keycodes_size);
+		return 1;
+	}
+
+	for (u8 i = 0; i < X_MODIFIER_COUNT; i++) {
+		for (u8 j = 0; j < keycodes_per_modifier; j++) {
+			u8 keycode = keycodes[(size_t)i * keycodes_per_modifier + j];
+			if (keycode == 0) {
+				continue;
+			}
+			dx11->modifiers[i] = (display_modifier_t)(dx11->modifiers[i] | modifier_from_key(dx11->keys[keycode]));
+		}
+	}
+
+	alloc_free(&display->alloc, keycodes, keycodes_size);
+
+	return 0;
+}
+
 static int read_x11_event(display_t *display, display_event_t *event)
 {
 	u8 data[X11_EVENT_SIZE] = {0};
@@ -1028,7 +1167,7 @@ static int read_x11_event(display_t *display, display_event_t *event)
 		cbuf_read_u16le(data, &off, &event->y);
 		off = X_KEY_BUTTON_EVENT_STATE_OFFSET;
 		cbuf_read_u16le(data, &off, &modifiers);
-		event->modifiers = modifiers;
+		event->modifiers = modifiers_from_state(dx11, modifiers);
 		if (type == X_EVENT_KEY_PRESS || type == X_EVENT_KEY_RELEASE) {
 			event->type = type == X_EVENT_KEY_PRESS ? DISPLAY_EVENT_KEY_DOWN : DISPLAY_EVENT_KEY_UP;
 			event->key  = dx11->keys[data[X_KEY_BUTTON_EVENT_DETAIL_OFFSET]];
@@ -1048,7 +1187,7 @@ static int read_x11_event(display_t *display, display_event_t *event)
 		cbuf_read_u16le(data, &off, &event->y);
 		off = X_MOTION_EVENT_STATE_OFFSET;
 		cbuf_read_u16le(data, &off, &modifiers);
-		event->modifiers = modifiers;
+		event->modifiers = modifiers_from_state(dx11, modifiers);
 		event->type	 = DISPLAY_EVENT_MOUSE_MOVE;
 		return 0;
 	}
@@ -1264,7 +1403,7 @@ static int display_x11_init(display_t *display)
 		return 1;
 	}
 
-	if (init_keys(display) || init_atoms(display)) {
+	if (init_keys(display) || init_modifiers(display) || init_atoms(display)) {
 		display_x11_t *dx11 = display->data;
 		sock_close(display->ss, dx11->sock);
 		mem_free(display->data, sizeof(display_x11_t));

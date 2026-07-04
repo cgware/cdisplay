@@ -176,6 +176,10 @@ const char *display_key_name(display_key_t key)
 		return "backspace";
 	case DISPLAY_KEY_SPACE:
 		return "space";
+	case DISPLAY_KEY_CAPS_LOCK:
+		return "caps lock";
+	case DISPLAY_KEY_NUM_LOCK:
+		return "num lock";
 	case DISPLAY_KEY_LEFT:
 		return "left";
 	case DISPLAY_KEY_RIGHT:
@@ -257,11 +261,129 @@ const char *display_mouse_name(display_mouse_t button)
 	}
 }
 
+const char *display_modifier_name(display_modifier_t modifier)
+{
+	switch (modifier) {
+	case DISPLAY_MOD_NONE:
+		return "none";
+	case DISPLAY_MOD_SHIFT:
+		return "shift";
+	case DISPLAY_MOD_CAPS_LOCK:
+		return "caps lock";
+	case DISPLAY_MOD_CONTROL:
+		return "control";
+	case DISPLAY_MOD_ALT:
+		return "alt";
+	case DISPLAY_MOD_NUM_LOCK:
+		return "num lock";
+	case DISPLAY_MOD_SUPER:
+		return "super";
+	case DISPLAY_MOD_MOUSE_LEFT:
+		return "mouse left";
+	case DISPLAY_MOD_MOUSE_MIDDLE:
+		return "mouse middle";
+	case DISPLAY_MOD_MOUSE_RIGHT:
+		return "mouse right";
+	case DISPLAY_MOD_MOUSE_WHEEL_UP:
+		return "mouse wheel up";
+	case DISPLAY_MOD_MOUSE_WHEEL_DOWN:
+		return "mouse wheel down";
+	default:
+		return "unknown";
+	}
+}
+
+static size_t display_str_len(const char *str)
+{
+	size_t len = 0;
+
+	while (str[len] != 0) {
+		len++;
+	}
+
+	return len;
+}
+
+static void modifier_format_add(display_modifier_t *written, char *buf, size_t size, const char *name)
+{
+	size_t off = display_str_len(buf);
+
+	if (*written != DISPLAY_MOD_NONE && off + 1 < size) {
+		buf[off++] = '|';
+		buf[off]   = 0;
+	}
+
+	if (off < size) {
+		c_sprintf(buf, size, off, "%s", name);
+	}
+	*written = (display_modifier_t)(*written | 1);
+}
+
+void display_modifiers_format(display_modifier_t modifiers, char *buf, size_t size)
+{
+	display_modifier_t written = DISPLAY_MOD_NONE;
+	display_modifier_t known =
+		(display_modifier_t)(DISPLAY_MOD_SHIFT | DISPLAY_MOD_CAPS_LOCK | DISPLAY_MOD_CONTROL | DISPLAY_MOD_ALT |
+				     DISPLAY_MOD_NUM_LOCK | DISPLAY_MOD_SUPER | DISPLAY_MOD_MOUSE_LEFT | DISPLAY_MOD_MOUSE_MIDDLE |
+				     DISPLAY_MOD_MOUSE_RIGHT | DISPLAY_MOD_MOUSE_WHEEL_UP | DISPLAY_MOD_MOUSE_WHEEL_DOWN);
+
+	if (buf == NULL || size == 0) {
+		return;
+	}
+
+	buf[0] = 0;
+
+	if (modifiers == DISPLAY_MOD_NONE) {
+		c_sprintf(buf, size, 0, "%s", display_modifier_name(DISPLAY_MOD_NONE));
+		return;
+	}
+
+	if (modifiers & DISPLAY_MOD_SHIFT) {
+		modifier_format_add(&written, buf, size, display_modifier_name(DISPLAY_MOD_SHIFT));
+	}
+	if (modifiers & DISPLAY_MOD_CAPS_LOCK) {
+		modifier_format_add(&written, buf, size, display_modifier_name(DISPLAY_MOD_CAPS_LOCK));
+	}
+	if (modifiers & DISPLAY_MOD_CONTROL) {
+		modifier_format_add(&written, buf, size, display_modifier_name(DISPLAY_MOD_CONTROL));
+	}
+	if (modifiers & DISPLAY_MOD_ALT) {
+		modifier_format_add(&written, buf, size, display_modifier_name(DISPLAY_MOD_ALT));
+	}
+	if (modifiers & DISPLAY_MOD_NUM_LOCK) {
+		modifier_format_add(&written, buf, size, display_modifier_name(DISPLAY_MOD_NUM_LOCK));
+	}
+	if (modifiers & DISPLAY_MOD_SUPER) {
+		modifier_format_add(&written, buf, size, display_modifier_name(DISPLAY_MOD_SUPER));
+	}
+	if (modifiers & DISPLAY_MOD_MOUSE_LEFT) {
+		modifier_format_add(&written, buf, size, display_modifier_name(DISPLAY_MOD_MOUSE_LEFT));
+	}
+	if (modifiers & DISPLAY_MOD_MOUSE_MIDDLE) {
+		modifier_format_add(&written, buf, size, display_modifier_name(DISPLAY_MOD_MOUSE_MIDDLE));
+	}
+	if (modifiers & DISPLAY_MOD_MOUSE_RIGHT) {
+		modifier_format_add(&written, buf, size, display_modifier_name(DISPLAY_MOD_MOUSE_RIGHT));
+	}
+	if (modifiers & DISPLAY_MOD_MOUSE_WHEEL_UP) {
+		modifier_format_add(&written, buf, size, display_modifier_name(DISPLAY_MOD_MOUSE_WHEEL_UP));
+	}
+	if (modifiers & DISPLAY_MOD_MOUSE_WHEEL_DOWN) {
+		modifier_format_add(&written, buf, size, display_modifier_name(DISPLAY_MOD_MOUSE_WHEEL_DOWN));
+	}
+	if (modifiers & ~known) {
+		modifier_format_add(&written, buf, size, display_modifier_name((display_modifier_t)~known));
+	}
+}
+
 void display_event_log(const display_event_t *event)
 {
 	if (event == NULL) {
 		return;
 	}
+
+	char modifiers[256] = {0};
+	display_modifiers_format(event->modifiers, modifiers, sizeof(modifiers));
 
 	switch (event->type) {
 	case DISPLAY_EVENT_RESIZE:
@@ -281,37 +403,37 @@ void display_event_log(const display_event_t *event)
 		log_info("cdisplay",
 			 "display",
 			 NULL,
-			 "event=%s window=%u key=%s pos=%u,%u mods=%u",
+			 "event=%s window=%u key=%s pos=%u,%u mods=%s",
 			 display_event_type_name(event->type),
 			 event->window,
 			 display_key_name(event->key),
 			 event->x,
 			 event->y,
-			 event->modifiers);
+			 modifiers);
 		break;
 	case DISPLAY_EVENT_MOUSE_MOVE:
 		log_info("cdisplay",
 			 "display",
 			 NULL,
-			 "event=%s window=%u pos=%u,%u mods=%u",
+			 "event=%s window=%u pos=%u,%u mods=%s",
 			 display_event_type_name(event->type),
 			 event->window,
 			 event->x,
 			 event->y,
-			 event->modifiers);
+			 modifiers);
 		break;
 	case DISPLAY_EVENT_MOUSE_DOWN:
 	case DISPLAY_EVENT_MOUSE_UP:
 		log_info("cdisplay",
 			 "display",
 			 NULL,
-			 "event=%s window=%u button=%s pos=%u,%u mods=%u",
+			 "event=%s window=%u button=%s pos=%u,%u mods=%s",
 			 display_event_type_name(event->type),
 			 event->window,
 			 display_mouse_name(event->button),
 			 event->x,
 			 event->y,
-			 event->modifiers);
+			 modifiers);
 		break;
 	default:
 		log_info("cdisplay", "display", NULL, "event=%s window=%u", display_event_type_name(event->type), event->window);
