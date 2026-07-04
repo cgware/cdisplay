@@ -100,6 +100,17 @@ static int display_none_window_set_size(window_t *wnd, u16 width, u16 height)
 	return 0;
 }
 
+static int display_none_window_set_borderless(window_t *wnd, int borderless)
+{
+	(void)borderless;
+
+	if (wnd == NULL) {
+		return 1;
+	}
+
+	return 0;
+}
+
 static int display_none_window_show(window_t *wnd)
 {
 	if (wnd == NULL) {
@@ -127,9 +138,10 @@ static display_driver_t display_none = {
 	.window_init	       = display_none_window_init,
 	.window_free	       = display_none_window_free,
 	.window_id	       = display_none_window_id,
-	.window_set_title     = display_none_window_set_title,
-	.window_set_position  = display_none_window_set_position,
-	.window_set_size      = display_none_window_set_size,
+	.window_set_title      = display_none_window_set_title,
+	.window_set_position   = display_none_window_set_position,
+	.window_set_size       = display_none_window_set_size,
+	.window_set_borderless = display_none_window_set_borderless,
 	.window_show	       = display_none_window_show,
 	.window_hide	       = display_none_window_hide,
 };

@@ -15,6 +15,7 @@ u32 window_id(window_t *wnd);
 int window_set_title(window_t *wnd, strv_t title);
 int window_set_position(window_t *wnd, u16 x, u16 y);
 int window_set_size(window_t *wnd, u16 width, u16 height);
+int window_set_borderless(window_t *wnd, int borderless);
 int window_show(window_t *wnd);
 int window_hide(window_t *wnd);
 

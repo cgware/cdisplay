@@ -66,6 +66,15 @@ int window_set_size(window_t *wnd, u16 width, u16 height)
 	return wnd->display->drv->window_set_size(wnd, width, height);
 }
 
+int window_set_borderless(window_t *wnd, int borderless)
+{
+	if (wnd == NULL || wnd->display == NULL || wnd->display->drv == NULL || wnd->display->drv->window_set_borderless == NULL) {
+		return 1;
+	}
+
+	return wnd->display->drv->window_set_borderless(wnd, borderless);
+}
+
 int window_show(window_t *wnd)
 {
 	if (wnd == NULL || wnd->display == NULL || wnd->display->drv == NULL || wnd->display->drv->window_show == NULL) {

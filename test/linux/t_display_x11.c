@@ -221,13 +221,14 @@ static void t_x11_atom_reply(u8 reply[32], u8 success, u32 atom)
 	cbuf_set_u32le(reply, 8, atom);
 }
 
-static void t_x11_default_atom_replies(u8 replies[160])
+static void t_x11_default_atom_replies(u8 replies[192])
 {
 	t_x11_atom_reply(replies, 1, 0x000000f0);
 	t_x11_atom_reply(&replies[32], 1, 0x000000f1);
 	t_x11_atom_reply(&replies[64], 1, 0x000000f2);
 	t_x11_atom_reply(&replies[96], 1, 0x000000f3);
 	t_x11_atom_reply(&replies[128], 1, 0x000000f4);
+	t_x11_atom_reply(&replies[160], 1, 0x000000f5);
 }
 
 static void t_x11_keyboard_mapping(buf_t *buf)
@@ -316,7 +317,7 @@ static void t_x11_script_setup_data_atoms(sock_t *ss, void *server, u8 success, 
 
 static void t_x11_script_setup_data(sock_t *ss, void *server, u8 success, const void *setup_data, size_t setup_size)
 {
-	u8 atom_reply[160] = {0};
+	u8 atom_reply[192] = {0};
 
 	if (success == 1) {
 		t_x11_default_atom_replies(atom_reply);
@@ -367,6 +368,7 @@ static void t_x11_drain_open_window_requests(sock_t *ss, void *peer)
 	u8 atom_request3[16]	= {0};
 	u8 atom_request4[20]	= {0};
 	u8 atom_request5[20]	= {0};
+	u8 atom_request6[24]	= {0};
 	u8 create_request[44]	= {0};
 	u8 property_request[28] = {0};
 
@@ -377,6 +379,7 @@ static void t_x11_drain_open_window_requests(sock_t *ss, void *peer)
 	sock_read_all(ss, peer, atom_request3, sizeof(atom_request3));
 	sock_read_all(ss, peer, atom_request4, sizeof(atom_request4));
 	sock_read_all(ss, peer, atom_request5, sizeof(atom_request5));
+	sock_read_all(ss, peer, atom_request6, sizeof(atom_request6));
 	sock_read_all(ss, peer, create_request, sizeof(create_request));
 	sock_read_all(ss, peer, property_request, sizeof(property_request));
 }
@@ -656,6 +659,7 @@ TEST(display_x11_window_init_writes_requests)
 	u8 atom_request3[16]	= {0};
 	u8 atom_request4[20]	= {0};
 	u8 atom_request5[20]	= {0};
+	u8 atom_request6[24]	= {0};
 	u8 create_request[44]	= {0};
 	u8 property_request[28] = {0};
 	u32 x11_window_id	= 0;
@@ -688,6 +692,7 @@ TEST(display_x11_window_init_writes_requests)
 	sock_read_all(&ss, peer, atom_request3, sizeof(atom_request3));
 	sock_read_all(&ss, peer, atom_request4, sizeof(atom_request4));
 	sock_read_all(&ss, peer, atom_request5, sizeof(atom_request5));
+	sock_read_all(&ss, peer, atom_request6, sizeof(atom_request6));
 	sock_read_all(&ss, peer, create_request, sizeof(create_request));
 	sock_read_all(&ss, peer, property_request, sizeof(property_request));
 
@@ -699,6 +704,7 @@ TEST(display_x11_window_init_writes_requests)
 	EXPECT_EQ(atom_request3[0], 16);
 	EXPECT_EQ(atom_request4[0], 16);
 	EXPECT_EQ(atom_request5[0], 16);
+	EXPECT_EQ(atom_request6[0], 16);
 
 	cbuf_get_u32le(create_request, 4, &x11_window_id);
 	cbuf_get_u32le(create_request, 8, &parent);
@@ -995,6 +1001,108 @@ TEST(display_x11_window_set_size_null_data)
 
 	EXPECT_NE(drv, NULL);
 	EXPECT_EQ(drv->window_set_size(&window, 333, 444), 1);
+
+	END;
+}
+
+TEST(display_x11_window_set_borderless_null_data)
+{
+	START;
+
+	display_driver_t *drv = t_x11_driver();
+	window_t window	      = {0};
+
+	EXPECT_NE(drv, NULL);
+	EXPECT_EQ(drv->window_set_borderless(&window, 1), 1);
+
+	END;
+}
+
+TEST(display_x11_window_set_borderless_writes_request)
+{
+	START;
+
+	display_driver_t *drv = t_x11_driver();
+	fs_t fs		      = {0};
+	proc_t proc	      = {0};
+	sock_t ss	      = {0};
+	display_t display     = {0};
+	window_t window	      = {0};
+	void *server	      = NULL;
+	void *peer	      = NULL;
+	u8 request[44]	      = {0};
+	u32 property	      = 0;
+	u32 property_type     = 0;
+	u32 length	      = 0;
+	u32 flags	      = 0;
+	u32 functions	      = 0;
+	u32 decorations	      = 0;
+	u32 input_mode	      = 0;
+	u32 status	      = 0;
+
+	t_x11_open_window(drv, &fs, &proc, &ss, &display, &window, &server, &peer);
+	t_x11_drain_open_window_requests(&ss, peer);
+
+	EXPECT_EQ(window_set_borderless(&window, 1), 0);
+	sock_read_all(&ss, peer, request, sizeof(request));
+
+	cbuf_get_u32le(request, 8, &property);
+	cbuf_get_u32le(request, 12, &property_type);
+	cbuf_get_u32le(request, 20, &length);
+	cbuf_get_u32le(request, 24, &flags);
+	cbuf_get_u32le(request, 28, &functions);
+	cbuf_get_u32le(request, 32, &decorations);
+	cbuf_get_u32le(request, 36, &input_mode);
+	cbuf_get_u32le(request, 40, &status);
+	EXPECT_EQ(request[0], 18);
+	EXPECT_EQ(property, 0x000000f5);
+	EXPECT_EQ(property_type, 0x000000f5);
+	EXPECT_EQ(request[16], 32);
+	EXPECT_EQ(length, 5);
+	EXPECT_EQ(flags, 2);
+	EXPECT_EQ(functions, 0);
+	EXPECT_EQ(decorations, 0);
+	EXPECT_EQ(input_mode, 0);
+	EXPECT_EQ(status, 0);
+
+	window_free(&window);
+	display_free(&display);
+	sock_close(&ss, peer);
+	sock_close(&ss, server);
+	t_x11_env_free(&fs, &proc, &ss);
+
+	END;
+}
+
+TEST(display_x11_window_set_bordered_writes_request)
+{
+	START;
+
+	display_driver_t *drv = t_x11_driver();
+	fs_t fs		      = {0};
+	proc_t proc	      = {0};
+	sock_t ss	      = {0};
+	display_t display     = {0};
+	window_t window	      = {0};
+	void *server	      = NULL;
+	void *peer	      = NULL;
+	u8 request[44]	      = {0};
+	u32 decorations	      = 0;
+
+	t_x11_open_window(drv, &fs, &proc, &ss, &display, &window, &server, &peer);
+	t_x11_drain_open_window_requests(&ss, peer);
+
+	EXPECT_EQ(window_set_borderless(&window, 0), 0);
+	sock_read_all(&ss, peer, request, sizeof(request));
+
+	cbuf_get_u32le(request, 32, &decorations);
+	EXPECT_EQ(decorations, 1);
+
+	window_free(&window);
+	display_free(&display);
+	sock_close(&ss, peer);
+	sock_close(&ss, server);
+	t_x11_env_free(&fs, &proc, &ss);
 
 	END;
 }
@@ -2121,7 +2229,7 @@ TEST(display_x11_init_keyboard_mapping_rejected)
 	void *server	      = NULL;
 	u8 setup[72]	      = {0};
 	u8 keyboard_reply[32] = {0};
-	u8 atom_reply[160]    = {0};
+	u8 atom_reply[192]    = {0};
 
 	t_x11_env_init(&fs, &proc, &ss);
 	t_x11_set_display(&proc, STRV(":0"));
@@ -2154,7 +2262,7 @@ TEST(display_x11_init_keyboard_mapping_invalid)
 	void *server	      = NULL;
 	u8 setup[72]	      = {0};
 	u8 keyboard_reply[32] = {0};
-	u8 atom_reply[160]    = {0};
+	u8 atom_reply[192]    = {0};
 
 	t_x11_env_init(&fs, &proc, &ss);
 	t_x11_set_display(&proc, STRV(":0"));
@@ -2469,6 +2577,7 @@ TEST(display_x11_window_init_wm_protocols_write_failure)
 	u8 atom_request3[16]  = {0};
 	u8 atom_request4[20]  = {0};
 	u8 atom_request5[20]  = {0};
+	u8 atom_request6[24]  = {0};
 	size_t rcvbuf	      = 44;
 
 	t_x11_env_init(&fs, &proc, &ss);
@@ -2487,6 +2596,7 @@ TEST(display_x11_window_init_wm_protocols_write_failure)
 	sock_read_all(&ss, peer, atom_request3, sizeof(atom_request3));
 	sock_read_all(&ss, peer, atom_request4, sizeof(atom_request4));
 	sock_read_all(&ss, peer, atom_request5, sizeof(atom_request5));
+	sock_read_all(&ss, peer, atom_request6, sizeof(atom_request6));
 	sock_setopt(&ss, peer, SOCK_OPT_RCVBUF, &rcvbuf, sizeof(rcvbuf));
 	EXPECT_EQ(window_init(&window, &display, 0, 0, 640, 480), NULL);
 	log_set_quiet(0, 0);
@@ -2604,6 +2714,9 @@ STEST(display_x11)
 	RUN(display_x11_window_geometry_writes_requests);
 	RUN(display_x11_window_set_position_null_data);
 	RUN(display_x11_window_set_size_null_data);
+	RUN(display_x11_window_set_borderless_null_data);
+	RUN(display_x11_window_set_borderless_writes_request);
+	RUN(display_x11_window_set_bordered_writes_request);
 	RUN(display_x11_window_set_position_write_failure);
 	RUN(display_x11_window_visibility_writes_requests);
 	RUN(display_x11_window_show_null_data);

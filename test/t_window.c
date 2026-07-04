@@ -8,12 +8,14 @@ static int t_window_free_calls;
 static int t_window_set_title_calls;
 static int t_window_set_position_calls;
 static int t_window_set_size_calls;
+static int t_window_set_borderless_calls;
 static int t_window_show_calls;
 static int t_window_hide_calls;
 static int t_window_init_ret;
 static int t_window_set_title_ret;
 static int t_window_set_position_ret;
 static int t_window_set_size_ret;
+static int t_window_set_borderless_ret;
 static int t_window_show_ret;
 static int t_window_hide_ret;
 static u32 t_window_id_ret;
@@ -22,6 +24,7 @@ static u16 t_window_x;
 static u16 t_window_y;
 static u16 t_window_width;
 static u16 t_window_height;
+static int t_window_borderless;
 
 static int t_window_display_init(display_t *display)
 {
@@ -99,6 +102,14 @@ static int t_window_driver_set_size(window_t *window, u16 width, u16 height)
 	return t_window_set_size_ret;
 }
 
+static int t_window_driver_set_borderless(window_t *window, int borderless)
+{
+	(void)window;
+	t_window_set_borderless_calls++;
+	t_window_borderless = borderless;
+	return t_window_set_borderless_ret;
+}
+
 static int t_window_driver_show(window_t *window)
 {
 	(void)window;
@@ -122,9 +133,10 @@ static display_driver_t t_window_driver = {
 	.window_init	       = t_window_driver_init,
 	.window_free	       = t_window_driver_free,
 	.window_id	       = t_window_driver_id,
-	.window_set_title     = t_window_driver_set_title,
-	.window_set_position  = t_window_driver_set_position,
-	.window_set_size      = t_window_driver_set_size,
+	.window_set_title      = t_window_driver_set_title,
+	.window_set_position   = t_window_driver_set_position,
+	.window_set_size       = t_window_driver_set_size,
+	.window_set_borderless = t_window_driver_set_borderless,
 	.window_show	       = t_window_driver_show,
 	.window_hide	       = t_window_driver_hide,
 };
@@ -133,15 +145,17 @@ static void t_window_reset(void)
 {
 	t_window_init_calls	      = 0;
 	t_window_free_calls	      = 0;
-	t_window_set_title_calls     = 0;
-	t_window_set_position_calls  = 0;
-	t_window_set_size_calls      = 0;
+	t_window_set_title_calls      = 0;
+	t_window_set_position_calls   = 0;
+	t_window_set_size_calls	      = 0;
+	t_window_set_borderless_calls = 0;
 	t_window_show_calls	      = 0;
 	t_window_hide_calls	      = 0;
 	t_window_init_ret	      = 0;
 	t_window_set_title_ret	      = 0;
 	t_window_set_position_ret     = 0;
 	t_window_set_size_ret	      = 0;
+	t_window_set_borderless_ret   = 0;
 	t_window_show_ret	      = 0;
 	t_window_hide_ret	      = 0;
 	t_window_id_ret		      = 0;
@@ -150,6 +164,7 @@ static void t_window_reset(void)
 	t_window_y		      = 0;
 	t_window_width		      = 0;
 	t_window_height		      = 0;
+	t_window_borderless	      = 0;
 }
 
 TEST(window_init_null_window)
@@ -441,9 +456,9 @@ TEST(window_set_title_returns_driver_result)
 
 	t_window_reset();
 	t_window_set_title_ret = 1;
-	display_t display = {
-		.drv = &t_window_driver,
-	};
+	display_t display      = {
+		     .drv = &t_window_driver,
+	     };
 	window_t window = {
 		.display = &display,
 		.data	 = (void *)0x5678,
@@ -490,8 +505,8 @@ TEST(window_set_position_returns_driver_result)
 
 	t_window_reset();
 	t_window_set_position_ret = 1;
-	display_t display = {
-		.drv = &t_window_driver,
+	display_t display	  = {
+			.drv = &t_window_driver,
 	};
 	window_t window = {
 		.display = &display,
@@ -539,6 +554,24 @@ TEST(window_set_size_returns_driver_result)
 
 	t_window_reset();
 	t_window_set_size_ret = 1;
+	display_t display     = {
+		    .drv = &t_window_driver,
+	    };
+	window_t window = {
+		.display = &display,
+		.data	 = (void *)0x5678,
+	};
+
+	EXPECT_EQ(window_set_size(&window, 333, 444), 1);
+
+	END;
+}
+
+TEST(window_set_borderless_calls_driver)
+{
+	START;
+
+	t_window_reset();
 	display_t display = {
 		.drv = &t_window_driver,
 	};
@@ -547,7 +580,37 @@ TEST(window_set_size_returns_driver_result)
 		.data	 = (void *)0x5678,
 	};
 
-	EXPECT_EQ(window_set_size(&window, 333, 444), 1);
+	EXPECT_EQ(window_set_borderless(&window, 1), 0);
+	EXPECT_EQ(t_window_set_borderless_calls, 1);
+	EXPECT_EQ(t_window_borderless, 1);
+
+	END;
+}
+
+TEST(window_set_borderless_null_window)
+{
+	START;
+
+	EXPECT_EQ(window_set_borderless(NULL, 1), 1);
+
+	END;
+}
+
+TEST(window_set_borderless_returns_driver_result)
+{
+	START;
+
+	t_window_reset();
+	t_window_set_borderless_ret = 1;
+	display_t display	    = {
+			  .drv = &t_window_driver,
+	  };
+	window_t window = {
+		.display = &display,
+		.data	 = (void *)0x5678,
+	};
+
+	EXPECT_EQ(window_set_borderless(&window, 1), 1);
 
 	END;
 }
@@ -676,6 +739,9 @@ STEST(window)
 	RUN(window_set_size_calls_driver);
 	RUN(window_set_size_null_window);
 	RUN(window_set_size_returns_driver_result);
+	RUN(window_set_borderless_calls_driver);
+	RUN(window_set_borderless_null_window);
+	RUN(window_set_borderless_returns_driver_result);
 	RUN(window_show_calls_driver);
 	RUN(window_show_null_window);
 	RUN(window_show_returns_driver_result);
