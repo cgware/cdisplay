@@ -125,5 +125,9 @@ display_t *display_init(display_t *display, struct display_driver_s *drv, fs_t *
 void display_free(display_t *display);
 int display_poll_event(display_t *display, display_event_t *event);
 int display_wait_event(display_t *display, display_event_t *event);
+const char *display_event_type_name(display_event_type_t type);
+const char *display_key_name(display_key_t key);
+const char *display_mouse_name(display_mouse_t button);
+void display_event_log(const display_event_t *event);
 
 #endif

@@ -67,65 +67,6 @@ static void toggle_fullscreen(example_window_t *window)
 	window->fullscreen = fullscreen;
 }
 
-static const char *event_name(display_event_type_t type)
-{
-	switch (type) {
-	case DISPLAY_EVENT_NONE:
-		return "none";
-	case DISPLAY_EVENT_CLOSE:
-		return "close";
-	case DISPLAY_EVENT_RESIZE:
-		return "resize";
-	case DISPLAY_EVENT_KEY_DOWN:
-		return "key down";
-	case DISPLAY_EVENT_KEY_UP:
-		return "key up";
-	case DISPLAY_EVENT_MOUSE_MOVE:
-		return "mouse move";
-	case DISPLAY_EVENT_MOUSE_DOWN:
-		return "mouse down";
-	case DISPLAY_EVENT_MOUSE_UP:
-		return "mouse up";
-	case DISPLAY_EVENT_FOCUS_GAINED:
-		return "focus gained";
-	case DISPLAY_EVENT_FOCUS_LOST:
-		return "focus lost";
-	default:
-		return "unknown";
-	}
-}
-
-static void print_event(const display_event_t *event)
-{
-	c_printf("event=%s window=%u", event_name(event->type), event->window);
-
-	switch (event->type) {
-	case DISPLAY_EVENT_RESIZE: {
-		c_printf(" pos=%u,%u size=%ux%u", event->x, event->y, event->width, event->height);
-		break;
-	}
-	case DISPLAY_EVENT_KEY_DOWN:
-	case DISPLAY_EVENT_KEY_UP: {
-		c_printf(" key=%u pos=%u,%u mods=%u", event->key, event->x, event->y, event->modifiers);
-		break;
-	}
-	case DISPLAY_EVENT_MOUSE_MOVE: {
-		c_printf(" pos=%u,%u mods=%u", event->x, event->y, event->modifiers);
-		break;
-	}
-	case DISPLAY_EVENT_MOUSE_DOWN:
-	case DISPLAY_EVENT_MOUSE_UP: {
-		c_printf(" button=%u pos=%u,%u mods=%u", event->button, event->x, event->y, event->modifiers);
-		break;
-	}
-	default: {
-		break;
-	}
-	}
-
-	c_printf("\n");
-}
-
 static void cleanup(display_t *display, example_window_t *windows, size_t count, fs_t *fs, proc_t *proc, sock_t *ss)
 {
 	for (size_t i = 0; i < count; i++) {
@@ -209,7 +150,7 @@ int main()
 			break;
 		}
 
-		print_event(&event);
+		display_event_log(&event);
 
 		example_window_t *window = find_window(windows, 2, event.window);
 		if (window == NULL) {
