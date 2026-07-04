@@ -15,6 +15,9 @@ typedef struct display_x11_s {
 	u32 black_pixel;
 	u32 wm_protocols;
 	u32 wm_delete_window;
+	u32 wm_name;
+	u32 net_wm_name;
+	u32 utf8_string;
 } display_x11_t;
 
 typedef struct window_x11_s {
@@ -356,15 +359,18 @@ static unsigned ctz32(uint32_t value)
 }
 
 enum {
-	X_CREATE_WINDOW	  = 1,
-	X_DESTROY_WINDOW  = 4,
-	X_MAP_WINDOW	  = 8,
-	X_INTERN_ATOM	  = 16,
-	X_CHANGE_PROPERTY = 18,
+	X_CREATE_WINDOW	   = 1,
+	X_DESTROY_WINDOW   = 4,
+	X_MAP_WINDOW	   = 8,
+	X_UNMAP_WINDOW	   = 10,
+	X_CONFIGURE_WINDOW = 12,
+	X_INTERN_ATOM	   = 16,
+	X_CHANGE_PROPERTY  = 18,
 };
 
 enum {
-	XA_ATOM = 4,
+	XA_ATOM	  = 4,
+	XA_STRING = 31,
 };
 
 enum {
@@ -426,6 +432,8 @@ enum {
 
 enum {
 	X_CHANGE_PROPERTY_REQUEST_SIZE	= 28,
+	X_CHANGE_PROPERTY_HEADER_SIZE	= 24,
+	X_CHANGE_PROPERTY_MAX_DATA_SIZE = X11_PAD_SIZE * 0xffff - X_CHANGE_PROPERTY_HEADER_SIZE,
 	X_CHANGE_PROPERTY_REQUEST_WORDS = X_CHANGE_PROPERTY_REQUEST_SIZE / X11_PAD_SIZE,
 	X_CHANGE_PROPERTY_ITEM_COUNT	= 1,
 };
@@ -433,6 +441,18 @@ enum {
 enum {
 	X_WINDOW_ID_REQUEST_SIZE  = 8,
 	X_WINDOW_ID_REQUEST_WORDS = X_WINDOW_ID_REQUEST_SIZE / X11_PAD_SIZE,
+};
+
+enum {
+	X_CONFIGURE_WINDOW_REQUEST_SIZE	 = 12,
+	X_CONFIGURE_WINDOW_REQUEST_WORDS = X_CONFIGURE_WINDOW_REQUEST_SIZE / X11_PAD_SIZE,
+};
+
+enum {
+	X_CONFIG_WINDOW_X      = 1u << 0,
+	X_CONFIG_WINDOW_Y      = 1u << 1,
+	X_CONFIG_WINDOW_WIDTH  = 1u << 2,
+	X_CONFIG_WINDOW_HEIGHT = 1u << 3,
 };
 
 enum {
@@ -540,11 +560,6 @@ static int intern_atom(display_t *display, strv_t name, u32 *atom)
 	u8 reply[X11_REPLY_SIZE]					= {0};
 	size_t off							= 0;
 
-	if (name.len + pad4(name.len) > X_INTERN_ATOM_NAME_MAX) {
-		log_error("cwindow", "display_x11", NULL, "atom name is too long: %.*s", name.len, name.data);
-		return 1;
-	}
-
 	cbuf_write_u8le(request, &off, X_INTERN_ATOM);
 	cbuf_write_u8le(request, &off, 0);
 	cbuf_write_u16le(request, &off, (u16)(X_INTERN_ATOM_REQUEST_SIZE / X11_PAD_SIZE + (name.len + pad4(name.len)) / X11_PAD_SIZE));
@@ -578,7 +593,61 @@ static int init_atoms(display_t *display)
 	display_x11_t *dx11 = display->data;
 
 	if (intern_atom(display, STRV("WM_PROTOCOLS"), &dx11->wm_protocols) ||
-	    intern_atom(display, STRV("WM_DELETE_WINDOW"), &dx11->wm_delete_window)) {
+	    intern_atom(display, STRV("WM_DELETE_WINDOW"), &dx11->wm_delete_window) ||
+	    intern_atom(display, STRV("WM_NAME"), &dx11->wm_name) || intern_atom(display, STRV("_NET_WM_NAME"), &dx11->net_wm_name) ||
+	    intern_atom(display, STRV("UTF8_STRING"), &dx11->utf8_string)) {
+		return 1;
+	}
+
+	return 0;
+}
+
+static int set_property_text(window_t *wnd, u32 property, u32 type, strv_t text)
+{
+	if (text.data == NULL && text.len > 0) {
+		return 1;
+	}
+
+	if (text.len > X_CHANGE_PROPERTY_MAX_DATA_SIZE) {
+		log_error("cwindow", "display_x11", NULL, "property text is too long");
+		return 1;
+	}
+
+	size_t data_size     = text.len;
+	size_t request_size  = X_CHANGE_PROPERTY_HEADER_SIZE + data_size + pad4(data_size);
+	size_t request_words = request_size / X11_PAD_SIZE;
+
+	u8 *request = mem_alloc(request_size);
+	if (request == NULL) {
+		return 1;
+	}
+
+	mem_set(request, 0, request_size);
+
+	window_x11_t *wx11 = wnd->data;
+
+	size_t off = 0;
+	cbuf_write_u8le(request, &off, X_CHANGE_PROPERTY);
+	cbuf_write_u8le(request, &off, X_CHANGE_PROPERTY_MODE_REPLACE);
+	cbuf_write_u16le(request, &off, (u16)request_words);
+	cbuf_write_u32le(request, &off, wx11->id);
+	cbuf_write_u32le(request, &off, property);
+	cbuf_write_u32le(request, &off, type);
+	cbuf_write_u8le(request, &off, 8);
+	cbuf_write_u8le(request, &off, 0);
+	cbuf_write_u8le(request, &off, 0);
+	cbuf_write_u8le(request, &off, 0);
+	cbuf_write_u32le(request, &off, (u32)text.len);
+	if (text.len > 0) {
+		mem_copy(&request[off], request_size - off, text.data, text.len);
+	}
+
+	display_x11_t *dx11 = wnd->display->data;
+	int ret		    = sock_write_all(wnd->display->ss, dx11->sock, request, request_size);
+	mem_free(request, request_size);
+
+	if (ret) {
+		log_error("cwindow", "display_x11", NULL, "failed to set window text property");
 		return 1;
 	}
 
@@ -772,6 +841,54 @@ static int map_window(window_t *wnd)
 	return 0;
 }
 
+static int unmap_window(window_t *wnd)
+{
+	window_x11_t *wx11 = wnd->data;
+
+	u8 request[X_WINDOW_ID_REQUEST_SIZE] = {0};
+	size_t off			     = 0;
+	cbuf_write_u8le(request, &off, X_UNMAP_WINDOW);
+	cbuf_write_u8le(request, &off, 0);
+	cbuf_write_u16le(request, &off, X_WINDOW_ID_REQUEST_WORDS);
+	cbuf_write_u32le(request, &off, wx11->id);
+
+	const display_x11_t *dx11 = wnd->display->data;
+
+	if (sock_write_all(wnd->display->ss, dx11->sock, request, sizeof(request))) {
+		log_error("cwindow", "awindow_x11", NULL, "failed to unmap window");
+		return 1;
+	}
+
+	return 0;
+}
+
+static int configure_window(window_t *wnd, u32 value_mask, const u32 *values, size_t value_count)
+{
+	u8 request[X_CONFIGURE_WINDOW_REQUEST_SIZE + X11_PAD_SIZE * 4] = {0};
+
+	window_x11_t *wx11 = wnd->data;
+
+	size_t off = 0;
+	cbuf_write_u8le(request, &off, X_CONFIGURE_WINDOW);
+	cbuf_write_u8le(request, &off, 0);
+	cbuf_write_u16le(request, &off, (u16)(X_CONFIGURE_WINDOW_REQUEST_WORDS + value_count));
+	cbuf_write_u32le(request, &off, wx11->id);
+	cbuf_write_u32le(request, &off, value_mask);
+
+	for (size_t i = 0; i < value_count; i++) {
+		cbuf_write_u32le(request, &off, values[i]);
+	}
+
+	const display_x11_t *dx11 = wnd->display->data;
+
+	if (sock_write_all(wnd->display->ss, dx11->sock, request, X_CONFIGURE_WINDOW_REQUEST_SIZE + value_count * X11_PAD_SIZE)) {
+		log_error("cwindow", "display_x11", NULL, "failed to configure window");
+		return 1;
+	}
+
+	return 0;
+}
+
 static int display_x11_poll_event(display_t *display, display_event_t *event)
 {
 	if (display == NULL || event == NULL) {
@@ -878,13 +995,6 @@ static int display_x11_window_init(window_t *wnd, u16 x, u16 y, u16 width, u16 h
 		return 1;
 	}
 
-	if (map_window(wnd)) {
-		destroy_window(wnd);
-		mem_free(wnd->data, sizeof(window_x11_t));
-		wnd->data = NULL;
-		return 1;
-	}
-
 	return 0;
 }
 
@@ -910,15 +1020,75 @@ static u32 display_x11_window_id(window_t *wnd)
 	return wx11->id;
 }
 
+static int display_x11_window_set_title(window_t *wnd, strv_t title)
+{
+	if (wnd == NULL || wnd->data == NULL) {
+		return 1;
+	}
+
+	display_x11_t *dx11 = wnd->display->data;
+	if (set_property_text(wnd, dx11->wm_name, XA_STRING, title) ||
+	    set_property_text(wnd, dx11->net_wm_name, dx11->utf8_string, title)) {
+		return 1;
+	}
+
+	return 0;
+}
+
+static int display_x11_window_set_position(window_t *wnd, u16 x, u16 y)
+{
+	if (wnd == NULL || wnd->data == NULL) {
+		return 1;
+	}
+
+	u32 values[] = {x, y};
+
+	return configure_window(wnd, X_CONFIG_WINDOW_X | X_CONFIG_WINDOW_Y, values, 2);
+}
+
+static int display_x11_window_set_size(window_t *wnd, u16 width, u16 height)
+{
+	if (wnd == NULL || wnd->data == NULL) {
+		return 1;
+	}
+
+	u32 values[] = {width, height};
+
+	return configure_window(wnd, X_CONFIG_WINDOW_WIDTH | X_CONFIG_WINDOW_HEIGHT, values, 2);
+}
+
+static int display_x11_window_show(window_t *wnd)
+{
+	if (wnd == NULL || wnd->data == NULL) {
+		return 1;
+	}
+
+	return map_window(wnd);
+}
+
+static int display_x11_window_hide(window_t *wnd)
+{
+	if (wnd == NULL || wnd->data == NULL) {
+		return 1;
+	}
+
+	return unmap_window(wnd);
+}
+
 static display_driver_t display_x11 = {
-	.name	     = "X11",
-	.init	     = display_x11_init,
-	.free	     = display_x11_free,
-	.poll_event  = display_x11_poll_event,
-	.wait_event  = display_x11_wait_event,
-	.window_init = display_x11_window_init,
-	.window_free = display_x11_window_free,
-	.window_id   = display_x11_window_id,
+	.name		     = "X11",
+	.init		     = display_x11_init,
+	.free		     = display_x11_free,
+	.poll_event	     = display_x11_poll_event,
+	.wait_event	     = display_x11_wait_event,
+	.window_init	     = display_x11_window_init,
+	.window_free	     = display_x11_window_free,
+	.window_id	     = display_x11_window_id,
+	.window_set_title    = display_x11_window_set_title,
+	.window_set_position = display_x11_window_set_position,
+	.window_set_size     = display_x11_window_set_size,
+	.window_show	     = display_x11_window_show,
+	.window_hide	     = display_x11_window_hide,
 };
 
 DISPLAY_DRIVER(display_x11, &display_x11);

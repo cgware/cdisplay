@@ -210,10 +210,13 @@ static void t_x11_atom_reply(u8 reply[32], u8 success, u32 atom)
 	cbuf_set_u32le(reply, 8, atom);
 }
 
-static void t_x11_default_atom_replies(u8 replies[64])
+static void t_x11_default_atom_replies(u8 replies[160])
 {
 	t_x11_atom_reply(replies, 1, 0x000000f0);
 	t_x11_atom_reply(&replies[32], 1, 0x000000f1);
+	t_x11_atom_reply(&replies[64], 1, 0x000000f2);
+	t_x11_atom_reply(&replies[96], 1, 0x000000f3);
+	t_x11_atom_reply(&replies[128], 1, 0x000000f4);
 }
 
 static void t_x11_script_setup_data_atoms(sock_t *ss, void *server, u8 success, const void *setup_data, size_t setup_size,
@@ -236,7 +239,7 @@ static void t_x11_script_setup_data_atoms(sock_t *ss, void *server, u8 success, 
 
 static void t_x11_script_setup_data(sock_t *ss, void *server, u8 success, const void *setup_data, size_t setup_size)
 {
-	u8 atom_reply[64] = {0};
+	u8 atom_reply[160] = {0};
 
 	if (success == 1) {
 		t_x11_default_atom_replies(atom_reply);
@@ -276,6 +279,27 @@ static void t_x11_open_window(display_driver_t *drv, fs_t *fs, proc_t *proc, soc
 	window_init(window, display, 0, 0, 640, 480);
 	log_set_quiet(0, 0);
 	sock_accept(ss, *server, peer);
+}
+
+static void t_x11_drain_open_window_requests(sock_t *ss, void *peer)
+{
+	u8 setup_request[48]	= {0};
+	u8 atom_request[20]	= {0};
+	u8 atom_request2[24]	= {0};
+	u8 atom_request3[16]	= {0};
+	u8 atom_request4[20]	= {0};
+	u8 atom_request5[20]	= {0};
+	u8 create_request[44]	= {0};
+	u8 property_request[28] = {0};
+
+	sock_read_all(ss, peer, setup_request, sizeof(setup_request));
+	sock_read_all(ss, peer, atom_request, sizeof(atom_request));
+	sock_read_all(ss, peer, atom_request2, sizeof(atom_request2));
+	sock_read_all(ss, peer, atom_request3, sizeof(atom_request3));
+	sock_read_all(ss, peer, atom_request4, sizeof(atom_request4));
+	sock_read_all(ss, peer, atom_request5, sizeof(atom_request5));
+	sock_read_all(ss, peer, create_request, sizeof(create_request));
+	sock_read_all(ss, peer, property_request, sizeof(property_request));
 }
 
 static void t_x11_write_key_event(sock_t *ss, void *peer, u8 type, u8 detail, u32 window, u16 x, u16 y, u16 state)
@@ -541,9 +565,11 @@ TEST(display_x11_window_init_writes_requests)
 	u8 setup_request[48]	= {0};
 	u8 atom_request[20]	= {0};
 	u8 atom_request2[24]	= {0};
+	u8 atom_request3[16]	= {0};
+	u8 atom_request4[20]	= {0};
+	u8 atom_request5[20]	= {0};
 	u8 create_request[44]	= {0};
 	u8 property_request[28] = {0};
-	u8 map_request[8]	= {0};
 	u32 x11_window_id	= 0;
 	u32 parent		= 0;
 	u32 event_mask		= 0;
@@ -570,12 +596,17 @@ TEST(display_x11_window_init_writes_requests)
 	sock_read_all(&ss, peer, setup_request, sizeof(setup_request));
 	sock_read_all(&ss, peer, atom_request, sizeof(atom_request));
 	sock_read_all(&ss, peer, atom_request2, sizeof(atom_request2));
+	sock_read_all(&ss, peer, atom_request3, sizeof(atom_request3));
+	sock_read_all(&ss, peer, atom_request4, sizeof(atom_request4));
+	sock_read_all(&ss, peer, atom_request5, sizeof(atom_request5));
 	sock_read_all(&ss, peer, create_request, sizeof(create_request));
 	sock_read_all(&ss, peer, property_request, sizeof(property_request));
-	sock_read_all(&ss, peer, map_request, sizeof(map_request));
 
 	EXPECT_EQ(atom_request[0], 16);
 	EXPECT_EQ(atom_request2[0], 16);
+	EXPECT_EQ(atom_request3[0], 16);
+	EXPECT_EQ(atom_request4[0], 16);
+	EXPECT_EQ(atom_request5[0], 16);
 
 	cbuf_get_u32le(create_request, 4, &x11_window_id);
 	cbuf_get_u32le(create_request, 8, &parent);
@@ -602,11 +633,393 @@ TEST(display_x11_window_init_writes_requests)
 	EXPECT_EQ(property_type, 4);
 	EXPECT_EQ(property_request[16], 32);
 	EXPECT_EQ(property_data, 0x000000f1);
-	EXPECT_EQ(map_request[0], 8);
 
 	window_free(&window);
 	display_free(&display);
 	sock_close(&ss, peer);
+	sock_close(&ss, server);
+	t_x11_env_free(&fs, &proc, &ss);
+
+	END;
+}
+
+TEST(display_x11_window_set_title_writes_requests)
+{
+	START;
+
+	display_driver_t *drv = t_x11_driver();
+	fs_t fs		      = {0};
+	proc_t proc	      = {0};
+	sock_t ss	      = {0};
+	display_t display     = {0};
+	window_t window	      = {0};
+	void *server	      = NULL;
+	void *peer	      = NULL;
+	u8 wm_name_request[28] = {0};
+	u8 net_wm_name_request[28] = {0};
+	u32 property	      = 0;
+	u32 property_type     = 0;
+	u32 length	      = 0;
+
+	t_x11_open_window(drv, &fs, &proc, &ss, &display, &window, &server, &peer);
+	t_x11_drain_open_window_requests(&ss, peer);
+
+	EXPECT_EQ(window_set_title(&window, STRV("Test")), 0);
+	sock_read_all(&ss, peer, wm_name_request, sizeof(wm_name_request));
+	sock_read_all(&ss, peer, net_wm_name_request, sizeof(net_wm_name_request));
+
+	cbuf_get_u32le(wm_name_request, 8, &property);
+	cbuf_get_u32le(wm_name_request, 12, &property_type);
+	cbuf_get_u32le(wm_name_request, 20, &length);
+	EXPECT_EQ(wm_name_request[0], 18);
+	EXPECT_EQ(property, 0x000000f2);
+	EXPECT_EQ(property_type, 31);
+	EXPECT_EQ(wm_name_request[16], 8);
+	EXPECT_EQ(length, 4);
+	EXPECT_EQ(wm_name_request[24], 'T');
+	EXPECT_EQ(wm_name_request[25], 'e');
+	EXPECT_EQ(wm_name_request[26], 's');
+	EXPECT_EQ(wm_name_request[27], 't');
+
+	cbuf_get_u32le(net_wm_name_request, 8, &property);
+	cbuf_get_u32le(net_wm_name_request, 12, &property_type);
+	cbuf_get_u32le(net_wm_name_request, 20, &length);
+	EXPECT_EQ(net_wm_name_request[0], 18);
+	EXPECT_EQ(property, 0x000000f3);
+	EXPECT_EQ(property_type, 0x000000f4);
+	EXPECT_EQ(net_wm_name_request[16], 8);
+	EXPECT_EQ(length, 4);
+	EXPECT_EQ(net_wm_name_request[24], 'T');
+	EXPECT_EQ(net_wm_name_request[25], 'e');
+	EXPECT_EQ(net_wm_name_request[26], 's');
+	EXPECT_EQ(net_wm_name_request[27], 't');
+
+	window_free(&window);
+	display_free(&display);
+	sock_close(&ss, peer);
+	sock_close(&ss, server);
+	t_x11_env_free(&fs, &proc, &ss);
+
+	END;
+}
+
+TEST(display_x11_window_set_title_null_data)
+{
+	START;
+
+	display_driver_t *drv = t_x11_driver();
+	window_t window	      = {0};
+
+	EXPECT_NE(drv, NULL);
+	EXPECT_EQ(drv->window_set_title(&window, STRV("title")), 1);
+
+	END;
+}
+
+TEST(display_x11_window_set_title_invalid_text)
+{
+	START;
+
+	display_driver_t *drv = t_x11_driver();
+	fs_t fs		      = {0};
+	proc_t proc	      = {0};
+	sock_t ss	      = {0};
+	display_t display     = {0};
+	window_t window	      = {0};
+	void *server	      = NULL;
+	void *peer	      = NULL;
+
+	t_x11_open_window(drv, &fs, &proc, &ss, &display, &window, &server, &peer);
+	t_x11_drain_open_window_requests(&ss, peer);
+
+	EXPECT_EQ(window_set_title(&window, STRVN(NULL, 1)), 1);
+
+	window_free(&window);
+	display_free(&display);
+	sock_close(&ss, peer);
+	sock_close(&ss, server);
+	t_x11_env_free(&fs, &proc, &ss);
+
+	END;
+}
+
+TEST(display_x11_window_set_title_too_long)
+{
+	START;
+
+	display_driver_t *drv = t_x11_driver();
+	fs_t fs		      = {0};
+	proc_t proc	      = {0};
+	sock_t ss	      = {0};
+	display_t display     = {0};
+	window_t window	      = {0};
+	void *server	      = NULL;
+	void *peer	      = NULL;
+
+	t_x11_open_window(drv, &fs, &proc, &ss, &display, &window, &server, &peer);
+	t_x11_drain_open_window_requests(&ss, peer);
+
+	log_set_quiet(0, 1);
+	EXPECT_EQ(window_set_title(&window, STRVN("", 262117)), 1);
+	log_set_quiet(0, 0);
+
+	window_free(&window);
+	display_free(&display);
+	sock_close(&ss, peer);
+	sock_close(&ss, server);
+	t_x11_env_free(&fs, &proc, &ss);
+
+	END;
+}
+
+TEST(display_x11_window_set_title_alloc_failure)
+{
+	START;
+
+	display_driver_t *drv = t_x11_driver();
+	fs_t fs		      = {0};
+	proc_t proc	      = {0};
+	sock_t ss	      = {0};
+	display_t display     = {0};
+	window_t window	      = {0};
+	void *server	      = NULL;
+	void *peer	      = NULL;
+
+	t_x11_open_window(drv, &fs, &proc, &ss, &display, &window, &server, &peer);
+	t_x11_drain_open_window_requests(&ss, peer);
+
+	mem_oom(1);
+	EXPECT_EQ(window_set_title(&window, STRV("title")), 1);
+	mem_oom(0);
+
+	window_free(&window);
+	display_free(&display);
+	sock_close(&ss, peer);
+	sock_close(&ss, server);
+	t_x11_env_free(&fs, &proc, &ss);
+
+	END;
+}
+
+TEST(display_x11_window_set_title_write_failure)
+{
+	START;
+
+	display_driver_t *drv = t_x11_driver();
+	fs_t fs		      = {0};
+	proc_t proc	      = {0};
+	sock_t ss	      = {0};
+	display_t display     = {0};
+	window_t window	      = {0};
+	void *server	      = NULL;
+	void *peer	      = NULL;
+
+	t_x11_open_window(drv, &fs, &proc, &ss, &display, &window, &server, &peer);
+	t_x11_drain_open_window_requests(&ss, peer);
+	sock_close(&ss, peer);
+
+	log_set_quiet(0, 1);
+	EXPECT_EQ(window_set_title(&window, STRV("title")), 1);
+	window_free(&window);
+	log_set_quiet(0, 0);
+
+	display_free(&display);
+	sock_close(&ss, server);
+	t_x11_env_free(&fs, &proc, &ss);
+
+	END;
+}
+
+TEST(display_x11_window_geometry_writes_requests)
+{
+	START;
+
+	display_driver_t *drv = t_x11_driver();
+	fs_t fs		      = {0};
+	proc_t proc	      = {0};
+	sock_t ss	      = {0};
+	display_t display     = {0};
+	window_t window	      = {0};
+	void *server	      = NULL;
+	void *peer	      = NULL;
+	u8 position_request[20] = {0};
+	u8 size_request[20]    = {0};
+	u32 mask	      = 0;
+	u32 first	      = 0;
+	u32 second	      = 0;
+
+	t_x11_open_window(drv, &fs, &proc, &ss, &display, &window, &server, &peer);
+	t_x11_drain_open_window_requests(&ss, peer);
+
+	EXPECT_EQ(window_set_position(&window, 11, 22), 0);
+	EXPECT_EQ(window_set_size(&window, 333, 444), 0);
+	sock_read_all(&ss, peer, position_request, sizeof(position_request));
+	sock_read_all(&ss, peer, size_request, sizeof(size_request));
+
+	cbuf_get_u32le(position_request, 8, &mask);
+	cbuf_get_u32le(position_request, 12, &first);
+	cbuf_get_u32le(position_request, 16, &second);
+	EXPECT_EQ(position_request[0], 12);
+	EXPECT_EQ(mask, (1u << 0) | (1u << 1));
+	EXPECT_EQ(first, 11);
+	EXPECT_EQ(second, 22);
+
+	cbuf_get_u32le(size_request, 8, &mask);
+	cbuf_get_u32le(size_request, 12, &first);
+	cbuf_get_u32le(size_request, 16, &second);
+	EXPECT_EQ(size_request[0], 12);
+	EXPECT_EQ(mask, (1u << 2) | (1u << 3));
+	EXPECT_EQ(first, 333);
+	EXPECT_EQ(second, 444);
+
+	window_free(&window);
+	display_free(&display);
+	sock_close(&ss, peer);
+	sock_close(&ss, server);
+	t_x11_env_free(&fs, &proc, &ss);
+
+	END;
+}
+
+TEST(display_x11_window_set_position_null_data)
+{
+	START;
+
+	display_driver_t *drv = t_x11_driver();
+	window_t window	      = {0};
+
+	EXPECT_NE(drv, NULL);
+	EXPECT_EQ(drv->window_set_position(&window, 11, 22), 1);
+
+	END;
+}
+
+TEST(display_x11_window_set_size_null_data)
+{
+	START;
+
+	display_driver_t *drv = t_x11_driver();
+	window_t window	      = {0};
+
+	EXPECT_NE(drv, NULL);
+	EXPECT_EQ(drv->window_set_size(&window, 333, 444), 1);
+
+	END;
+}
+
+TEST(display_x11_window_set_position_write_failure)
+{
+	START;
+
+	display_driver_t *drv = t_x11_driver();
+	fs_t fs		      = {0};
+	proc_t proc	      = {0};
+	sock_t ss	      = {0};
+	display_t display     = {0};
+	window_t window	      = {0};
+	void *server	      = NULL;
+	void *peer	      = NULL;
+
+	t_x11_open_window(drv, &fs, &proc, &ss, &display, &window, &server, &peer);
+	t_x11_drain_open_window_requests(&ss, peer);
+	sock_close(&ss, peer);
+
+	log_set_quiet(0, 1);
+	EXPECT_EQ(window_set_position(&window, 11, 22), 1);
+	window_free(&window);
+	log_set_quiet(0, 0);
+
+	display_free(&display);
+	sock_close(&ss, server);
+	t_x11_env_free(&fs, &proc, &ss);
+
+	END;
+}
+
+TEST(display_x11_window_visibility_writes_requests)
+{
+	START;
+
+	display_driver_t *drv = t_x11_driver();
+	fs_t fs		      = {0};
+	proc_t proc	      = {0};
+	sock_t ss	      = {0};
+	display_t display     = {0};
+	window_t window	      = {0};
+	void *server	      = NULL;
+	void *peer	      = NULL;
+	u8 hide_request[8]    = {0};
+	u8 show_request[8]    = {0};
+
+	t_x11_open_window(drv, &fs, &proc, &ss, &display, &window, &server, &peer);
+	t_x11_drain_open_window_requests(&ss, peer);
+
+	EXPECT_EQ(window_hide(&window), 0);
+	EXPECT_EQ(window_show(&window), 0);
+	sock_read_all(&ss, peer, hide_request, sizeof(hide_request));
+	sock_read_all(&ss, peer, show_request, sizeof(show_request));
+
+	EXPECT_EQ(hide_request[0], 10);
+	EXPECT_EQ(show_request[0], 8);
+
+	window_free(&window);
+	display_free(&display);
+	sock_close(&ss, peer);
+	sock_close(&ss, server);
+	t_x11_env_free(&fs, &proc, &ss);
+
+	END;
+}
+
+TEST(display_x11_window_show_null_data)
+{
+	START;
+
+	display_driver_t *drv = t_x11_driver();
+	window_t window	      = {0};
+
+	EXPECT_NE(drv, NULL);
+	EXPECT_EQ(drv->window_show(&window), 1);
+
+	END;
+}
+
+TEST(display_x11_window_hide_null_data)
+{
+	START;
+
+	display_driver_t *drv = t_x11_driver();
+	window_t window	      = {0};
+
+	EXPECT_NE(drv, NULL);
+	EXPECT_EQ(drv->window_hide(&window), 1);
+
+	END;
+}
+
+TEST(display_x11_window_hide_write_failure)
+{
+	START;
+
+	display_driver_t *drv = t_x11_driver();
+	fs_t fs		      = {0};
+	proc_t proc	      = {0};
+	sock_t ss	      = {0};
+	display_t display     = {0};
+	window_t window	      = {0};
+	void *server	      = NULL;
+	void *peer	      = NULL;
+
+	t_x11_open_window(drv, &fs, &proc, &ss, &display, &window, &server, &peer);
+	t_x11_drain_open_window_requests(&ss, peer);
+	sock_close(&ss, peer);
+
+	log_set_quiet(0, 1);
+	EXPECT_EQ(window_hide(&window), 1);
+	window_free(&window);
+	log_set_quiet(0, 0);
+
+	display_free(&display);
 	sock_close(&ss, server);
 	t_x11_env_free(&fs, &proc, &ss);
 
@@ -1683,7 +2096,7 @@ TEST(display_x11_window_init_create_write_failure)
 	END;
 }
 
-TEST(display_x11_window_init_map_write_failure)
+TEST(display_x11_window_show_write_failure)
 {
 	START;
 
@@ -1695,29 +2108,17 @@ TEST(display_x11_window_init_map_write_failure)
 	window_t window	      = {0};
 	void *server	      = NULL;
 	void *peer	      = NULL;
-	u8 setup_request[48]  = {0};
-	u8 atom_request[20]   = {0};
-	u8 atom_request2[24]  = {0};
-	size_t rcvbuf	      = 44 + 28;
 
-	t_x11_env_init(&fs, &proc, &ss);
-	t_x11_set_display(&proc, STRV(":0"));
-	t_x11_set_xauthority(&proc);
-	t_x11_write_authority(&fs);
-	t_x11_listen(&ss, &server);
-	t_x11_script_setup(&ss, server);
+	t_x11_open_window(drv, &fs, &proc, &ss, &display, &window, &server, &peer);
+	t_x11_drain_open_window_requests(&ss, peer);
+	sock_close(&ss, peer);
+
 	log_set_quiet(0, 1);
-	display_init(&display, drv, &fs, &proc, &ss, ALLOC_STD);
-	sock_accept(&ss, server, &peer);
-	sock_read_all(&ss, peer, setup_request, sizeof(setup_request));
-	sock_read_all(&ss, peer, atom_request, sizeof(atom_request));
-	sock_read_all(&ss, peer, atom_request2, sizeof(atom_request2));
-	sock_setopt(&ss, peer, SOCK_OPT_RCVBUF, &rcvbuf, sizeof(rcvbuf));
-	EXPECT_EQ(window_init(&window, &display, 0, 0, 640, 480), NULL);
+	EXPECT_EQ(window_show(&window), 1);
+	window_free(&window);
 	log_set_quiet(0, 0);
 
 	display_free(&display);
-	sock_close(&ss, peer);
 	sock_close(&ss, server);
 	t_x11_env_free(&fs, &proc, &ss);
 
@@ -1739,6 +2140,9 @@ TEST(display_x11_window_init_wm_protocols_write_failure)
 	u8 setup_request[48]  = {0};
 	u8 atom_request[20]   = {0};
 	u8 atom_request2[24]  = {0};
+	u8 atom_request3[16]  = {0};
+	u8 atom_request4[20]  = {0};
+	u8 atom_request5[20]  = {0};
 	size_t rcvbuf	      = 44;
 
 	t_x11_env_init(&fs, &proc, &ss);
@@ -1753,6 +2157,9 @@ TEST(display_x11_window_init_wm_protocols_write_failure)
 	sock_read_all(&ss, peer, setup_request, sizeof(setup_request));
 	sock_read_all(&ss, peer, atom_request, sizeof(atom_request));
 	sock_read_all(&ss, peer, atom_request2, sizeof(atom_request2));
+	sock_read_all(&ss, peer, atom_request3, sizeof(atom_request3));
+	sock_read_all(&ss, peer, atom_request4, sizeof(atom_request4));
+	sock_read_all(&ss, peer, atom_request5, sizeof(atom_request5));
 	sock_setopt(&ss, peer, SOCK_OPT_RCVBUF, &rcvbuf, sizeof(rcvbuf));
 	EXPECT_EQ(window_init(&window, &display, 0, 0, 640, 480), NULL);
 	log_set_quiet(0, 0);
@@ -1861,6 +2268,20 @@ STEST(display_x11)
 	RUN(display_x11_window_id_null_data);
 	RUN(display_x11_init_success);
 	RUN(display_x11_window_init_writes_requests);
+	RUN(display_x11_window_set_title_writes_requests);
+	RUN(display_x11_window_set_title_null_data);
+	RUN(display_x11_window_set_title_invalid_text);
+	RUN(display_x11_window_set_title_too_long);
+	RUN(display_x11_window_set_title_alloc_failure);
+	RUN(display_x11_window_set_title_write_failure);
+	RUN(display_x11_window_geometry_writes_requests);
+	RUN(display_x11_window_set_position_null_data);
+	RUN(display_x11_window_set_size_null_data);
+	RUN(display_x11_window_set_position_write_failure);
+	RUN(display_x11_window_visibility_writes_requests);
+	RUN(display_x11_window_show_null_data);
+	RUN(display_x11_window_hide_null_data);
+	RUN(display_x11_window_hide_write_failure);
 	RUN(display_x11_poll_event_no_event);
 	RUN(display_x11_poll_event_null_display);
 	RUN(display_x11_poll_event_null_event);
@@ -1900,7 +2321,7 @@ STEST(display_x11)
 	RUN(display_x11_window_init_resource_exhausted);
 	RUN(display_x11_window_init_create_write_failure);
 	RUN(display_x11_window_init_wm_protocols_write_failure);
-	RUN(display_x11_window_init_map_write_failure);
+	RUN(display_x11_window_show_write_failure);
 	RUN(display_x11_window_free_destroy_write_failure);
 	RUN(display_x11_init_valid_authority_writes_cookie);
 

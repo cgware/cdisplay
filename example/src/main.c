@@ -161,6 +161,13 @@ int main()
 		return 1;
 	}
 
+	if (window_show(&windows[0].wnd) || window_show(&windows[1].wnd)) {
+		c_printf("failed to show windows\n");
+		cleanup(&display, windows, 2, &fs, &proc, &ss);
+		mem_print(DST_STD());
+		return 1;
+	}
+
 	for (size_t i = 0; i < 2; i++) {
 		windows[i].id	= window_id(&windows[i].wnd);
 		windows[i].open = 1;
@@ -186,10 +193,6 @@ int main()
 			open--;
 			window_free(&window->wnd);
 			continue;
-		}
-
-		if (event.type == DISPLAY_EVENT_KEY_DOWN) {
-			break;
 		}
 	}
 

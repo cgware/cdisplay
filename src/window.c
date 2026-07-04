@@ -38,3 +38,48 @@ u32 window_id(window_t *wnd)
 
 	return wnd->display->drv->window_id(wnd);
 }
+
+int window_set_title(window_t *wnd, strv_t title)
+{
+	if (wnd == NULL || wnd->display == NULL || wnd->display->drv == NULL || wnd->display->drv->window_set_title == NULL) {
+		return 1;
+	}
+
+	return wnd->display->drv->window_set_title(wnd, title);
+}
+
+int window_set_position(window_t *wnd, u16 x, u16 y)
+{
+	if (wnd == NULL || wnd->display == NULL || wnd->display->drv == NULL || wnd->display->drv->window_set_position == NULL) {
+		return 1;
+	}
+
+	return wnd->display->drv->window_set_position(wnd, x, y);
+}
+
+int window_set_size(window_t *wnd, u16 width, u16 height)
+{
+	if (wnd == NULL || wnd->display == NULL || wnd->display->drv == NULL || wnd->display->drv->window_set_size == NULL) {
+		return 1;
+	}
+
+	return wnd->display->drv->window_set_size(wnd, width, height);
+}
+
+int window_show(window_t *wnd)
+{
+	if (wnd == NULL || wnd->display == NULL || wnd->display->drv == NULL || wnd->display->drv->window_show == NULL) {
+		return 1;
+	}
+
+	return wnd->display->drv->window_show(wnd);
+}
+
+int window_hide(window_t *wnd)
+{
+	if (wnd == NULL || wnd->display == NULL || wnd->display->drv == NULL || wnd->display->drv->window_hide == NULL) {
+		return 1;
+	}
+
+	return wnd->display->drv->window_hide(wnd);
+}

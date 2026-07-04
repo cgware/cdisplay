@@ -154,6 +154,126 @@ TEST(display_none_window_id)
 	END;
 }
 
+TEST(display_none_window_set_title_null_window)
+{
+	START;
+
+	display_driver_t *drv = t_none_driver();
+	EXPECT_NE(drv, NULL);
+	EXPECT_EQ(drv->window_set_title(NULL, STRV("title")), 1);
+
+	END;
+}
+
+TEST(display_none_window_set_title)
+{
+	START;
+
+	display_driver_t *drv = t_none_driver();
+	window_t window	      = {0};
+
+	EXPECT_NE(drv, NULL);
+	EXPECT_EQ(drv->window_set_title(&window, STRV("title")), 0);
+
+	END;
+}
+
+TEST(display_none_window_set_position_null_window)
+{
+	START;
+
+	display_driver_t *drv = t_none_driver();
+	EXPECT_NE(drv, NULL);
+	EXPECT_EQ(drv->window_set_position(NULL, 11, 22), 1);
+
+	END;
+}
+
+TEST(display_none_window_set_position)
+{
+	START;
+
+	display_driver_t *drv = t_none_driver();
+	window_t window	      = {0};
+
+	EXPECT_NE(drv, NULL);
+	EXPECT_EQ(drv->window_set_position(&window, 11, 22), 0);
+
+	END;
+}
+
+TEST(display_none_window_set_size_null_window)
+{
+	START;
+
+	display_driver_t *drv = t_none_driver();
+	EXPECT_NE(drv, NULL);
+	EXPECT_EQ(drv->window_set_size(NULL, 333, 444), 1);
+
+	END;
+}
+
+TEST(display_none_window_set_size)
+{
+	START;
+
+	display_driver_t *drv = t_none_driver();
+	window_t window	      = {0};
+
+	EXPECT_NE(drv, NULL);
+	EXPECT_EQ(drv->window_set_size(&window, 333, 444), 0);
+
+	END;
+}
+
+TEST(display_none_window_show_null_window)
+{
+	START;
+
+	display_driver_t *drv = t_none_driver();
+	EXPECT_NE(drv, NULL);
+	EXPECT_EQ(drv->window_show(NULL), 1);
+
+	END;
+}
+
+TEST(display_none_window_show)
+{
+	START;
+
+	display_driver_t *drv = t_none_driver();
+	window_t window	      = {0};
+
+	EXPECT_NE(drv, NULL);
+	EXPECT_EQ(drv->window_show(&window), 0);
+
+	END;
+}
+
+TEST(display_none_window_hide_null_window)
+{
+	START;
+
+	display_driver_t *drv = t_none_driver();
+	EXPECT_NE(drv, NULL);
+	EXPECT_EQ(drv->window_hide(NULL), 1);
+
+	END;
+}
+
+TEST(display_none_window_hide)
+{
+	START;
+
+	display_driver_t *drv = t_none_driver();
+	window_t window	      = {0};
+
+	EXPECT_NE(drv, NULL);
+	EXPECT_EQ(drv->window_hide(&window), 0);
+
+	END;
+}
+
 TEST(display_none_init_success)
 {
 	START;
@@ -205,6 +325,16 @@ STEST(display_none)
 	RUN(display_none_window_free_null_window);
 	RUN(display_none_window_id_null_window);
 	RUN(display_none_window_id);
+	RUN(display_none_window_set_title_null_window);
+	RUN(display_none_window_set_title);
+	RUN(display_none_window_set_position_null_window);
+	RUN(display_none_window_set_position);
+	RUN(display_none_window_set_size_null_window);
+	RUN(display_none_window_set_size);
+	RUN(display_none_window_show_null_window);
+	RUN(display_none_window_show);
+	RUN(display_none_window_hide_null_window);
+	RUN(display_none_window_hide);
 	RUN(display_none_init_success);
 	RUN(display_none_window_init_success);
 
