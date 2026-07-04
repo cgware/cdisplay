@@ -40,6 +40,17 @@ static example_window_t *find_window(example_window_t *windows, size_t count, u3
 	return NULL;
 }
 
+static void close_window(example_window_t *window, int *open)
+{
+	if (window == NULL || !window->open) {
+		return;
+	}
+
+	window->open = 0;
+	(*open)--;
+	window_free(&window->wnd);
+}
+
 static const char *event_name(display_event_type_t type)
 {
 	switch (type) {
@@ -188,11 +199,20 @@ int main()
 			continue;
 		}
 
-		if (event.type == DISPLAY_EVENT_CLOSE && window->open) {
-			window->open = 0;
-			open--;
-			window_free(&window->wnd);
+		switch (event.type) {
+		case DISPLAY_EVENT_CLOSE: {
+			close_window(window, &open);
 			continue;
+		}
+		case DISPLAY_EVENT_KEY_DOWN: {
+			if (event.key == DISPLAY_KEY_ESCAPE) {
+				close_window(window, &open);
+				continue;
+			}
+			break;
+		}
+		default:
+			break;
 		}
 	}
 

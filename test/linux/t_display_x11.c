@@ -29,12 +29,19 @@ static const u8 t_x11_cookie[] = {
 };
 
 typedef struct t_alloc_s {
+	int alloc_calls;
+	int fail_alloc_after;
 	int fail_realloc;
 } t_alloc_t;
 
 static void *t_alloc_alloc(alloc_t *alloc, size_t size)
 {
-	(void)alloc;
+	t_alloc_t *state = alloc->priv;
+	state->alloc_calls++;
+	if (state->fail_alloc_after == state->alloc_calls) {
+		return NULL;
+	}
+
 	return mem_alloc(size);
 }
 
@@ -200,6 +207,10 @@ static void t_x11_setup_data(u8 *setup, size_t size, u8 screen_count, u16 vendor
 		cbuf_set_u32le(setup, 32, 0x00000040);
 		cbuf_set_u32le(setup, 40, 0x00ffffff);
 		cbuf_set_u32le(setup, 44, 0x00000000);
+		cbuf_set_u8le(setup, 24, 32);
+		cbuf_set_u8le(setup, 25, 32);
+		cbuf_set_u8le(setup, 26, 8);
+		cbuf_set_u8le(setup, 27, 40);
 	}
 }
 
@@ -219,22 +230,88 @@ static void t_x11_default_atom_replies(u8 replies[160])
 	t_x11_atom_reply(&replies[128], 1, 0x000000f4);
 }
 
-static void t_x11_script_setup_data_atoms(sock_t *ss, void *server, u8 success, const void *setup_data, size_t setup_size,
-					  const void *atom_data, size_t atom_size)
+static void t_x11_keyboard_mapping(buf_t *buf)
+{
+	u8 reply[32]	   = {0};
+	u8 keysyms[33 * 4] = {0};
+
+	cbuf_set_u8le(reply, 0, 1);
+	cbuf_set_u8le(reply, 1, 1);
+	cbuf_set_u32le(reply, 4, 33);
+
+	cbuf_set_u32le(keysyms, 0 * 4, 'A');
+	cbuf_set_u32le(keysyms, 1 * 4, 0xff1b);
+	cbuf_set_u32le(keysyms, 2 * 4, 0xffbe);
+	cbuf_set_u32le(keysyms, 3 * 4, '1');
+	cbuf_set_u32le(keysyms, 4 * 4, 0xff0d);
+	cbuf_set_u32le(keysyms, 5 * 4, 0xff09);
+	cbuf_set_u32le(keysyms, 6 * 4, 0xff08);
+	cbuf_set_u32le(keysyms, 7 * 4, ' ');
+	cbuf_set_u32le(keysyms, 8 * 4, 0xff51);
+	cbuf_set_u32le(keysyms, 9 * 4, 0xff53);
+	cbuf_set_u32le(keysyms, 10 * 4, 0xff52);
+	cbuf_set_u32le(keysyms, 11 * 4, 0xff54);
+	cbuf_set_u32le(keysyms, 12 * 4, 0xffe1);
+	cbuf_set_u32le(keysyms, 13 * 4, 0xffe2);
+	cbuf_set_u32le(keysyms, 14 * 4, 0xffe3);
+	cbuf_set_u32le(keysyms, 15 * 4, 0xffe4);
+	cbuf_set_u32le(keysyms, 16 * 4, 0xffe9);
+	cbuf_set_u32le(keysyms, 17 * 4, 0xffea);
+	cbuf_set_u32le(keysyms, 18 * 4, 0xffeb);
+	cbuf_set_u32le(keysyms, 19 * 4, 0xffec);
+	cbuf_set_u32le(keysyms, 30 * 4, 'a');
+
+	buf_add(buf, sizeof(reply), reply, NULL);
+	buf_add(buf, sizeof(keysyms), keysyms, NULL);
+}
+
+static void t_x11_keyboard_reply(u8 reply[32], u8 success, u8 keysyms_per_keycode, u32 words)
+{
+	mem_set(reply, 0, 32);
+	cbuf_set_u8le(reply, 0, success);
+	cbuf_set_u8le(reply, 1, keysyms_per_keycode);
+	cbuf_set_u32le(reply, 4, words);
+}
+
+static void t_x11_script_setup_data_keyboard_atoms(sock_t *ss, void *server, u8 success, const void *setup_data, size_t setup_size,
+						   const void *keyboard_data, size_t keyboard_size, const void *atom_data, size_t atom_size)
 {
 	buf_t script = {0};
 	u8 header[8] = {0};
 
 	t_x11_setup_header(header, success, setup_size / 4);
 
-	buf_init(&script, sizeof(header) + setup_size + atom_size, ALLOC_STD);
+	buf_init(&script, sizeof(header) + setup_size + keyboard_size + atom_size, ALLOC_STD);
 	buf_add(&script, sizeof(header), header, NULL);
 	buf_add(&script, setup_size, setup_data, NULL);
+	if (keyboard_data != NULL) {
+		buf_add(&script, keyboard_size, keyboard_data, NULL);
+	}
 	if (atom_data != NULL) {
 		buf_add(&script, atom_size, atom_data, NULL);
 	}
 	sock_script(ss, server, script.data, script.used);
 	buf_free(&script);
+}
+
+static void t_x11_script_setup_data_atoms(sock_t *ss, void *server, u8 success, const void *setup_data, size_t setup_size,
+					  const void *atom_data, size_t atom_size)
+{
+	buf_t keyboard = {0};
+	buf_init(&keyboard, 32 + 33 * 4, ALLOC_STD);
+	if (success == 1) {
+		t_x11_keyboard_mapping(&keyboard);
+	}
+	t_x11_script_setup_data_keyboard_atoms(ss,
+					       server,
+					       success,
+					       setup_data,
+					       setup_size,
+					       success == 1 ? keyboard.data : NULL,
+					       success == 1 ? keyboard.used : 0,
+					       atom_data,
+					       atom_size);
+	buf_free(&keyboard);
 }
 
 static void t_x11_script_setup_data(sock_t *ss, void *server, u8 success, const void *setup_data, size_t setup_size)
@@ -284,6 +361,7 @@ static void t_x11_open_window(display_driver_t *drv, fs_t *fs, proc_t *proc, soc
 static void t_x11_drain_open_window_requests(sock_t *ss, void *peer)
 {
 	u8 setup_request[48]	= {0};
+	u8 keymap_request[8]	= {0};
 	u8 atom_request[20]	= {0};
 	u8 atom_request2[24]	= {0};
 	u8 atom_request3[16]	= {0};
@@ -293,6 +371,7 @@ static void t_x11_drain_open_window_requests(sock_t *ss, void *peer)
 	u8 property_request[28] = {0};
 
 	sock_read_all(ss, peer, setup_request, sizeof(setup_request));
+	sock_read_all(ss, peer, keymap_request, sizeof(keymap_request));
 	sock_read_all(ss, peer, atom_request, sizeof(atom_request));
 	sock_read_all(ss, peer, atom_request2, sizeof(atom_request2));
 	sock_read_all(ss, peer, atom_request3, sizeof(atom_request3));
@@ -415,6 +494,14 @@ static void t_x11_write_unknown_client_event(sock_t *ss, void *peer, u32 window)
 	cbuf_set_u32le(event, 4, window);
 	cbuf_set_u32le(event, 8, 0x000000f0);
 	cbuf_set_u32le(event, 12, 0x000000ff);
+	sock_write_all(ss, peer, event, sizeof(event));
+}
+
+static void t_x11_write_mapping_event(sock_t *ss, void *peer)
+{
+	u8 event[32] = {0};
+
+	cbuf_set_u8le(event, 0, 34);
 	sock_write_all(ss, peer, event, sizeof(event));
 }
 
@@ -563,6 +650,7 @@ TEST(display_x11_window_init_writes_requests)
 	void *server		= NULL;
 	void *peer		= NULL;
 	u8 setup_request[48]	= {0};
+	u8 keymap_request[8]	= {0};
 	u8 atom_request[20]	= {0};
 	u8 atom_request2[24]	= {0};
 	u8 atom_request3[16]	= {0};
@@ -594,6 +682,7 @@ TEST(display_x11_window_init_writes_requests)
 
 	sock_accept(&ss, server, &peer);
 	sock_read_all(&ss, peer, setup_request, sizeof(setup_request));
+	sock_read_all(&ss, peer, keymap_request, sizeof(keymap_request));
 	sock_read_all(&ss, peer, atom_request, sizeof(atom_request));
 	sock_read_all(&ss, peer, atom_request2, sizeof(atom_request2));
 	sock_read_all(&ss, peer, atom_request3, sizeof(atom_request3));
@@ -602,6 +691,9 @@ TEST(display_x11_window_init_writes_requests)
 	sock_read_all(&ss, peer, create_request, sizeof(create_request));
 	sock_read_all(&ss, peer, property_request, sizeof(property_request));
 
+	EXPECT_EQ(keymap_request[0], 101);
+	EXPECT_EQ(keymap_request[4], 8);
+	EXPECT_EQ(keymap_request[5], 33);
 	EXPECT_EQ(atom_request[0], 16);
 	EXPECT_EQ(atom_request2[0], 16);
 	EXPECT_EQ(atom_request3[0], 16);
@@ -647,19 +739,19 @@ TEST(display_x11_window_set_title_writes_requests)
 {
 	START;
 
-	display_driver_t *drv = t_x11_driver();
-	fs_t fs		      = {0};
-	proc_t proc	      = {0};
-	sock_t ss	      = {0};
-	display_t display     = {0};
-	window_t window	      = {0};
-	void *server	      = NULL;
-	void *peer	      = NULL;
-	u8 wm_name_request[28] = {0};
+	display_driver_t *drv	   = t_x11_driver();
+	fs_t fs			   = {0};
+	proc_t proc		   = {0};
+	sock_t ss		   = {0};
+	display_t display	   = {0};
+	window_t window		   = {0};
+	void *server		   = NULL;
+	void *peer		   = NULL;
+	u8 wm_name_request[28]	   = {0};
 	u8 net_wm_name_request[28] = {0};
-	u32 property	      = 0;
-	u32 property_type     = 0;
-	u32 length	      = 0;
+	u32 property		   = 0;
+	u32 property_type	   = 0;
+	u32 length		   = 0;
 
 	t_x11_open_window(drv, &fs, &proc, &ss, &display, &window, &server, &peer);
 	t_x11_drain_open_window_requests(&ss, peer);
@@ -834,19 +926,19 @@ TEST(display_x11_window_geometry_writes_requests)
 {
 	START;
 
-	display_driver_t *drv = t_x11_driver();
-	fs_t fs		      = {0};
-	proc_t proc	      = {0};
-	sock_t ss	      = {0};
-	display_t display     = {0};
-	window_t window	      = {0};
-	void *server	      = NULL;
-	void *peer	      = NULL;
+	display_driver_t *drv	= t_x11_driver();
+	fs_t fs			= {0};
+	proc_t proc		= {0};
+	sock_t ss		= {0};
+	display_t display	= {0};
+	window_t window		= {0};
+	void *server		= NULL;
+	void *peer		= NULL;
 	u8 position_request[20] = {0};
-	u8 size_request[20]    = {0};
-	u32 mask	      = 0;
-	u32 first	      = 0;
-	u32 second	      = 0;
+	u8 size_request[20]	= {0};
+	u32 mask		= 0;
+	u32 first		= 0;
+	u32 second		= 0;
 
 	t_x11_open_window(drv, &fs, &proc, &ss, &display, &window, &server, &peer);
 	t_x11_drain_open_window_requests(&ss, peer);
@@ -1344,6 +1436,41 @@ TEST(display_x11_wait_event_skips_reparent_notify)
 	END;
 }
 
+TEST(display_x11_wait_event_skips_mapping_notify)
+{
+	START;
+
+	display_driver_t *drv = t_x11_driver();
+	fs_t fs		      = {0};
+	proc_t proc	      = {0};
+	sock_t ss	      = {0};
+	display_t display     = {0};
+	window_t window	      = {0};
+	void *server	      = NULL;
+	void *peer	      = NULL;
+	display_event_t event = {0};
+
+	t_x11_open_window(drv, &fs, &proc, &ss, &display, &window, &server, &peer);
+	t_x11_write_mapping_event(&ss, peer);
+	t_x11_write_configure_event(&ss, peer, 0x00100000, 10, 20, 640, 480);
+
+	EXPECT_EQ(display_wait_event(&display, &event), 0);
+	EXPECT_EQ(event.type, DISPLAY_EVENT_RESIZE);
+	EXPECT_EQ(event.window, 0x00100000);
+	EXPECT_EQ(event.x, 10);
+	EXPECT_EQ(event.y, 20);
+	EXPECT_EQ(event.width, 640);
+	EXPECT_EQ(event.height, 480);
+
+	window_free(&window);
+	display_free(&display);
+	sock_close(&ss, peer);
+	sock_close(&ss, server);
+	t_x11_env_free(&fs, &proc, &ss);
+
+	END;
+}
+
 TEST(display_x11_wait_event_client_message_close)
 {
 	START;
@@ -1422,6 +1549,9 @@ TEST(display_x11_wait_event_inputs)
 	t_x11_open_window(drv, &fs, &proc, &ss, &display, &window, &server, &peer);
 	t_x11_write_key_event(&ss, peer, 2, 38, 0x00100000, 11, 22, 1);
 	t_x11_write_key_event(&ss, peer, 3, 38, 0x00100000, 12, 23, 2);
+	t_x11_write_key_event(&ss, peer, 2, 9, 0x00100000, 12, 23, 2);
+	t_x11_write_key_event(&ss, peer, 2, 10, 0x00100000, 12, 23, 2);
+	t_x11_write_key_event(&ss, peer, 2, 40, 0x00100000, 12, 23, 2);
 	t_x11_write_key_event(&ss, peer, 4, 1, 0x00100000, 13, 24, 4);
 	t_x11_write_key_event(&ss, peer, 5, 1, 0x00100000, 14, 25, 8);
 	t_x11_write_motion_event(&ss, peer, 0x00100000, 15, 26, 16);
@@ -1429,15 +1559,27 @@ TEST(display_x11_wait_event_inputs)
 	EXPECT_EQ(display_wait_event(&display, &event), 0);
 	EXPECT_EQ(event.type, DISPLAY_EVENT_KEY_DOWN);
 	EXPECT_EQ(event.window, 0x00100000);
-	EXPECT_EQ(event.key, 38);
+	EXPECT_EQ(event.key, DISPLAY_KEY_A);
 	EXPECT_EQ(event.x, 11);
 	EXPECT_EQ(event.y, 22);
 	EXPECT_EQ(event.modifiers, 1);
 
 	EXPECT_EQ(display_wait_event(&display, &event), 0);
 	EXPECT_EQ(event.type, DISPLAY_EVENT_KEY_UP);
-	EXPECT_EQ(event.key, 38);
+	EXPECT_EQ(event.key, DISPLAY_KEY_A);
 	EXPECT_EQ(event.modifiers, 2);
+
+	EXPECT_EQ(display_wait_event(&display, &event), 0);
+	EXPECT_EQ(event.type, DISPLAY_EVENT_KEY_DOWN);
+	EXPECT_EQ(event.key, DISPLAY_KEY_ESCAPE);
+
+	EXPECT_EQ(display_wait_event(&display, &event), 0);
+	EXPECT_EQ(event.type, DISPLAY_EVENT_KEY_DOWN);
+	EXPECT_EQ(event.key, DISPLAY_KEY_F1);
+
+	EXPECT_EQ(display_wait_event(&display, &event), 0);
+	EXPECT_EQ(event.type, DISPLAY_EVENT_KEY_DOWN);
+	EXPECT_EQ(event.key, DISPLAY_KEY_UNKNOWN);
 
 	EXPECT_EQ(display_wait_event(&display, &event), 0);
 	EXPECT_EQ(event.type, DISPLAY_EVENT_MOUSE_DOWN);
@@ -1909,6 +2051,189 @@ TEST(display_x11_init_setup_alloc_failure)
 	END;
 }
 
+TEST(display_x11_init_invalid_keycode_range)
+{
+	START;
+
+	display_driver_t *drv = t_x11_driver();
+	fs_t fs		      = {0};
+	proc_t proc	      = {0};
+	sock_t ss	      = {0};
+	display_t display     = {0};
+	void *server	      = NULL;
+	u8 setup[72]	      = {0};
+
+	t_x11_env_init(&fs, &proc, &ss);
+	t_x11_set_display(&proc, STRV(":0"));
+	t_x11_set_xauthority(&proc);
+	t_x11_write_authority(&fs);
+	t_x11_listen(&ss, &server);
+	t_x11_setup_data(setup, sizeof(setup), 1, 0);
+	cbuf_set_u8le(setup, 26, 40);
+	cbuf_set_u8le(setup, 27, 8);
+	t_x11_script_setup_data(&ss, server, 1, setup, sizeof(setup));
+	log_set_quiet(0, 1);
+	EXPECT_EQ(display_init(&display, drv, &fs, &proc, &ss, ALLOC_STD), NULL);
+	log_set_quiet(0, 0);
+	sock_close(&ss, server);
+	t_x11_env_free(&fs, &proc, &ss);
+
+	END;
+}
+
+TEST(display_x11_init_keyboard_mapping_read_failure)
+{
+	START;
+
+	display_driver_t *drv = t_x11_driver();
+	fs_t fs		      = {0};
+	proc_t proc	      = {0};
+	sock_t ss	      = {0};
+	display_t display     = {0};
+	void *server	      = NULL;
+	u8 setup[72]	      = {0};
+
+	t_x11_env_init(&fs, &proc, &ss);
+	t_x11_set_display(&proc, STRV(":0"));
+	t_x11_set_xauthority(&proc);
+	t_x11_write_authority(&fs);
+	t_x11_listen(&ss, &server);
+	t_x11_setup_data(setup, sizeof(setup), 1, 0);
+	t_x11_script_setup_data_keyboard_atoms(&ss, server, 1, setup, sizeof(setup), NULL, 0, NULL, 0);
+	log_set_quiet(0, 1);
+	EXPECT_EQ(display_init(&display, drv, &fs, &proc, &ss, ALLOC_STD), NULL);
+	log_set_quiet(0, 0);
+	sock_close(&ss, server);
+	t_x11_env_free(&fs, &proc, &ss);
+
+	END;
+}
+
+TEST(display_x11_init_keyboard_mapping_rejected)
+{
+	START;
+
+	display_driver_t *drv = t_x11_driver();
+	fs_t fs		      = {0};
+	proc_t proc	      = {0};
+	sock_t ss	      = {0};
+	display_t display     = {0};
+	void *server	      = NULL;
+	u8 setup[72]	      = {0};
+	u8 keyboard_reply[32] = {0};
+	u8 atom_reply[160]    = {0};
+
+	t_x11_env_init(&fs, &proc, &ss);
+	t_x11_set_display(&proc, STRV(":0"));
+	t_x11_set_xauthority(&proc);
+	t_x11_write_authority(&fs);
+	t_x11_listen(&ss, &server);
+	t_x11_setup_data(setup, sizeof(setup), 1, 0);
+	t_x11_keyboard_reply(keyboard_reply, 0, 0, 0);
+	t_x11_default_atom_replies(atom_reply);
+	t_x11_script_setup_data_keyboard_atoms(
+		&ss, server, 1, setup, sizeof(setup), keyboard_reply, sizeof(keyboard_reply), atom_reply, sizeof(atom_reply));
+	log_set_quiet(0, 1);
+	EXPECT_EQ(display_init(&display, drv, &fs, &proc, &ss, ALLOC_STD), NULL);
+	log_set_quiet(0, 0);
+	sock_close(&ss, server);
+	t_x11_env_free(&fs, &proc, &ss);
+
+	END;
+}
+
+TEST(display_x11_init_keyboard_mapping_invalid)
+{
+	START;
+
+	display_driver_t *drv = t_x11_driver();
+	fs_t fs		      = {0};
+	proc_t proc	      = {0};
+	sock_t ss	      = {0};
+	display_t display     = {0};
+	void *server	      = NULL;
+	u8 setup[72]	      = {0};
+	u8 keyboard_reply[32] = {0};
+	u8 atom_reply[160]    = {0};
+
+	t_x11_env_init(&fs, &proc, &ss);
+	t_x11_set_display(&proc, STRV(":0"));
+	t_x11_set_xauthority(&proc);
+	t_x11_write_authority(&fs);
+	t_x11_listen(&ss, &server);
+	t_x11_setup_data(setup, sizeof(setup), 1, 0);
+	t_x11_keyboard_reply(keyboard_reply, 1, 1, 1);
+	t_x11_default_atom_replies(atom_reply);
+	t_x11_script_setup_data_keyboard_atoms(
+		&ss, server, 1, setup, sizeof(setup), keyboard_reply, sizeof(keyboard_reply), atom_reply, sizeof(atom_reply));
+	log_set_quiet(0, 1);
+	EXPECT_EQ(display_init(&display, drv, &fs, &proc, &ss, ALLOC_STD), NULL);
+	log_set_quiet(0, 0);
+	sock_close(&ss, server);
+	t_x11_env_free(&fs, &proc, &ss);
+
+	END;
+}
+
+TEST(display_x11_init_keyboard_mapping_data_read_failure)
+{
+	START;
+
+	display_driver_t *drv = t_x11_driver();
+	fs_t fs		      = {0};
+	proc_t proc	      = {0};
+	sock_t ss	      = {0};
+	display_t display     = {0};
+	void *server	      = NULL;
+	u8 setup[72]	      = {0};
+	u8 keyboard_reply[32] = {0};
+
+	t_x11_env_init(&fs, &proc, &ss);
+	t_x11_set_display(&proc, STRV(":0"));
+	t_x11_set_xauthority(&proc);
+	t_x11_write_authority(&fs);
+	t_x11_listen(&ss, &server);
+	t_x11_setup_data(setup, sizeof(setup), 1, 0);
+	t_x11_keyboard_reply(keyboard_reply, 1, 1, 33);
+	t_x11_script_setup_data_keyboard_atoms(&ss, server, 1, setup, sizeof(setup), keyboard_reply, sizeof(keyboard_reply), NULL, 0);
+	log_set_quiet(0, 1);
+	EXPECT_EQ(display_init(&display, drv, &fs, &proc, &ss, ALLOC_STD), NULL);
+	log_set_quiet(0, 0);
+	sock_close(&ss, server);
+	t_x11_env_free(&fs, &proc, &ss);
+
+	END;
+}
+
+TEST(display_x11_init_keyboard_mapping_alloc_failure)
+{
+	START;
+
+	display_driver_t *drv = t_x11_driver();
+	fs_t fs		      = {0};
+	proc_t proc	      = {0};
+	sock_t ss	      = {0};
+	display_t display     = {0};
+	void *server	      = NULL;
+	u8 setup[72]	      = {0};
+	t_alloc_t state	      = {.fail_alloc_after = 3};
+
+	t_x11_env_init(&fs, &proc, &ss);
+	t_x11_set_display(&proc, STRV(":0"));
+	t_x11_set_xauthority(&proc);
+	t_x11_write_authority(&fs);
+	t_x11_listen(&ss, &server);
+	t_x11_setup_data(setup, sizeof(setup), 1, 0);
+	t_x11_script_setup_data(&ss, server, 1, setup, sizeof(setup));
+	log_set_quiet(0, 1);
+	EXPECT_EQ(display_init(&display, drv, &fs, &proc, &ss, t_alloc(&state)), NULL);
+	log_set_quiet(0, 0);
+	sock_close(&ss, server);
+	t_x11_env_free(&fs, &proc, &ss);
+
+	END;
+}
+
 TEST(display_x11_init_intern_atom_read_failure)
 {
 	START;
@@ -2138,6 +2463,7 @@ TEST(display_x11_window_init_wm_protocols_write_failure)
 	void *server	      = NULL;
 	void *peer	      = NULL;
 	u8 setup_request[48]  = {0};
+	u8 keymap_request[8]  = {0};
 	u8 atom_request[20]   = {0};
 	u8 atom_request2[24]  = {0};
 	u8 atom_request3[16]  = {0};
@@ -2155,6 +2481,7 @@ TEST(display_x11_window_init_wm_protocols_write_failure)
 	display_init(&display, drv, &fs, &proc, &ss, ALLOC_STD);
 	sock_accept(&ss, server, &peer);
 	sock_read_all(&ss, peer, setup_request, sizeof(setup_request));
+	sock_read_all(&ss, peer, keymap_request, sizeof(keymap_request));
 	sock_read_all(&ss, peer, atom_request, sizeof(atom_request));
 	sock_read_all(&ss, peer, atom_request2, sizeof(atom_request2));
 	sock_read_all(&ss, peer, atom_request3, sizeof(atom_request3));
@@ -2294,6 +2621,7 @@ STEST(display_x11)
 	RUN(display_x11_wait_event_skips_map_notify);
 	RUN(display_x11_wait_event_skips_unmap_notify);
 	RUN(display_x11_wait_event_skips_reparent_notify);
+	RUN(display_x11_wait_event_skips_mapping_notify);
 	RUN(display_x11_wait_event_client_message_close);
 	RUN(display_x11_wait_event_skips_unknown_client_message);
 	RUN(display_x11_wait_event_inputs);
@@ -2314,6 +2642,12 @@ STEST(display_x11)
 	RUN(display_x11_init_setup_without_screens);
 	RUN(display_x11_init_invalid_screen_offset);
 	RUN(display_x11_init_setup_alloc_failure);
+	RUN(display_x11_init_invalid_keycode_range);
+	RUN(display_x11_init_keyboard_mapping_read_failure);
+	RUN(display_x11_init_keyboard_mapping_rejected);
+	RUN(display_x11_init_keyboard_mapping_invalid);
+	RUN(display_x11_init_keyboard_mapping_data_read_failure);
+	RUN(display_x11_init_keyboard_mapping_alloc_failure);
 	RUN(display_x11_init_intern_atom_read_failure);
 	RUN(display_x11_init_intern_atom_rejected_reply);
 	RUN(display_x11_init_intern_atom_missing);

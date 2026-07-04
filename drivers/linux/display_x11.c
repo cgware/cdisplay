@@ -18,6 +18,9 @@ typedef struct display_x11_s {
 	u32 wm_name;
 	u32 net_wm_name;
 	u32 utf8_string;
+	u8 min_keycode;
+	u8 max_keycode;
+	display_key_t keys[256];
 } display_x11_t;
 
 typedef struct window_x11_s {
@@ -50,6 +53,8 @@ enum {
 	X11_SETUP_VENDOR_LENGTH_OFFSET	  = 16,
 	X11_SETUP_SCREEN_COUNT_OFFSET	  = 20,
 	X11_SETUP_FORMAT_COUNT_OFFSET	  = 21,
+	X11_SETUP_MIN_KEYCODE_OFFSET	  = 26,
+	X11_SETUP_MAX_KEYCODE_OFFSET	  = 27,
 	X11_SETUP_SCREEN_LIST_OFFSET	  = 32,
 	X11_SCREEN_DEFAULT_COLORMAP_SIZE  = 4,
 };
@@ -316,6 +321,10 @@ static int open_display(display_t *d)
 	off = X11_SETUP_FORMAT_COUNT_OFFSET;
 	u8 format_count;
 	buf_read_u8le(&b, &off, &format_count);
+	off = X11_SETUP_MIN_KEYCODE_OFFSET;
+	buf_read_u8le(&b, &off, &dx11->min_keycode);
+	off = X11_SETUP_MAX_KEYCODE_OFFSET;
+	buf_read_u8le(&b, &off, &dx11->max_keycode);
 
 	size_t screen_offset = X11_SETUP_SCREEN_LIST_OFFSET + vendor_length + pad4(vendor_length) + (size_t)format_count * X11_FORMAT_SIZE;
 
@@ -359,13 +368,14 @@ static unsigned ctz32(uint32_t value)
 }
 
 enum {
-	X_CREATE_WINDOW	   = 1,
-	X_DESTROY_WINDOW   = 4,
-	X_MAP_WINDOW	   = 8,
-	X_UNMAP_WINDOW	   = 10,
-	X_CONFIGURE_WINDOW = 12,
-	X_INTERN_ATOM	   = 16,
-	X_CHANGE_PROPERTY  = 18,
+	X_CREATE_WINDOW	       = 1,
+	X_DESTROY_WINDOW       = 4,
+	X_MAP_WINDOW	       = 8,
+	X_UNMAP_WINDOW	       = 10,
+	X_CONFIGURE_WINDOW     = 12,
+	X_INTERN_ATOM	       = 16,
+	X_CHANGE_PROPERTY      = 18,
+	X_GET_KEYBOARD_MAPPING = 101,
 };
 
 enum {
@@ -415,6 +425,7 @@ enum {
 	X_EVENT_REPARENT_NOTIFY	 = 21,
 	X_EVENT_CONFIGURE_NOTIFY = 22,
 	X_EVENT_CLIENT_MESSAGE	 = 33,
+	X_EVENT_MAPPING_NOTIFY	 = 34,
 };
 
 enum {
@@ -453,6 +464,44 @@ enum {
 	X_CONFIG_WINDOW_Y      = 1u << 1,
 	X_CONFIG_WINDOW_WIDTH  = 1u << 2,
 	X_CONFIG_WINDOW_HEIGHT = 1u << 3,
+};
+
+enum {
+	X_GET_KEYBOARD_MAPPING_REQUEST_SIZE	   = 8,
+	X_GET_KEYBOARD_MAPPING_REQUEST_WORDS	   = X_GET_KEYBOARD_MAPPING_REQUEST_SIZE / X11_PAD_SIZE,
+	X_GET_KEYBOARD_MAPPING_KEYSYM_COUNT_OFFSET = 1,
+	X_GET_KEYBOARD_MAPPING_LENGTH_OFFSET	   = 4,
+};
+
+enum {
+	XK_BACKSPACE = 0xff08,
+	XK_TAB	     = 0xff09,
+	XK_RETURN    = 0xff0d,
+	XK_ESCAPE    = 0xff1b,
+	XK_LEFT	     = 0xff51,
+	XK_UP	     = 0xff52,
+	XK_RIGHT     = 0xff53,
+	XK_DOWN	     = 0xff54,
+	XK_F1	     = 0xffbe,
+	XK_F2	     = 0xffbf,
+	XK_F3	     = 0xffc0,
+	XK_F4	     = 0xffc1,
+	XK_F5	     = 0xffc2,
+	XK_F6	     = 0xffc3,
+	XK_F7	     = 0xffc4,
+	XK_F8	     = 0xffc5,
+	XK_F9	     = 0xffc6,
+	XK_F10	     = 0xffc7,
+	XK_F11	     = 0xffc8,
+	XK_F12	     = 0xffc9,
+	XK_SHIFT_L   = 0xffe1,
+	XK_SHIFT_R   = 0xffe2,
+	XK_CONTROL_L = 0xffe3,
+	XK_CONTROL_R = 0xffe4,
+	XK_ALT_L     = 0xffe9,
+	XK_ALT_R     = 0xffea,
+	XK_SUPER_L   = 0xffeb,
+	XK_SUPER_R   = 0xffec,
 };
 
 enum {
@@ -683,6 +732,134 @@ static int set_wm_protocols(window_t *wnd)
 	return 0;
 }
 
+static display_key_t key_from_keysym(u32 keysym)
+{
+	if (keysym >= 'a' && keysym <= 'z') {
+		return (display_key_t)(DISPLAY_KEY_A + keysym - 'a');
+	}
+
+	if (keysym >= 'A' && keysym <= 'Z') {
+		return (display_key_t)(DISPLAY_KEY_A + keysym - 'A');
+	}
+
+	if (keysym >= '0' && keysym <= '9') {
+		return (display_key_t)(DISPLAY_KEY_0 + keysym - '0');
+	}
+
+	if (keysym >= XK_F1 && keysym <= XK_F12) {
+		return (display_key_t)(DISPLAY_KEY_F1 + keysym - XK_F1);
+	}
+
+	switch (keysym) {
+	case XK_ESCAPE:
+		return DISPLAY_KEY_ESCAPE;
+	case XK_RETURN:
+		return DISPLAY_KEY_ENTER;
+	case XK_TAB:
+		return DISPLAY_KEY_TAB;
+	case XK_BACKSPACE:
+		return DISPLAY_KEY_BACKSPACE;
+	case ' ':
+		return DISPLAY_KEY_SPACE;
+	case XK_LEFT:
+		return DISPLAY_KEY_LEFT;
+	case XK_RIGHT:
+		return DISPLAY_KEY_RIGHT;
+	case XK_UP:
+		return DISPLAY_KEY_UP;
+	case XK_DOWN:
+		return DISPLAY_KEY_DOWN;
+	case XK_SHIFT_L:
+		return DISPLAY_KEY_LEFT_SHIFT;
+	case XK_SHIFT_R:
+		return DISPLAY_KEY_RIGHT_SHIFT;
+	case XK_CONTROL_L:
+		return DISPLAY_KEY_LEFT_CONTROL;
+	case XK_CONTROL_R:
+		return DISPLAY_KEY_RIGHT_CONTROL;
+	case XK_ALT_L:
+		return DISPLAY_KEY_LEFT_ALT;
+	case XK_ALT_R:
+		return DISPLAY_KEY_RIGHT_ALT;
+	case XK_SUPER_L:
+		return DISPLAY_KEY_LEFT_SUPER;
+	case XK_SUPER_R:
+		return DISPLAY_KEY_RIGHT_SUPER;
+	default:
+		return DISPLAY_KEY_UNKNOWN;
+	}
+}
+
+static int init_keys(display_t *display)
+{
+	display_x11_t *dx11 = display->data;
+
+	if (dx11->min_keycode > dx11->max_keycode) {
+		log_error("cwindow", "display_x11", NULL, "invalid keycode range");
+		return 1;
+	}
+
+	u8 keycode_count				= (u8)(dx11->max_keycode - dx11->min_keycode + 1);
+	u8 request[X_GET_KEYBOARD_MAPPING_REQUEST_SIZE] = {0};
+
+	size_t off = 0;
+	cbuf_write_u8le(request, &off, X_GET_KEYBOARD_MAPPING);
+	cbuf_write_u8le(request, &off, 0);
+	cbuf_write_u16le(request, &off, X_GET_KEYBOARD_MAPPING_REQUEST_WORDS);
+	cbuf_write_u8le(request, &off, dx11->min_keycode);
+	cbuf_write_u8le(request, &off, keycode_count);
+	cbuf_write_u16le(request, &off, 0);
+
+	u8 reply[X11_REPLY_SIZE] = {0};
+	if (sock_write_all(display->ss, dx11->sock, request, sizeof(request)) ||
+	    sock_read_all(display->ss, dx11->sock, reply, sizeof(reply))) {
+		log_error("cwindow", "display_x11", NULL, "failed to get keyboard mapping");
+		return 1;
+	}
+
+	if (reply[0] != X11_REPLY_SUCCESS) {
+		log_error("cwindow", "display_x11", NULL, "failed to get keyboard mapping");
+		return 1;
+	}
+
+	u8 keysyms_per_keycode = reply[X_GET_KEYBOARD_MAPPING_KEYSYM_COUNT_OFFSET];
+	u32 reply_words;
+	cbuf_get_u32le(reply, X_GET_KEYBOARD_MAPPING_LENGTH_OFFSET, &reply_words);
+	size_t keysyms_size  = (size_t)reply_words * X11_PAD_SIZE;
+	size_t expected_size = (size_t)keycode_count * keysyms_per_keycode * sizeof(u32);
+	if (keysyms_size != expected_size || keysyms_per_keycode == 0) {
+		log_error("cwindow", "display_x11", NULL, "invalid keyboard mapping");
+		return 1;
+	}
+
+	u8 *data = alloc_alloc(&display->alloc, keysyms_size);
+	if (data == NULL) {
+		return 1;
+	}
+
+	if (sock_read_all(display->ss, dx11->sock, data, keysyms_size)) {
+		log_error("cwindow", "display_x11", NULL, "failed to read keyboard mapping");
+		alloc_free(&display->alloc, data, keysyms_size);
+		return 1;
+	}
+
+	for (u8 i = 0; i < keycode_count; i++) {
+		for (u8 j = 0; j < keysyms_per_keycode; j++) {
+			u32 keysym;
+			cbuf_get_u32le(data, ((size_t)i * keysyms_per_keycode + j) * sizeof(u32), &keysym);
+			display_key_t key = key_from_keysym(keysym);
+			if (key != DISPLAY_KEY_UNKNOWN) {
+				dx11->keys[dx11->min_keycode + i] = key;
+				break;
+			}
+		}
+	}
+
+	alloc_free(&display->alloc, data, keysyms_size);
+
+	return 0;
+}
+
 static int read_x11_event(display_t *display, display_event_t *event)
 {
 	u8 data[X11_EVENT_SIZE] = {0};
@@ -715,7 +892,7 @@ static int read_x11_event(display_t *display, display_event_t *event)
 		event->modifiers = modifiers;
 		if (type == X_EVENT_KEY_PRESS || type == X_EVENT_KEY_RELEASE) {
 			event->type = type == X_EVENT_KEY_PRESS ? DISPLAY_EVENT_KEY_DOWN : DISPLAY_EVENT_KEY_UP;
-			event->key  = data[X_KEY_BUTTON_EVENT_DETAIL_OFFSET];
+			event->key  = dx11->keys[data[X_KEY_BUTTON_EVENT_DETAIL_OFFSET]];
 		} else {
 			event->type   = type == X_EVENT_BUTTON_PRESS ? DISPLAY_EVENT_MOUSE_DOWN : DISPLAY_EVENT_MOUSE_UP;
 			event->button = data[X_KEY_BUTTON_EVENT_DETAIL_OFFSET];
@@ -789,6 +966,9 @@ static int read_x11_event(display_t *display, display_event_t *event)
 			event->type   = DISPLAY_EVENT_CLOSE;
 			return 0;
 		}
+		return X11_EVENT_IGNORED;
+	}
+	case X_EVENT_MAPPING_NOTIFY: {
 		return X11_EVENT_IGNORED;
 	}
 	default: {
@@ -937,6 +1117,7 @@ static int display_x11_init(display_t *display)
 	if (display->data == NULL) {
 		return 1;
 	}
+	mem_set(display->data, 0, sizeof(display_x11_t));
 
 	if (open_display(display)) {
 		mem_free(display->data, sizeof(display_x11_t));
@@ -944,7 +1125,7 @@ static int display_x11_init(display_t *display)
 		return 1;
 	}
 
-	if (init_atoms(display)) {
+	if (init_keys(display) || init_atoms(display)) {
 		display_x11_t *dx11 = display->data;
 		sock_close(display->ss, dx11->sock);
 		mem_free(display->data, sizeof(display_x11_t));
