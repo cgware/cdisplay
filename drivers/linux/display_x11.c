@@ -19,6 +19,8 @@ typedef struct display_x11_s {
 	u32 net_wm_name;
 	u32 utf8_string;
 	u32 motif_wm_hints;
+	u32 net_wm_state;
+	u32 net_wm_state_fullscreen;
 	u8 min_keycode;
 	u8 max_keycode;
 	display_key_t keys[256];
@@ -26,6 +28,7 @@ typedef struct display_x11_s {
 
 typedef struct window_x11_s {
 	u32 id;
+	int mapped;
 } window_x11_t;
 
 enum {
@@ -376,6 +379,7 @@ enum {
 	X_CONFIGURE_WINDOW     = 12,
 	X_INTERN_ATOM	       = 16,
 	X_CHANGE_PROPERTY      = 18,
+	X_SEND_EVENT	       = 25,
 	X_GET_KEYBOARD_MAPPING = 101,
 };
 
@@ -401,14 +405,16 @@ enum {
 };
 
 enum {
-	X_EVENT_MASK_KEY_PRESS	    = 1u << 0,
-	X_EVENT_MASK_KEY_RELEASE    = 1u << 1,
-	X_EVENT_MASK_BUTTON_PRESS   = 1u << 2,
-	X_EVENT_MASK_BUTTON_RELEASE = 1u << 3,
-	X_EVENT_MASK_POINTER_MOTION = 1u << 6,
-	X_EVENT_MASK_EXPOSURE	    = 1u << 15,
-	X_EVENT_MASK_STRUCTURE	    = 1u << 17,
-	X_EVENT_MASK_FOCUS_CHANGE   = 1u << 21,
+	X_EVENT_MASK_KEY_PRESS		   = 1u << 0,
+	X_EVENT_MASK_KEY_RELEASE	   = 1u << 1,
+	X_EVENT_MASK_BUTTON_PRESS	   = 1u << 2,
+	X_EVENT_MASK_BUTTON_RELEASE	   = 1u << 3,
+	X_EVENT_MASK_POINTER_MOTION	   = 1u << 6,
+	X_EVENT_MASK_EXPOSURE		   = 1u << 15,
+	X_EVENT_MASK_SUBSTRUCTURE_NOTIFY   = 1u << 19,
+	X_EVENT_MASK_SUBSTRUCTURE_REDIRECT = 1u << 20,
+	X_EVENT_MASK_STRUCTURE		   = 1u << 17,
+	X_EVENT_MASK_FOCUS_CHANGE	   = 1u << 21,
 };
 
 enum {
@@ -449,9 +455,19 @@ enum {
 };
 
 enum {
+	X_SEND_EVENT_REQUEST_SIZE  = 44,
+	X_SEND_EVENT_REQUEST_WORDS = X_SEND_EVENT_REQUEST_SIZE / X11_PAD_SIZE,
+};
+
+enum {
 	MOTIF_WM_HINTS_FIELD_COUNT	= 5,
 	MOTIF_WM_HINTS_DECORATIONS_FLAG = 1u << 1,
 	MOTIF_WM_DECOR_ALL		= 1,
+};
+
+enum {
+	NET_WM_STATE_REMOVE = 0,
+	NET_WM_STATE_ADD    = 1,
 };
 
 enum {
@@ -650,7 +666,9 @@ static int init_atoms(display_t *display)
 	    intern_atom(display, STRV("WM_DELETE_WINDOW"), &dx11->wm_delete_window) ||
 	    intern_atom(display, STRV("WM_NAME"), &dx11->wm_name) || intern_atom(display, STRV("_NET_WM_NAME"), &dx11->net_wm_name) ||
 	    intern_atom(display, STRV("UTF8_STRING"), &dx11->utf8_string) ||
-	    intern_atom(display, STRV("_MOTIF_WM_HINTS"), &dx11->motif_wm_hints)) {
+	    intern_atom(display, STRV("_MOTIF_WM_HINTS"), &dx11->motif_wm_hints) ||
+	    intern_atom(display, STRV("_NET_WM_STATE"), &dx11->net_wm_state) ||
+	    intern_atom(display, STRV("_NET_WM_STATE_FULLSCREEN"), &dx11->net_wm_state_fullscreen)) {
 		return 1;
 	}
 
@@ -760,6 +778,57 @@ static int set_borderless(window_t *wnd, int borderless)
 	};
 
 	return set_property_u32(wnd, dx11->motif_wm_hints, dx11->motif_wm_hints, hints, MOTIF_WM_HINTS_FIELD_COUNT);
+}
+
+static int set_fullscreen_property(window_t *wnd, int fullscreen)
+{
+	display_x11_t *dx11 = wnd->display->data;
+	u32 state[]	    = {dx11->net_wm_state_fullscreen};
+
+	return set_property_u32(wnd, dx11->net_wm_state, XA_ATOM, state, fullscreen ? 1 : 0);
+}
+
+static int send_fullscreen_message(window_t *wnd, int fullscreen)
+{
+	u8 request[X_SEND_EVENT_REQUEST_SIZE] = {0};
+	size_t off			      = 0;
+
+	window_x11_t *wx11  = wnd->data;
+	display_x11_t *dx11 = wnd->display->data;
+
+	cbuf_write_u8le(request, &off, X_SEND_EVENT);
+	cbuf_write_u8le(request, &off, 0);
+	cbuf_write_u16le(request, &off, X_SEND_EVENT_REQUEST_WORDS);
+	cbuf_write_u32le(request, &off, dx11->root);
+	cbuf_write_u32le(request, &off, X_EVENT_MASK_SUBSTRUCTURE_REDIRECT | X_EVENT_MASK_SUBSTRUCTURE_NOTIFY);
+	cbuf_write_u8le(request, &off, X_EVENT_CLIENT_MESSAGE);
+	cbuf_write_u8le(request, &off, X_PROPERTY_FORMAT_32);
+	cbuf_write_u16le(request, &off, 0);
+	cbuf_write_u32le(request, &off, wx11->id);
+	cbuf_write_u32le(request, &off, dx11->net_wm_state);
+	cbuf_write_u32le(request, &off, fullscreen ? NET_WM_STATE_ADD : NET_WM_STATE_REMOVE);
+	cbuf_write_u32le(request, &off, dx11->net_wm_state_fullscreen);
+	cbuf_write_u32le(request, &off, 0);
+	cbuf_write_u32le(request, &off, 1);
+	cbuf_write_u32le(request, &off, 0);
+
+	if (sock_write_all(wnd->display->ss, dx11->sock, request, sizeof(request))) {
+		log_error("cwindow", "display_x11", NULL, "failed to set fullscreen state");
+		return 1;
+	}
+
+	return 0;
+}
+
+static int set_fullscreen(window_t *wnd, int fullscreen)
+{
+	window_x11_t *wx11 = wnd->data;
+
+	if (wx11->mapped) {
+		return send_fullscreen_message(wnd, fullscreen);
+	}
+
+	return set_fullscreen_property(wnd, fullscreen);
 }
 
 static int set_wm_protocols(window_t *wnd)
@@ -1205,6 +1274,7 @@ static int display_x11_window_init(window_t *wnd, u16 x, u16 y, u16 width, u16 h
 	if (wnd->data == NULL) {
 		return 1;
 	}
+	mem_set(wnd->data, 0, sizeof(window_x11_t));
 
 	if (create_window(wnd, x, y, width, height)) {
 		mem_free(wnd->data, sizeof(window_x11_t));
@@ -1290,13 +1360,28 @@ static int display_x11_window_set_borderless(window_t *wnd, int borderless)
 	return set_borderless(wnd, borderless);
 }
 
+static int display_x11_window_set_fullscreen(window_t *wnd, int fullscreen)
+{
+	if (wnd == NULL || wnd->data == NULL) {
+		return 1;
+	}
+
+	return set_fullscreen(wnd, fullscreen);
+}
+
 static int display_x11_window_show(window_t *wnd)
 {
 	if (wnd == NULL || wnd->data == NULL) {
 		return 1;
 	}
 
-	return map_window(wnd);
+	if (map_window(wnd)) {
+		return 1;
+	}
+
+	window_x11_t *wx11 = wnd->data;
+	wx11->mapped	   = 1;
+	return 0;
 }
 
 static int display_x11_window_hide(window_t *wnd)
@@ -1305,7 +1390,13 @@ static int display_x11_window_hide(window_t *wnd)
 		return 1;
 	}
 
-	return unmap_window(wnd);
+	if (unmap_window(wnd)) {
+		return 1;
+	}
+
+	window_x11_t *wx11 = wnd->data;
+	wx11->mapped	   = 0;
+	return 0;
 }
 
 static display_driver_t display_x11 = {
@@ -1321,6 +1412,7 @@ static display_driver_t display_x11 = {
 	.window_set_position   = display_x11_window_set_position,
 	.window_set_size       = display_x11_window_set_size,
 	.window_set_borderless = display_x11_window_set_borderless,
+	.window_set_fullscreen = display_x11_window_set_fullscreen,
 	.window_show	       = display_x11_window_show,
 	.window_hide	       = display_x11_window_hide,
 };

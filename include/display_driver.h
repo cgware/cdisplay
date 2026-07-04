@@ -19,6 +19,7 @@ typedef struct display_driver_s {
 	int (*window_set_position)(window_t *window, u16 x, u16 y);
 	int (*window_set_size)(window_t *window, u16 width, u16 height);
 	int (*window_set_borderless)(window_t *window, int borderless);
+	int (*window_set_fullscreen)(window_t *window, int fullscreen);
 	int (*window_show)(window_t *window);
 	int (*window_hide)(window_t *window);
 	fs_t *fs;

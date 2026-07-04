@@ -75,6 +75,15 @@ int window_set_borderless(window_t *wnd, int borderless)
 	return wnd->display->drv->window_set_borderless(wnd, borderless);
 }
 
+int window_set_fullscreen(window_t *wnd, int fullscreen)
+{
+	if (wnd == NULL || wnd->display == NULL || wnd->display->drv == NULL || wnd->display->drv->window_set_fullscreen == NULL) {
+		return 1;
+	}
+
+	return wnd->display->drv->window_set_fullscreen(wnd, fullscreen);
+}
+
 int window_show(window_t *wnd)
 {
 	if (wnd == NULL || wnd->display == NULL || wnd->display->drv == NULL || wnd->display->drv->window_show == NULL) {

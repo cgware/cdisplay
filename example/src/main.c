@@ -11,6 +11,7 @@ typedef struct example_window_s {
 	window_t wnd;
 	u32 id;
 	int open;
+	int fullscreen;
 } example_window_t;
 
 static display_driver_t *find_display_driver(strv_t name)
@@ -49,6 +50,21 @@ static void close_window(example_window_t *window, int *open)
 	window->open = 0;
 	(*open)--;
 	window_free(&window->wnd);
+}
+
+static void toggle_fullscreen(example_window_t *window)
+{
+	if (window == NULL || !window->open) {
+		return;
+	}
+
+	int fullscreen = !window->fullscreen;
+	if (window_set_fullscreen(&window->wnd, fullscreen)) {
+		c_printf("failed to set fullscreen for window %u\n", window->id);
+		return;
+	}
+
+	window->fullscreen = fullscreen;
 }
 
 static const char *event_name(display_event_type_t type)
@@ -180,8 +196,9 @@ int main()
 	}
 
 	for (size_t i = 0; i < 2; i++) {
-		windows[i].id	= window_id(&windows[i].wnd);
-		windows[i].open = 1;
+		windows[i].id	      = window_id(&windows[i].wnd);
+		windows[i].open	      = 1;
+		windows[i].fullscreen = 0;
 		c_printf("window[%zu]=%u\n", i, windows[i].id);
 	}
 
@@ -207,6 +224,10 @@ int main()
 		case DISPLAY_EVENT_KEY_DOWN: {
 			if (event.key == DISPLAY_KEY_ESCAPE) {
 				close_window(window, &open);
+				continue;
+			}
+			if (event.key == DISPLAY_KEY_F11) {
+				toggle_fullscreen(window);
 				continue;
 			}
 			break;

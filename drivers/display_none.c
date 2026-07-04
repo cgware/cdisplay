@@ -111,6 +111,17 @@ static int display_none_window_set_borderless(window_t *wnd, int borderless)
 	return 0;
 }
 
+static int display_none_window_set_fullscreen(window_t *wnd, int fullscreen)
+{
+	(void)fullscreen;
+
+	if (wnd == NULL) {
+		return 1;
+	}
+
+	return 0;
+}
+
 static int display_none_window_show(window_t *wnd)
 {
 	if (wnd == NULL) {
@@ -142,6 +153,7 @@ static display_driver_t display_none = {
 	.window_set_position   = display_none_window_set_position,
 	.window_set_size       = display_none_window_set_size,
 	.window_set_borderless = display_none_window_set_borderless,
+	.window_set_fullscreen = display_none_window_set_fullscreen,
 	.window_show	       = display_none_window_show,
 	.window_hide	       = display_none_window_hide,
 };

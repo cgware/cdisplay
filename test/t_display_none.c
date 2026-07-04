@@ -250,6 +250,30 @@ TEST(display_none_window_set_borderless)
 	END;
 }
 
+TEST(display_none_window_set_fullscreen_null_window)
+{
+	START;
+
+	display_driver_t *drv = t_none_driver();
+	EXPECT_NE(drv, NULL);
+	EXPECT_EQ(drv->window_set_fullscreen(NULL, 1), 1);
+
+	END;
+}
+
+TEST(display_none_window_set_fullscreen)
+{
+	START;
+
+	display_driver_t *drv = t_none_driver();
+	window_t window	      = {0};
+
+	EXPECT_NE(drv, NULL);
+	EXPECT_EQ(drv->window_set_fullscreen(&window, 1), 0);
+
+	END;
+}
+
 TEST(display_none_window_show_null_window)
 {
 	START;
@@ -357,6 +381,8 @@ STEST(display_none)
 	RUN(display_none_window_set_size);
 	RUN(display_none_window_set_borderless_null_window);
 	RUN(display_none_window_set_borderless);
+	RUN(display_none_window_set_fullscreen_null_window);
+	RUN(display_none_window_set_fullscreen);
 	RUN(display_none_window_show_null_window);
 	RUN(display_none_window_show);
 	RUN(display_none_window_hide_null_window);
