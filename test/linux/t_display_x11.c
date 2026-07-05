@@ -264,7 +264,59 @@ static void t_x11_keyboard_mapping(buf_t *buf)
 	cbuf_set_u32le(keysyms, 19 * 4, 0xffec);
 	cbuf_set_u32le(keysyms, 20 * 4, 0xffe5);
 	cbuf_set_u32le(keysyms, 21 * 4, 0xff7f);
+	cbuf_set_u32le(keysyms, 22 * 4, 0xff14);
+	cbuf_set_u32le(keysyms, 23 * 4, 0xff13);
+	cbuf_set_u32le(keysyms, 24 * 4, 0xff63);
+	cbuf_set_u32le(keysyms, 25 * 4, 0xffff);
+	cbuf_set_u32le(keysyms, 26 * 4, 0xff50);
+	cbuf_set_u32le(keysyms, 27 * 4, 0xff57);
+	cbuf_set_u32le(keysyms, 28 * 4, 0xff55);
+	cbuf_set_u32le(keysyms, 29 * 4, 0xff56);
 	cbuf_set_u32le(keysyms, 30 * 4, 'a');
+
+	buf_add(buf, sizeof(reply), reply, NULL);
+	buf_add(buf, sizeof(keysyms), keysyms, NULL);
+}
+
+static void t_x11_extended_keyboard_mapping(buf_t *buf)
+{
+	u8 reply[32]	   = {0};
+	u8 keysyms[63 * 4] = {0};
+
+	cbuf_set_u8le(reply, 0, 1);
+	cbuf_set_u8le(reply, 1, 1);
+	cbuf_set_u32le(reply, 4, 63);
+
+	cbuf_set_u32le(keysyms, 33 * 4, 0x0060);
+	cbuf_set_u32le(keysyms, 34 * 4, 0x003d);
+	cbuf_set_u32le(keysyms, 35 * 4, 0x002d);
+	cbuf_set_u32le(keysyms, 36 * 4, 0x005b);
+	cbuf_set_u32le(keysyms, 37 * 4, 0x005d);
+	cbuf_set_u32le(keysyms, 38 * 4, 0x005c);
+	cbuf_set_u32le(keysyms, 39 * 4, 0x003b);
+	cbuf_set_u32le(keysyms, 40 * 4, 0x0027);
+	cbuf_set_u32le(keysyms, 41 * 4, 0x002c);
+	cbuf_set_u32le(keysyms, 42 * 4, 0x002e);
+	cbuf_set_u32le(keysyms, 43 * 4, 0x002f);
+	cbuf_set_u32le(keysyms, 44 * 4, 0xff67);
+	cbuf_set_u32le(keysyms, 45 * 4, 0xffaf);
+	cbuf_set_u32le(keysyms, 46 * 4, 0xffaa);
+	cbuf_set_u32le(keysyms, 47 * 4, 0xffad);
+	cbuf_set_u32le(keysyms, 48 * 4, 0xffab);
+	cbuf_set_u32le(keysyms, 49 * 4, 0xff8d);
+	cbuf_set_u32le(keysyms, 50 * 4, 0xff9e);
+	cbuf_set_u32le(keysyms, 51 * 4, 0xff9c);
+	cbuf_set_u32le(keysyms, 52 * 4, 0xff99);
+	cbuf_set_u32le(keysyms, 53 * 4, 0xff9b);
+	cbuf_set_u32le(keysyms, 54 * 4, 0xff96);
+	cbuf_set_u32le(keysyms, 55 * 4, 0xff9d);
+	cbuf_set_u32le(keysyms, 56 * 4, 0xff98);
+	cbuf_set_u32le(keysyms, 57 * 4, 0xff95);
+	cbuf_set_u32le(keysyms, 58 * 4, 0xff97);
+	cbuf_set_u32le(keysyms, 59 * 4, 0xff9a);
+	cbuf_set_u32le(keysyms, 60 * 4, 0xffae);
+	cbuf_set_u32le(keysyms, 61 * 4, 0xffb0);
+	cbuf_set_u32le(keysyms, 62 * 4, 0xff9f);
 
 	buf_add(buf, sizeof(reply), reply, NULL);
 	buf_add(buf, sizeof(keysyms), keysyms, NULL);
@@ -2057,6 +2109,211 @@ TEST(display_x11_wait_event_mouse_buttons)
 	END;
 }
 
+TEST(display_x11_wait_event_extended_keys)
+{
+	START;
+
+	display_driver_t *drv = t_x11_driver();
+	fs_t fs		      = {0};
+	proc_t proc	      = {0};
+	sock_t ss	      = {0};
+	display_t display     = {0};
+	window_t window	      = {0};
+	void *server	      = NULL;
+	void *peer	      = NULL;
+	display_event_t event = {0};
+
+	t_x11_open_window(drv, &fs, &proc, &ss, &display, &window, &server, &peer);
+	t_x11_write_key_event(&ss, peer, 2, 30, 0x00100000, 10, 20, 0);
+	t_x11_write_key_event(&ss, peer, 2, 31, 0x00100000, 10, 20, 0);
+	t_x11_write_key_event(&ss, peer, 2, 32, 0x00100000, 10, 20, 0);
+	t_x11_write_key_event(&ss, peer, 2, 33, 0x00100000, 10, 20, 0);
+	t_x11_write_key_event(&ss, peer, 2, 34, 0x00100000, 10, 20, 0);
+	t_x11_write_key_event(&ss, peer, 2, 35, 0x00100000, 10, 20, 0);
+	t_x11_write_key_event(&ss, peer, 2, 36, 0x00100000, 10, 20, 0);
+	t_x11_write_key_event(&ss, peer, 2, 37, 0x00100000, 10, 20, 0);
+
+	EXPECT_EQ(display_wait_event(&display, &event), 0);
+	EXPECT_EQ(event.type, DISPLAY_EVENT_KEY_DOWN);
+	EXPECT_EQ(event.key, DISPLAY_KEY_SCROLL_LOCK);
+
+	EXPECT_EQ(display_wait_event(&display, &event), 0);
+	EXPECT_EQ(event.type, DISPLAY_EVENT_KEY_DOWN);
+	EXPECT_EQ(event.key, DISPLAY_KEY_PAUSE);
+
+	EXPECT_EQ(display_wait_event(&display, &event), 0);
+	EXPECT_EQ(event.type, DISPLAY_EVENT_KEY_DOWN);
+	EXPECT_EQ(event.key, DISPLAY_KEY_INSERT);
+
+	EXPECT_EQ(display_wait_event(&display, &event), 0);
+	EXPECT_EQ(event.type, DISPLAY_EVENT_KEY_DOWN);
+	EXPECT_EQ(event.key, DISPLAY_KEY_DELETE);
+
+	EXPECT_EQ(display_wait_event(&display, &event), 0);
+	EXPECT_EQ(event.type, DISPLAY_EVENT_KEY_DOWN);
+	EXPECT_EQ(event.key, DISPLAY_KEY_HOME);
+
+	EXPECT_EQ(display_wait_event(&display, &event), 0);
+	EXPECT_EQ(event.type, DISPLAY_EVENT_KEY_DOWN);
+	EXPECT_EQ(event.key, DISPLAY_KEY_END);
+
+	EXPECT_EQ(display_wait_event(&display, &event), 0);
+	EXPECT_EQ(event.type, DISPLAY_EVENT_KEY_DOWN);
+	EXPECT_EQ(event.key, DISPLAY_KEY_PAGE_UP);
+
+	EXPECT_EQ(display_wait_event(&display, &event), 0);
+	EXPECT_EQ(event.type, DISPLAY_EVENT_KEY_DOWN);
+	EXPECT_EQ(event.key, DISPLAY_KEY_PAGE_DOWN);
+
+	window_free(&window);
+	display_free(&display);
+	sock_close(&ss, peer);
+	sock_close(&ss, server);
+	t_x11_env_free(&fs, &proc, &ss);
+
+	END;
+}
+
+TEST(display_x11_wait_event_keypad_keys)
+{
+	START;
+
+	display_driver_t *drv = t_x11_driver();
+	fs_t fs		      = {0};
+	proc_t proc	      = {0};
+	sock_t ss	      = {0};
+	display_t display     = {0};
+	window_t window	      = {0};
+	void *server	      = NULL;
+	void *peer	      = NULL;
+	display_event_t event = {0};
+	u8 setup[72]	      = {0};
+	u8 atom_reply[256]    = {0};
+	buf_t keyboard	      = {0};
+
+	t_x11_env_init(&fs, &proc, &ss);
+	t_x11_set_display(&proc, STRV(":0"));
+	t_x11_set_xauthority(&proc);
+	t_x11_write_authority(&fs);
+	t_x11_listen(&ss, &server);
+	t_x11_setup_data(setup, sizeof(setup), 1, 0);
+	cbuf_set_u8le(setup, 27, 70);
+	t_x11_default_atom_replies(atom_reply);
+	buf_init(&keyboard, 32 + 63 * 4 + 32 + 16, ALLOC_STD);
+	t_x11_extended_keyboard_mapping(&keyboard);
+	t_x11_modifier_mapping(&keyboard);
+	t_x11_script_setup_data_keyboard_atoms(
+		&ss, server, 1, setup, sizeof(setup), keyboard.data, keyboard.used, atom_reply, sizeof(atom_reply));
+	log_set_quiet(0, 1);
+	EXPECT_EQ(display_init(&display, drv, &fs, &proc, &ss, ALLOC_STD), &display);
+	EXPECT_EQ(window_init(&window, &display, 0, 0, 640, 480), &window);
+	log_set_quiet(0, 0);
+	sock_accept(&ss, server, &peer);
+
+	for (u8 keycode = 41; keycode <= 70; keycode++) {
+		t_x11_write_key_event(&ss, peer, 2, keycode, 0x00100000, 10, 20, 0);
+	}
+
+	EXPECT_EQ(display_wait_event(&display, &event), 0);
+	EXPECT_EQ(event.key, DISPLAY_KEY_GRAVE);
+
+	EXPECT_EQ(display_wait_event(&display, &event), 0);
+	EXPECT_EQ(event.key, DISPLAY_KEY_EQUAL);
+
+	EXPECT_EQ(display_wait_event(&display, &event), 0);
+	EXPECT_EQ(event.key, DISPLAY_KEY_MINUS);
+
+	EXPECT_EQ(display_wait_event(&display, &event), 0);
+	EXPECT_EQ(event.key, DISPLAY_KEY_LEFT_BRACKET);
+
+	EXPECT_EQ(display_wait_event(&display, &event), 0);
+	EXPECT_EQ(event.key, DISPLAY_KEY_RIGHT_BRACKET);
+
+	EXPECT_EQ(display_wait_event(&display, &event), 0);
+	EXPECT_EQ(event.key, DISPLAY_KEY_BACKSLASH);
+
+	EXPECT_EQ(display_wait_event(&display, &event), 0);
+	EXPECT_EQ(event.key, DISPLAY_KEY_SEMICOLON);
+
+	EXPECT_EQ(display_wait_event(&display, &event), 0);
+	EXPECT_EQ(event.key, DISPLAY_KEY_APOSTROPHE);
+
+	EXPECT_EQ(display_wait_event(&display, &event), 0);
+	EXPECT_EQ(event.key, DISPLAY_KEY_COMMA);
+
+	EXPECT_EQ(display_wait_event(&display, &event), 0);
+	EXPECT_EQ(event.key, DISPLAY_KEY_PERIOD);
+
+	EXPECT_EQ(display_wait_event(&display, &event), 0);
+	EXPECT_EQ(event.key, DISPLAY_KEY_SLASH);
+
+	EXPECT_EQ(display_wait_event(&display, &event), 0);
+	EXPECT_EQ(event.key, DISPLAY_KEY_MENU);
+
+	EXPECT_EQ(display_wait_event(&display, &event), 0);
+	EXPECT_EQ(event.key, DISPLAY_KEY_KP_DIVIDE);
+
+	EXPECT_EQ(display_wait_event(&display, &event), 0);
+	EXPECT_EQ(event.key, DISPLAY_KEY_KP_MULTIPLY);
+
+	EXPECT_EQ(display_wait_event(&display, &event), 0);
+	EXPECT_EQ(event.key, DISPLAY_KEY_KP_SUBTRACT);
+
+	EXPECT_EQ(display_wait_event(&display, &event), 0);
+	EXPECT_EQ(event.key, DISPLAY_KEY_KP_ADD);
+
+	EXPECT_EQ(display_wait_event(&display, &event), 0);
+	EXPECT_EQ(event.key, DISPLAY_KEY_KP_ENTER);
+
+	EXPECT_EQ(display_wait_event(&display, &event), 0);
+	EXPECT_EQ(event.key, DISPLAY_KEY_KP_0);
+
+	EXPECT_EQ(display_wait_event(&display, &event), 0);
+	EXPECT_EQ(event.key, DISPLAY_KEY_KP_1);
+
+	EXPECT_EQ(display_wait_event(&display, &event), 0);
+	EXPECT_EQ(event.key, DISPLAY_KEY_KP_2);
+
+	EXPECT_EQ(display_wait_event(&display, &event), 0);
+	EXPECT_EQ(event.key, DISPLAY_KEY_KP_3);
+
+	EXPECT_EQ(display_wait_event(&display, &event), 0);
+	EXPECT_EQ(event.key, DISPLAY_KEY_KP_4);
+
+	EXPECT_EQ(display_wait_event(&display, &event), 0);
+	EXPECT_EQ(event.key, DISPLAY_KEY_KP_5);
+
+	EXPECT_EQ(display_wait_event(&display, &event), 0);
+	EXPECT_EQ(event.key, DISPLAY_KEY_KP_6);
+
+	EXPECT_EQ(display_wait_event(&display, &event), 0);
+	EXPECT_EQ(event.key, DISPLAY_KEY_KP_7);
+
+	EXPECT_EQ(display_wait_event(&display, &event), 0);
+	EXPECT_EQ(event.key, DISPLAY_KEY_KP_8);
+
+	EXPECT_EQ(display_wait_event(&display, &event), 0);
+	EXPECT_EQ(event.key, DISPLAY_KEY_KP_9);
+
+	EXPECT_EQ(display_wait_event(&display, &event), 0);
+	EXPECT_EQ(event.key, DISPLAY_KEY_KP_DECIMAL);
+
+	EXPECT_EQ(display_wait_event(&display, &event), 0);
+	EXPECT_EQ(event.key, DISPLAY_KEY_KP_0);
+
+	EXPECT_EQ(display_wait_event(&display, &event), 0);
+	EXPECT_EQ(event.key, DISPLAY_KEY_KP_DECIMAL);
+
+	window_free(&window);
+	display_free(&display);
+	sock_close(&ss, peer);
+	buf_free(&keyboard);
+	sock_close(&ss, server);
+	t_x11_env_free(&fs, &proc, &ss);
+
+	END;
+}
+
 TEST(display_x11_wait_event_modifiers)
 {
 	START;
@@ -2072,14 +2329,7 @@ TEST(display_x11_wait_event_modifiers)
 	display_event_t event = {0};
 
 	t_x11_open_window(drv, &fs, &proc, &ss, &display, &window, &server, &peer);
-	t_x11_write_key_event(&ss,
-			      peer,
-			      2,
-			      38,
-			      0x00100000,
-			      11,
-			      22,
-			      64 | 256 | 512 | 1024 | 2048 | 4096);
+	t_x11_write_key_event(&ss, peer, 2, 38, 0x00100000, 11, 22, 64 | 256 | 512 | 1024 | 2048 | 4096);
 
 	EXPECT_EQ(display_wait_event(&display, &event), 0);
 	EXPECT_EQ(event.type, DISPLAY_EVENT_KEY_DOWN);
@@ -3345,6 +3595,8 @@ STEST(display_x11)
 	RUN(display_x11_wait_event_skips_unknown_client_message);
 	RUN(display_x11_wait_event_inputs);
 	RUN(display_x11_wait_event_mouse_buttons);
+	RUN(display_x11_wait_event_extended_keys);
+	RUN(display_x11_wait_event_keypad_keys);
 	RUN(display_x11_wait_event_modifiers);
 	RUN(display_x11_wait_event_focus_and_close);
 	RUN(display_x11_init_wild_authority);

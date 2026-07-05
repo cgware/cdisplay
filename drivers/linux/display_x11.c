@@ -505,36 +505,83 @@ enum {
 };
 
 enum {
-	XK_BACKSPACE = 0xff08,
-	XK_TAB	     = 0xff09,
-	XK_RETURN    = 0xff0d,
-	XK_ESCAPE    = 0xff1b,
-	XK_LEFT	     = 0xff51,
-	XK_UP	     = 0xff52,
-	XK_RIGHT     = 0xff53,
-	XK_DOWN	     = 0xff54,
-	XK_F1	     = 0xffbe,
-	XK_F2	     = 0xffbf,
-	XK_F3	     = 0xffc0,
-	XK_F4	     = 0xffc1,
-	XK_F5	     = 0xffc2,
-	XK_F6	     = 0xffc3,
-	XK_F7	     = 0xffc4,
-	XK_F8	     = 0xffc5,
-	XK_F9	     = 0xffc6,
-	XK_F10	     = 0xffc7,
-	XK_F11	     = 0xffc8,
-	XK_F12	     = 0xffc9,
-	XK_SHIFT_L   = 0xffe1,
-	XK_SHIFT_R   = 0xffe2,
-	XK_CONTROL_L = 0xffe3,
-	XK_CONTROL_R = 0xffe4,
-	XK_CAPS_LOCK = 0xffe5,
-	XK_NUM_LOCK  = 0xff7f,
-	XK_ALT_L     = 0xffe9,
-	XK_ALT_R     = 0xffea,
-	XK_SUPER_L   = 0xffeb,
-	XK_SUPER_R   = 0xffec,
+	XK_APOSTROPHE	 = 0x0027,
+	XK_COMMA	 = 0x002c,
+	XK_MINUS	 = 0x002d,
+	XK_PERIOD	 = 0x002e,
+	XK_SLASH	 = 0x002f,
+	XK_SEMICOLON	 = 0x003b,
+	XK_EQUAL	 = 0x003d,
+	XK_LEFT_BRACKET	 = 0x005b,
+	XK_BACKSLASH	 = 0x005c,
+	XK_RIGHT_BRACKET = 0x005d,
+	XK_GRAVE	 = 0x0060,
+	XK_BACKSPACE	 = 0xff08,
+	XK_TAB		 = 0xff09,
+	XK_RETURN	 = 0xff0d,
+	XK_PAUSE	 = 0xff13,
+	XK_SCROLL_LOCK	 = 0xff14,
+	XK_ESCAPE	 = 0xff1b,
+	XK_HOME		 = 0xff50,
+	XK_LEFT		 = 0xff51,
+	XK_UP		 = 0xff52,
+	XK_RIGHT	 = 0xff53,
+	XK_DOWN		 = 0xff54,
+	XK_PAGE_UP	 = 0xff55,
+	XK_PAGE_DOWN	 = 0xff56,
+	XK_END		 = 0xff57,
+	XK_INSERT	 = 0xff63,
+	XK_MENU		 = 0xff67,
+	XK_KP_ENTER	 = 0xff8d,
+	XK_KP_HOME	 = 0xff95,
+	XK_KP_LEFT	 = 0xff96,
+	XK_KP_UP	 = 0xff97,
+	XK_KP_RIGHT	 = 0xff98,
+	XK_KP_DOWN	 = 0xff99,
+	XK_KP_PAGE_UP	 = 0xff9a,
+	XK_KP_PAGE_DOWN	 = 0xff9b,
+	XK_KP_END	 = 0xff9c,
+	XK_KP_BEGIN	 = 0xff9d,
+	XK_KP_INSERT	 = 0xff9e,
+	XK_KP_DELETE	 = 0xff9f,
+	XK_KP_MULTIPLY	 = 0xffaa,
+	XK_KP_ADD	 = 0xffab,
+	XK_KP_SUBTRACT	 = 0xffad,
+	XK_KP_DECIMAL	 = 0xffae,
+	XK_KP_DIVIDE	 = 0xffaf,
+	XK_KP_0		 = 0xffb0,
+	XK_KP_1		 = 0xffb1,
+	XK_KP_2		 = 0xffb2,
+	XK_KP_3		 = 0xffb3,
+	XK_KP_4		 = 0xffb4,
+	XK_KP_5		 = 0xffb5,
+	XK_KP_6		 = 0xffb6,
+	XK_KP_7		 = 0xffb7,
+	XK_KP_8		 = 0xffb8,
+	XK_KP_9		 = 0xffb9,
+	XK_F1		 = 0xffbe,
+	XK_F2		 = 0xffbf,
+	XK_F3		 = 0xffc0,
+	XK_F4		 = 0xffc1,
+	XK_F5		 = 0xffc2,
+	XK_F6		 = 0xffc3,
+	XK_F7		 = 0xffc4,
+	XK_F8		 = 0xffc5,
+	XK_F9		 = 0xffc6,
+	XK_F10		 = 0xffc7,
+	XK_F11		 = 0xffc8,
+	XK_F12		 = 0xffc9,
+	XK_SHIFT_L	 = 0xffe1,
+	XK_SHIFT_R	 = 0xffe2,
+	XK_CONTROL_L	 = 0xffe3,
+	XK_CONTROL_R	 = 0xffe4,
+	XK_CAPS_LOCK	 = 0xffe5,
+	XK_NUM_LOCK	 = 0xff7f,
+	XK_DELETE	 = 0xffff,
+	XK_ALT_L	 = 0xffe9,
+	XK_ALT_R	 = 0xffea,
+	XK_SUPER_L	 = 0xffeb,
+	XK_SUPER_R	 = 0xffec,
 };
 
 enum {
@@ -878,33 +925,75 @@ static display_key_t key_from_keysym(u32 keysym)
 		return (display_key_t)(DISPLAY_KEY_0 + keysym - '0');
 	}
 
+	if (keysym >= XK_KP_0 && keysym <= XK_KP_9) {
+		return (display_key_t)(DISPLAY_KEY_KP_0 + keysym - XK_KP_0);
+	}
+
 	if (keysym >= XK_F1 && keysym <= XK_F12) {
 		return (display_key_t)(DISPLAY_KEY_F1 + keysym - XK_F1);
 	}
 
 	switch (keysym) {
-	case XK_ESCAPE:
-		return DISPLAY_KEY_ESCAPE;
+	case XK_GRAVE:
+		return DISPLAY_KEY_GRAVE;
+	case XK_MINUS:
+		return DISPLAY_KEY_MINUS;
+	case XK_EQUAL:
+		return DISPLAY_KEY_EQUAL;
+	case XK_LEFT_BRACKET:
+		return DISPLAY_KEY_LEFT_BRACKET;
+	case XK_RIGHT_BRACKET:
+		return DISPLAY_KEY_RIGHT_BRACKET;
+	case XK_BACKSLASH:
+		return DISPLAY_KEY_BACKSLASH;
+	case XK_SEMICOLON:
+		return DISPLAY_KEY_SEMICOLON;
+	case XK_APOSTROPHE:
+		return DISPLAY_KEY_APOSTROPHE;
+	case XK_COMMA:
+		return DISPLAY_KEY_COMMA;
+	case XK_PERIOD:
+		return DISPLAY_KEY_PERIOD;
+	case XK_SLASH:
+		return DISPLAY_KEY_SLASH;
+	case ' ':
+		return DISPLAY_KEY_SPACE;
 	case XK_RETURN:
 		return DISPLAY_KEY_ENTER;
 	case XK_TAB:
 		return DISPLAY_KEY_TAB;
 	case XK_BACKSPACE:
 		return DISPLAY_KEY_BACKSPACE;
-	case ' ':
-		return DISPLAY_KEY_SPACE;
+	case XK_ESCAPE:
+		return DISPLAY_KEY_ESCAPE;
 	case XK_CAPS_LOCK:
 		return DISPLAY_KEY_CAPS_LOCK;
 	case XK_NUM_LOCK:
 		return DISPLAY_KEY_NUM_LOCK;
-	case XK_LEFT:
-		return DISPLAY_KEY_LEFT;
-	case XK_RIGHT:
-		return DISPLAY_KEY_RIGHT;
+	case XK_SCROLL_LOCK:
+		return DISPLAY_KEY_SCROLL_LOCK;
+	case XK_PAUSE:
+		return DISPLAY_KEY_PAUSE;
+	case XK_INSERT:
+		return DISPLAY_KEY_INSERT;
+	case XK_DELETE:
+		return DISPLAY_KEY_DELETE;
+	case XK_HOME:
+		return DISPLAY_KEY_HOME;
+	case XK_END:
+		return DISPLAY_KEY_END;
+	case XK_PAGE_UP:
+		return DISPLAY_KEY_PAGE_UP;
+	case XK_PAGE_DOWN:
+		return DISPLAY_KEY_PAGE_DOWN;
 	case XK_UP:
 		return DISPLAY_KEY_UP;
 	case XK_DOWN:
 		return DISPLAY_KEY_DOWN;
+	case XK_LEFT:
+		return DISPLAY_KEY_LEFT;
+	case XK_RIGHT:
+		return DISPLAY_KEY_RIGHT;
 	case XK_SHIFT_L:
 		return DISPLAY_KEY_LEFT_SHIFT;
 	case XK_SHIFT_R:
@@ -921,6 +1010,42 @@ static display_key_t key_from_keysym(u32 keysym)
 		return DISPLAY_KEY_LEFT_SUPER;
 	case XK_SUPER_R:
 		return DISPLAY_KEY_RIGHT_SUPER;
+	case XK_MENU:
+		return DISPLAY_KEY_MENU;
+	case XK_KP_INSERT:
+		return DISPLAY_KEY_KP_0;
+	case XK_KP_END:
+		return DISPLAY_KEY_KP_1;
+	case XK_KP_DOWN:
+		return DISPLAY_KEY_KP_2;
+	case XK_KP_PAGE_DOWN:
+		return DISPLAY_KEY_KP_3;
+	case XK_KP_LEFT:
+		return DISPLAY_KEY_KP_4;
+	case XK_KP_BEGIN:
+		return DISPLAY_KEY_KP_5;
+	case XK_KP_RIGHT:
+		return DISPLAY_KEY_KP_6;
+	case XK_KP_HOME:
+		return DISPLAY_KEY_KP_7;
+	case XK_KP_UP:
+		return DISPLAY_KEY_KP_8;
+	case XK_KP_PAGE_UP:
+		return DISPLAY_KEY_KP_9;
+	case XK_KP_DELETE:
+		return DISPLAY_KEY_KP_DECIMAL;
+	case XK_KP_DECIMAL:
+		return DISPLAY_KEY_KP_DECIMAL;
+	case XK_KP_DIVIDE:
+		return DISPLAY_KEY_KP_DIVIDE;
+	case XK_KP_MULTIPLY:
+		return DISPLAY_KEY_KP_MULTIPLY;
+	case XK_KP_SUBTRACT:
+		return DISPLAY_KEY_KP_SUBTRACT;
+	case XK_KP_ADD:
+		return DISPLAY_KEY_KP_ADD;
+	case XK_KP_ENTER:
+		return DISPLAY_KEY_KP_ENTER;
 	default:
 		return DISPLAY_KEY_UNKNOWN;
 	}
@@ -972,7 +1097,7 @@ static display_mouse_t mouse_from_button(u8 button)
 	case 9:
 		return DISPLAY_MOUSE_FORWARD;
 	default:
-		log_error("cdisplay", "display_x11", NULL, "unsupported X11 mouse button: %u", button);
+		log_warn("cdisplay", "display_x11", NULL, "unknown X11 mouse button: %u", button);
 		return DISPLAY_MOUSE_UNKNOWN;
 	}
 }
@@ -1171,6 +1296,10 @@ static int read_x11_event(display_t *display, display_event_t *event)
 		if (type == X_EVENT_KEY_PRESS || type == X_EVENT_KEY_RELEASE) {
 			event->type = type == X_EVENT_KEY_PRESS ? DISPLAY_EVENT_KEY_DOWN : DISPLAY_EVENT_KEY_UP;
 			event->key  = dx11->keys[data[X_KEY_BUTTON_EVENT_DETAIL_OFFSET]];
+			if (event->key == DISPLAY_KEY_UNKNOWN) {
+				log_warn(
+					"cdisplay", "display_x11", NULL, "unknown X11 keycode: %u", data[X_KEY_BUTTON_EVENT_DETAIL_OFFSET]);
+			}
 		} else {
 			event->type   = type == X_EVENT_BUTTON_PRESS ? DISPLAY_EVENT_MOUSE_DOWN : DISPLAY_EVENT_MOUSE_UP;
 			event->button = mouse_from_button(data[X_KEY_BUTTON_EVENT_DETAIL_OFFSET]);

@@ -163,13 +163,17 @@ int main()
 			continue;
 		}
 		case DISPLAY_EVENT_KEY_DOWN: {
-			if (event.key == DISPLAY_KEY_ESCAPE) {
+			switch (event.key) {
+			case DISPLAY_KEY_ESCAPE: {
 				close_window(window, &open);
 				continue;
 			}
-			if (event.key == DISPLAY_KEY_F11) {
+			case DISPLAY_KEY_F11: {
 				toggle_fullscreen(window);
-				continue;
+				break;
+			}
+			default:
+				break;
 			}
 			break;
 		}

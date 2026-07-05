@@ -89,208 +89,167 @@ const char *display_event_type_name(display_event_type_t type)
 	}
 }
 
+static const char *s_key_str[] = {
+	[DISPLAY_KEY_UNKNOWN]	    = "unknown",
+	[DISPLAY_KEY_A]		    = "a",
+	[DISPLAY_KEY_B]		    = "b",
+	[DISPLAY_KEY_C]		    = "c",
+	[DISPLAY_KEY_D]		    = "d",
+	[DISPLAY_KEY_E]		    = "e",
+	[DISPLAY_KEY_F]		    = "f",
+	[DISPLAY_KEY_G]		    = "g",
+	[DISPLAY_KEY_H]		    = "h",
+	[DISPLAY_KEY_I]		    = "i",
+	[DISPLAY_KEY_J]		    = "j",
+	[DISPLAY_KEY_K]		    = "k",
+	[DISPLAY_KEY_L]		    = "l",
+	[DISPLAY_KEY_M]		    = "m",
+	[DISPLAY_KEY_N]		    = "n",
+	[DISPLAY_KEY_O]		    = "o",
+	[DISPLAY_KEY_P]		    = "p",
+	[DISPLAY_KEY_Q]		    = "q",
+	[DISPLAY_KEY_R]		    = "r",
+	[DISPLAY_KEY_S]		    = "s",
+	[DISPLAY_KEY_T]		    = "t",
+	[DISPLAY_KEY_U]		    = "u",
+	[DISPLAY_KEY_V]		    = "v",
+	[DISPLAY_KEY_W]		    = "w",
+	[DISPLAY_KEY_X]		    = "x",
+	[DISPLAY_KEY_Y]		    = "y",
+	[DISPLAY_KEY_Z]		    = "z",
+	[DISPLAY_KEY_0]		    = "0",
+	[DISPLAY_KEY_1]		    = "1",
+	[DISPLAY_KEY_2]		    = "2",
+	[DISPLAY_KEY_3]		    = "3",
+	[DISPLAY_KEY_4]		    = "4",
+	[DISPLAY_KEY_5]		    = "5",
+	[DISPLAY_KEY_6]		    = "6",
+	[DISPLAY_KEY_7]		    = "7",
+	[DISPLAY_KEY_8]		    = "8",
+	[DISPLAY_KEY_9]		    = "9",
+	[DISPLAY_KEY_GRAVE]	    = "grave",
+	[DISPLAY_KEY_MINUS]	    = "minus",
+	[DISPLAY_KEY_EQUAL]	    = "equal",
+	[DISPLAY_KEY_LEFT_BRACKET]  = "left bracket",
+	[DISPLAY_KEY_RIGHT_BRACKET] = "right bracket",
+	[DISPLAY_KEY_BACKSLASH]	    = "backslash",
+	[DISPLAY_KEY_SEMICOLON]	    = "semicolon",
+	[DISPLAY_KEY_APOSTROPHE]    = "apostrophe",
+	[DISPLAY_KEY_COMMA]	    = "comma",
+	[DISPLAY_KEY_PERIOD]	    = "period",
+	[DISPLAY_KEY_SLASH]	    = "slash",
+	[DISPLAY_KEY_SPACE]	    = "space",
+	[DISPLAY_KEY_ENTER]	    = "enter",
+	[DISPLAY_KEY_TAB]	    = "tab",
+	[DISPLAY_KEY_BACKSPACE]	    = "backspace",
+	[DISPLAY_KEY_ESCAPE]	    = "escape",
+	[DISPLAY_KEY_CAPS_LOCK]	    = "caps lock",
+	[DISPLAY_KEY_NUM_LOCK]	    = "num lock",
+	[DISPLAY_KEY_SCROLL_LOCK]   = "scroll lock",
+	[DISPLAY_KEY_PAUSE]	    = "pause",
+	[DISPLAY_KEY_INSERT]	    = "insert",
+	[DISPLAY_KEY_DELETE]	    = "delete",
+	[DISPLAY_KEY_HOME]	    = "home",
+	[DISPLAY_KEY_END]	    = "end",
+	[DISPLAY_KEY_PAGE_UP]	    = "page up",
+	[DISPLAY_KEY_PAGE_DOWN]	    = "page down",
+	[DISPLAY_KEY_UP]	    = "up",
+	[DISPLAY_KEY_DOWN]	    = "down",
+	[DISPLAY_KEY_LEFT]	    = "left",
+	[DISPLAY_KEY_RIGHT]	    = "right",
+	[DISPLAY_KEY_LEFT_SHIFT]    = "left shift",
+	[DISPLAY_KEY_RIGHT_SHIFT]   = "right shift",
+	[DISPLAY_KEY_LEFT_CONTROL]  = "left control",
+	[DISPLAY_KEY_RIGHT_CONTROL] = "right control",
+	[DISPLAY_KEY_LEFT_ALT]	    = "left alt",
+	[DISPLAY_KEY_RIGHT_ALT]	    = "right alt",
+	[DISPLAY_KEY_LEFT_SUPER]    = "left super",
+	[DISPLAY_KEY_RIGHT_SUPER]   = "right super",
+	[DISPLAY_KEY_MENU]	    = "menu",
+	[DISPLAY_KEY_F1]	    = "f1",
+	[DISPLAY_KEY_F2]	    = "f2",
+	[DISPLAY_KEY_F3]	    = "f3",
+	[DISPLAY_KEY_F4]	    = "f4",
+	[DISPLAY_KEY_F5]	    = "f5",
+	[DISPLAY_KEY_F6]	    = "f6",
+	[DISPLAY_KEY_F7]	    = "f7",
+	[DISPLAY_KEY_F8]	    = "f8",
+	[DISPLAY_KEY_F9]	    = "f9",
+	[DISPLAY_KEY_F10]	    = "f10",
+	[DISPLAY_KEY_F11]	    = "f11",
+	[DISPLAY_KEY_F12]	    = "f12",
+	[DISPLAY_KEY_KP_0]	    = "kp 0",
+	[DISPLAY_KEY_KP_1]	    = "kp 1",
+	[DISPLAY_KEY_KP_2]	    = "kp 2",
+	[DISPLAY_KEY_KP_3]	    = "kp 3",
+	[DISPLAY_KEY_KP_4]	    = "kp 4",
+	[DISPLAY_KEY_KP_5]	    = "kp 5",
+	[DISPLAY_KEY_KP_6]	    = "kp 6",
+	[DISPLAY_KEY_KP_7]	    = "kp 7",
+	[DISPLAY_KEY_KP_8]	    = "kp 8",
+	[DISPLAY_KEY_KP_9]	    = "kp 9",
+	[DISPLAY_KEY_KP_DECIMAL]    = "kp decimal",
+	[DISPLAY_KEY_KP_DIVIDE]	    = "kp divide",
+	[DISPLAY_KEY_KP_MULTIPLY]   = "kp multiply",
+	[DISPLAY_KEY_KP_SUBTRACT]   = "kp subtract",
+	[DISPLAY_KEY_KP_ADD]	    = "kp add",
+	[DISPLAY_KEY_KP_ENTER]	    = "kp enter",
+};
+
 const char *display_key_name(display_key_t key)
 {
-	switch (key) {
-	case DISPLAY_KEY_UNKNOWN:
-		return "unknown";
-	case DISPLAY_KEY_A:
-		return "a";
-	case DISPLAY_KEY_B:
-		return "b";
-	case DISPLAY_KEY_C:
-		return "c";
-	case DISPLAY_KEY_D:
-		return "d";
-	case DISPLAY_KEY_E:
-		return "e";
-	case DISPLAY_KEY_F:
-		return "f";
-	case DISPLAY_KEY_G:
-		return "g";
-	case DISPLAY_KEY_H:
-		return "h";
-	case DISPLAY_KEY_I:
-		return "i";
-	case DISPLAY_KEY_J:
-		return "j";
-	case DISPLAY_KEY_K:
-		return "k";
-	case DISPLAY_KEY_L:
-		return "l";
-	case DISPLAY_KEY_M:
-		return "m";
-	case DISPLAY_KEY_N:
-		return "n";
-	case DISPLAY_KEY_O:
-		return "o";
-	case DISPLAY_KEY_P:
-		return "p";
-	case DISPLAY_KEY_Q:
-		return "q";
-	case DISPLAY_KEY_R:
-		return "r";
-	case DISPLAY_KEY_S:
-		return "s";
-	case DISPLAY_KEY_T:
-		return "t";
-	case DISPLAY_KEY_U:
-		return "u";
-	case DISPLAY_KEY_V:
-		return "v";
-	case DISPLAY_KEY_W:
-		return "w";
-	case DISPLAY_KEY_X:
-		return "x";
-	case DISPLAY_KEY_Y:
-		return "y";
-	case DISPLAY_KEY_Z:
-		return "z";
-	case DISPLAY_KEY_0:
-		return "0";
-	case DISPLAY_KEY_1:
-		return "1";
-	case DISPLAY_KEY_2:
-		return "2";
-	case DISPLAY_KEY_3:
-		return "3";
-	case DISPLAY_KEY_4:
-		return "4";
-	case DISPLAY_KEY_5:
-		return "5";
-	case DISPLAY_KEY_6:
-		return "6";
-	case DISPLAY_KEY_7:
-		return "7";
-	case DISPLAY_KEY_8:
-		return "8";
-	case DISPLAY_KEY_9:
-		return "9";
-	case DISPLAY_KEY_ESCAPE:
-		return "escape";
-	case DISPLAY_KEY_ENTER:
-		return "enter";
-	case DISPLAY_KEY_TAB:
-		return "tab";
-	case DISPLAY_KEY_BACKSPACE:
-		return "backspace";
-	case DISPLAY_KEY_SPACE:
-		return "space";
-	case DISPLAY_KEY_CAPS_LOCK:
-		return "caps lock";
-	case DISPLAY_KEY_NUM_LOCK:
-		return "num lock";
-	case DISPLAY_KEY_LEFT:
-		return "left";
-	case DISPLAY_KEY_RIGHT:
-		return "right";
-	case DISPLAY_KEY_UP:
-		return "up";
-	case DISPLAY_KEY_DOWN:
-		return "down";
-	case DISPLAY_KEY_LEFT_SHIFT:
-		return "left shift";
-	case DISPLAY_KEY_RIGHT_SHIFT:
-		return "right shift";
-	case DISPLAY_KEY_LEFT_CONTROL:
-		return "left control";
-	case DISPLAY_KEY_RIGHT_CONTROL:
-		return "right control";
-	case DISPLAY_KEY_LEFT_ALT:
-		return "left alt";
-	case DISPLAY_KEY_RIGHT_ALT:
-		return "right alt";
-	case DISPLAY_KEY_LEFT_SUPER:
-		return "left super";
-	case DISPLAY_KEY_RIGHT_SUPER:
-		return "right super";
-	case DISPLAY_KEY_F1:
-		return "f1";
-	case DISPLAY_KEY_F2:
-		return "f2";
-	case DISPLAY_KEY_F3:
-		return "f3";
-	case DISPLAY_KEY_F4:
-		return "f4";
-	case DISPLAY_KEY_F5:
-		return "f5";
-	case DISPLAY_KEY_F6:
-		return "f6";
-	case DISPLAY_KEY_F7:
-		return "f7";
-	case DISPLAY_KEY_F8:
-		return "f8";
-	case DISPLAY_KEY_F9:
-		return "f9";
-	case DISPLAY_KEY_F10:
-		return "f10";
-	case DISPLAY_KEY_F11:
-		return "f11";
-	case DISPLAY_KEY_F12:
-		return "f12";
-	default:
-		return "unknown";
+	if (key < DISPLAY_KEY_UNKNOWN || key >= __DISPLAY_KEY_MAX) {
+		key = DISPLAY_KEY_UNKNOWN;
 	}
+
+	return s_key_str[key];
 }
+
+static const char *s_mouse_str[] = {
+	[DISPLAY_MOUSE_UNKNOWN]	    = "unknown",
+	[DISPLAY_MOUSE_LEFT]	    = "left",
+	[DISPLAY_MOUSE_MIDDLE]	    = "middle",
+	[DISPLAY_MOUSE_RIGHT]	    = "right",
+	[DISPLAY_MOUSE_WHEEL_UP]    = "wheel up",
+	[DISPLAY_MOUSE_WHEEL_DOWN]  = "wheel down",
+	[DISPLAY_MOUSE_WHEEL_LEFT]  = "wheel left",
+	[DISPLAY_MOUSE_WHEEL_RIGHT] = "wheel right",
+	[DISPLAY_MOUSE_BACK]	    = "back",
+	[DISPLAY_MOUSE_FORWARD]	    = "forward",
+};
 
 const char *display_mouse_name(display_mouse_t button)
 {
-	switch (button) {
-	case DISPLAY_MOUSE_UNKNOWN:
-		return "unknown";
-	case DISPLAY_MOUSE_LEFT:
-		return "left";
-	case DISPLAY_MOUSE_MIDDLE:
-		return "middle";
-	case DISPLAY_MOUSE_RIGHT:
-		return "right";
-	case DISPLAY_MOUSE_WHEEL_UP:
-		return "wheel up";
-	case DISPLAY_MOUSE_WHEEL_DOWN:
-		return "wheel down";
-	case DISPLAY_MOUSE_WHEEL_LEFT:
-		return "wheel left";
-	case DISPLAY_MOUSE_WHEEL_RIGHT:
-		return "wheel right";
-	case DISPLAY_MOUSE_BACK:
-		return "back";
-	case DISPLAY_MOUSE_FORWARD:
-		return "forward";
-	default:
-		return "unknown";
+	if (button < DISPLAY_MOUSE_UNKNOWN || button >= __DISPLAY_MOUSE_MAX) {
+		button = DISPLAY_MOUSE_UNKNOWN;
 	}
+
+	return s_mouse_str[button];
 }
+
+static const char *s_modifier_str[] = {
+	[DISPLAY_MOD_NONE]	       = "none",
+	[DISPLAY_MOD_SHIFT]	       = "shift",
+	[DISPLAY_MOD_CAPS_LOCK]	       = "caps lock",
+	[DISPLAY_MOD_CONTROL]	       = "control",
+	[DISPLAY_MOD_ALT]	       = "alt",
+	[DISPLAY_MOD_NUM_LOCK]	       = "num lock",
+	[DISPLAY_MOD_SUPER]	       = "super",
+	[DISPLAY_MOD_MOUSE_LEFT]       = "mouse left",
+	[DISPLAY_MOD_MOUSE_MIDDLE]     = "mouse middle",
+	[DISPLAY_MOD_MOUSE_RIGHT]      = "mouse right",
+	[DISPLAY_MOD_MOUSE_WHEEL_UP]   = "mouse wheel up",
+	[DISPLAY_MOD_MOUSE_WHEEL_DOWN] = "mouse wheel down",
+	[DISPLAY_MOD_UNKNOWN]	       = "unknown",
+};
 
 const char *display_modifier_name(display_modifier_t modifier)
 {
-	switch (modifier) {
-	case DISPLAY_MOD_NONE:
-		return "none";
-	case DISPLAY_MOD_SHIFT:
-		return "shift";
-	case DISPLAY_MOD_CAPS_LOCK:
-		return "caps lock";
-	case DISPLAY_MOD_CONTROL:
-		return "control";
-	case DISPLAY_MOD_ALT:
-		return "alt";
-	case DISPLAY_MOD_NUM_LOCK:
-		return "num lock";
-	case DISPLAY_MOD_SUPER:
-		return "super";
-	case DISPLAY_MOD_MOUSE_LEFT:
-		return "mouse left";
-	case DISPLAY_MOD_MOUSE_MIDDLE:
-		return "mouse middle";
-	case DISPLAY_MOD_MOUSE_RIGHT:
-		return "mouse right";
-	case DISPLAY_MOD_MOUSE_WHEEL_UP:
-		return "mouse wheel up";
-	case DISPLAY_MOD_MOUSE_WHEEL_DOWN:
-		return "mouse wheel down";
-	default:
-		return "unknown";
+	if (modifier < DISPLAY_MOD_NONE || modifier >= __DISPLAY_MOD_MAX) {
+		modifier = DISPLAY_MOD_UNKNOWN;
 	}
+
+	return s_modifier_str[modifier];
 }
 
 static size_t display_str_len(const char *str)

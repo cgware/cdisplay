@@ -507,17 +507,36 @@ TEST(display_key_name_values)
 	EXPECT_STR(display_key_name(DISPLAY_KEY_7), "7");
 	EXPECT_STR(display_key_name(DISPLAY_KEY_8), "8");
 	EXPECT_STR(display_key_name(DISPLAY_KEY_9), "9");
-	EXPECT_STR(display_key_name(DISPLAY_KEY_ESCAPE), "escape");
+	EXPECT_STR(display_key_name(DISPLAY_KEY_GRAVE), "grave");
+	EXPECT_STR(display_key_name(DISPLAY_KEY_MINUS), "minus");
+	EXPECT_STR(display_key_name(DISPLAY_KEY_EQUAL), "equal");
+	EXPECT_STR(display_key_name(DISPLAY_KEY_LEFT_BRACKET), "left bracket");
+	EXPECT_STR(display_key_name(DISPLAY_KEY_RIGHT_BRACKET), "right bracket");
+	EXPECT_STR(display_key_name(DISPLAY_KEY_BACKSLASH), "backslash");
+	EXPECT_STR(display_key_name(DISPLAY_KEY_SEMICOLON), "semicolon");
+	EXPECT_STR(display_key_name(DISPLAY_KEY_APOSTROPHE), "apostrophe");
+	EXPECT_STR(display_key_name(DISPLAY_KEY_COMMA), "comma");
+	EXPECT_STR(display_key_name(DISPLAY_KEY_PERIOD), "period");
+	EXPECT_STR(display_key_name(DISPLAY_KEY_SLASH), "slash");
+	EXPECT_STR(display_key_name(DISPLAY_KEY_SPACE), "space");
 	EXPECT_STR(display_key_name(DISPLAY_KEY_ENTER), "enter");
 	EXPECT_STR(display_key_name(DISPLAY_KEY_TAB), "tab");
 	EXPECT_STR(display_key_name(DISPLAY_KEY_BACKSPACE), "backspace");
-	EXPECT_STR(display_key_name(DISPLAY_KEY_SPACE), "space");
+	EXPECT_STR(display_key_name(DISPLAY_KEY_ESCAPE), "escape");
 	EXPECT_STR(display_key_name(DISPLAY_KEY_CAPS_LOCK), "caps lock");
 	EXPECT_STR(display_key_name(DISPLAY_KEY_NUM_LOCK), "num lock");
-	EXPECT_STR(display_key_name(DISPLAY_KEY_LEFT), "left");
-	EXPECT_STR(display_key_name(DISPLAY_KEY_RIGHT), "right");
+	EXPECT_STR(display_key_name(DISPLAY_KEY_SCROLL_LOCK), "scroll lock");
+	EXPECT_STR(display_key_name(DISPLAY_KEY_PAUSE), "pause");
+	EXPECT_STR(display_key_name(DISPLAY_KEY_INSERT), "insert");
+	EXPECT_STR(display_key_name(DISPLAY_KEY_DELETE), "delete");
+	EXPECT_STR(display_key_name(DISPLAY_KEY_HOME), "home");
+	EXPECT_STR(display_key_name(DISPLAY_KEY_END), "end");
+	EXPECT_STR(display_key_name(DISPLAY_KEY_PAGE_UP), "page up");
+	EXPECT_STR(display_key_name(DISPLAY_KEY_PAGE_DOWN), "page down");
 	EXPECT_STR(display_key_name(DISPLAY_KEY_UP), "up");
 	EXPECT_STR(display_key_name(DISPLAY_KEY_DOWN), "down");
+	EXPECT_STR(display_key_name(DISPLAY_KEY_LEFT), "left");
+	EXPECT_STR(display_key_name(DISPLAY_KEY_RIGHT), "right");
 	EXPECT_STR(display_key_name(DISPLAY_KEY_LEFT_SHIFT), "left shift");
 	EXPECT_STR(display_key_name(DISPLAY_KEY_RIGHT_SHIFT), "right shift");
 	EXPECT_STR(display_key_name(DISPLAY_KEY_LEFT_CONTROL), "left control");
@@ -526,6 +545,7 @@ TEST(display_key_name_values)
 	EXPECT_STR(display_key_name(DISPLAY_KEY_RIGHT_ALT), "right alt");
 	EXPECT_STR(display_key_name(DISPLAY_KEY_LEFT_SUPER), "left super");
 	EXPECT_STR(display_key_name(DISPLAY_KEY_RIGHT_SUPER), "right super");
+	EXPECT_STR(display_key_name(DISPLAY_KEY_MENU), "menu");
 	EXPECT_STR(display_key_name(DISPLAY_KEY_F1), "f1");
 	EXPECT_STR(display_key_name(DISPLAY_KEY_F2), "f2");
 	EXPECT_STR(display_key_name(DISPLAY_KEY_F3), "f3");
@@ -538,6 +558,22 @@ TEST(display_key_name_values)
 	EXPECT_STR(display_key_name(DISPLAY_KEY_F10), "f10");
 	EXPECT_STR(display_key_name(DISPLAY_KEY_F11), "f11");
 	EXPECT_STR(display_key_name(DISPLAY_KEY_F12), "f12");
+	EXPECT_STR(display_key_name(DISPLAY_KEY_KP_0), "kp 0");
+	EXPECT_STR(display_key_name(DISPLAY_KEY_KP_1), "kp 1");
+	EXPECT_STR(display_key_name(DISPLAY_KEY_KP_2), "kp 2");
+	EXPECT_STR(display_key_name(DISPLAY_KEY_KP_3), "kp 3");
+	EXPECT_STR(display_key_name(DISPLAY_KEY_KP_4), "kp 4");
+	EXPECT_STR(display_key_name(DISPLAY_KEY_KP_5), "kp 5");
+	EXPECT_STR(display_key_name(DISPLAY_KEY_KP_6), "kp 6");
+	EXPECT_STR(display_key_name(DISPLAY_KEY_KP_7), "kp 7");
+	EXPECT_STR(display_key_name(DISPLAY_KEY_KP_8), "kp 8");
+	EXPECT_STR(display_key_name(DISPLAY_KEY_KP_9), "kp 9");
+	EXPECT_STR(display_key_name(DISPLAY_KEY_KP_DECIMAL), "kp decimal");
+	EXPECT_STR(display_key_name(DISPLAY_KEY_KP_DIVIDE), "kp divide");
+	EXPECT_STR(display_key_name(DISPLAY_KEY_KP_MULTIPLY), "kp multiply");
+	EXPECT_STR(display_key_name(DISPLAY_KEY_KP_SUBTRACT), "kp subtract");
+	EXPECT_STR(display_key_name(DISPLAY_KEY_KP_ADD), "kp add");
+	EXPECT_STR(display_key_name(DISPLAY_KEY_KP_ENTER), "kp enter");
 	EXPECT_STR(display_key_name((display_key_t)999), "unknown");
 
 	END;
@@ -624,10 +660,9 @@ TEST(display_modifiers_format_values)
 
 	char modifiers[256] = {0};
 
-	display_modifiers_format(DISPLAY_MOD_SHIFT | DISPLAY_MOD_CAPS_LOCK | DISPLAY_MOD_CONTROL | DISPLAY_MOD_ALT |
-					 DISPLAY_MOD_NUM_LOCK | DISPLAY_MOD_SUPER | DISPLAY_MOD_MOUSE_LEFT |
-					 DISPLAY_MOD_MOUSE_MIDDLE | DISPLAY_MOD_MOUSE_RIGHT | DISPLAY_MOD_MOUSE_WHEEL_UP |
-					 DISPLAY_MOD_MOUSE_WHEEL_DOWN,
+	display_modifiers_format(DISPLAY_MOD_SHIFT | DISPLAY_MOD_CAPS_LOCK | DISPLAY_MOD_CONTROL | DISPLAY_MOD_ALT | DISPLAY_MOD_NUM_LOCK |
+					 DISPLAY_MOD_SUPER | DISPLAY_MOD_MOUSE_LEFT | DISPLAY_MOD_MOUSE_MIDDLE | DISPLAY_MOD_MOUSE_RIGHT |
+					 DISPLAY_MOD_MOUSE_WHEEL_UP | DISPLAY_MOD_MOUSE_WHEEL_DOWN,
 				 modifiers,
 				 sizeof(modifiers));
 
