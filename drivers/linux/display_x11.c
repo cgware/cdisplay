@@ -530,6 +530,7 @@ enum {
 	XK_PAGE_UP	 = 0xff55,
 	XK_PAGE_DOWN	 = 0xff56,
 	XK_END		 = 0xff57,
+	XK_PRINT	 = 0xff61,
 	XK_INSERT	 = 0xff63,
 	XK_MENU		 = 0xff67,
 	XK_KP_ENTER	 = 0xff8d,
@@ -974,6 +975,8 @@ static display_key_t key_from_keysym(u32 keysym)
 		return DISPLAY_KEY_SCROLL_LOCK;
 	case XK_PAUSE:
 		return DISPLAY_KEY_PAUSE;
+	case XK_PRINT:
+		return DISPLAY_KEY_PRINT_SCREEN;
 	case XK_INSERT:
 		return DISPLAY_KEY_INSERT;
 	case XK_DELETE:

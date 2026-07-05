@@ -527,6 +527,7 @@ TEST(display_key_name_values)
 	EXPECT_STR(display_key_name(DISPLAY_KEY_NUM_LOCK), "num lock");
 	EXPECT_STR(display_key_name(DISPLAY_KEY_SCROLL_LOCK), "scroll lock");
 	EXPECT_STR(display_key_name(DISPLAY_KEY_PAUSE), "pause");
+	EXPECT_STR(display_key_name(DISPLAY_KEY_PRINT_SCREEN), "print screen");
 	EXPECT_STR(display_key_name(DISPLAY_KEY_INSERT), "insert");
 	EXPECT_STR(display_key_name(DISPLAY_KEY_DELETE), "delete");
 	EXPECT_STR(display_key_name(DISPLAY_KEY_HOME), "home");

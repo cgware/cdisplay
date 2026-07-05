@@ -61,6 +61,9 @@ typedef struct display_windows_s {
 typedef struct window_windows_s {
 	HWND handle;
 	int visible;
+	display_modifier_t modifiers;
+	display_modifier_t lock_modifiers;
+	u8 keys[__DISPLAY_KEY_MAX];
 } window_windows_t;
 
 static display_windows_wndproc_api_t *s_wndproc_api;
@@ -165,11 +168,234 @@ static int display_windows_register_class(display_windows_t *dwindows)
 	return 0;
 }
 
-static int display_windows_translate_message(const MSG *msg, display_event_t *event)
+static window_t *display_windows_window_from_hwnd(display_windows_t *dwindows, HWND hwnd)
+{
+	if (dwindows == NULL || dwindows->GetWindowLongPtrA == NULL || hwnd == NULL) {
+		return NULL;
+	}
+
+	return (window_t *)dwindows->GetWindowLongPtrA(hwnd, GWLP_USERDATA);
+}
+
+static display_key_t display_windows_key_from_message(const MSG *msg)
+{
+	UINT code = (UINT)msg->wParam;
+	UINT scan = (UINT)((msg->lParam >> 16) & 0xff);
+	int extended = (msg->lParam & (1l << 24)) != 0;
+
+	if (code >= 'A' && code <= 'Z') {
+		return (display_key_t)(DISPLAY_KEY_A + code - 'A');
+	}
+	if (code >= '0' && code <= '9') {
+		return (display_key_t)(DISPLAY_KEY_0 + code - '0');
+	}
+	if (code >= VK_F1 && code <= VK_F12) {
+		return (display_key_t)(DISPLAY_KEY_F1 + code - VK_F1);
+	}
+	if (code >= VK_NUMPAD0 && code <= VK_NUMPAD9) {
+		return (display_key_t)(DISPLAY_KEY_KP_0 + code - VK_NUMPAD0);
+	}
+
+	switch (code) {
+	case VK_OEM_3:
+		return DISPLAY_KEY_GRAVE;
+	case VK_OEM_MINUS:
+		return DISPLAY_KEY_MINUS;
+	case VK_OEM_PLUS:
+		return DISPLAY_KEY_EQUAL;
+	case VK_OEM_4:
+		return DISPLAY_KEY_LEFT_BRACKET;
+	case VK_OEM_6:
+		return DISPLAY_KEY_RIGHT_BRACKET;
+	case VK_OEM_5:
+		return DISPLAY_KEY_BACKSLASH;
+	case VK_OEM_1:
+		return DISPLAY_KEY_SEMICOLON;
+	case VK_OEM_7:
+		return DISPLAY_KEY_APOSTROPHE;
+	case VK_OEM_COMMA:
+		return DISPLAY_KEY_COMMA;
+	case VK_OEM_PERIOD:
+		return DISPLAY_KEY_PERIOD;
+	case VK_OEM_2:
+		return DISPLAY_KEY_SLASH;
+	case VK_SPACE:
+		return DISPLAY_KEY_SPACE;
+	case VK_RETURN:
+		return extended ? DISPLAY_KEY_KP_ENTER : DISPLAY_KEY_ENTER;
+	case VK_TAB:
+		return DISPLAY_KEY_TAB;
+	case VK_BACK:
+		return DISPLAY_KEY_BACKSPACE;
+	case VK_ESCAPE:
+		return DISPLAY_KEY_ESCAPE;
+	case VK_CAPITAL:
+		return DISPLAY_KEY_CAPS_LOCK;
+	case VK_NUMLOCK:
+		return DISPLAY_KEY_NUM_LOCK;
+	case VK_SCROLL:
+		return DISPLAY_KEY_SCROLL_LOCK;
+	case VK_PAUSE:
+		return DISPLAY_KEY_PAUSE;
+	case VK_SNAPSHOT:
+		return DISPLAY_KEY_PRINT_SCREEN;
+	case VK_CLEAR:
+		return DISPLAY_KEY_KP_5;
+	case VK_INSERT:
+		return DISPLAY_KEY_INSERT;
+	case VK_DELETE:
+		return DISPLAY_KEY_DELETE;
+	case VK_HOME:
+		return DISPLAY_KEY_HOME;
+	case VK_END:
+		return DISPLAY_KEY_END;
+	case VK_PRIOR:
+		return DISPLAY_KEY_PAGE_UP;
+	case VK_NEXT:
+		return DISPLAY_KEY_PAGE_DOWN;
+	case VK_UP:
+		return DISPLAY_KEY_UP;
+	case VK_DOWN:
+		return DISPLAY_KEY_DOWN;
+	case VK_LEFT:
+		return DISPLAY_KEY_LEFT;
+	case VK_RIGHT:
+		return DISPLAY_KEY_RIGHT;
+	case VK_SHIFT:
+		return scan == 0x36 ? DISPLAY_KEY_RIGHT_SHIFT : DISPLAY_KEY_LEFT_SHIFT;
+	case VK_LSHIFT:
+		return DISPLAY_KEY_LEFT_SHIFT;
+	case VK_RSHIFT:
+		return DISPLAY_KEY_RIGHT_SHIFT;
+	case VK_CONTROL:
+		return extended ? DISPLAY_KEY_RIGHT_CONTROL : DISPLAY_KEY_LEFT_CONTROL;
+	case VK_LCONTROL:
+		return DISPLAY_KEY_LEFT_CONTROL;
+	case VK_RCONTROL:
+		return DISPLAY_KEY_RIGHT_CONTROL;
+	case VK_MENU:
+		return extended ? DISPLAY_KEY_RIGHT_ALT : DISPLAY_KEY_LEFT_ALT;
+	case VK_LMENU:
+		return DISPLAY_KEY_LEFT_ALT;
+	case VK_RMENU:
+		return DISPLAY_KEY_RIGHT_ALT;
+	case VK_LWIN:
+		return DISPLAY_KEY_LEFT_SUPER;
+	case VK_RWIN:
+		return DISPLAY_KEY_RIGHT_SUPER;
+	case VK_APPS:
+		return DISPLAY_KEY_MENU;
+	case VK_DECIMAL:
+		return DISPLAY_KEY_KP_DECIMAL;
+	case VK_DIVIDE:
+		return DISPLAY_KEY_KP_DIVIDE;
+	case VK_MULTIPLY:
+		return DISPLAY_KEY_KP_MULTIPLY;
+	case VK_SUBTRACT:
+		return DISPLAY_KEY_KP_SUBTRACT;
+	case VK_ADD:
+		return DISPLAY_KEY_KP_ADD;
+	default:
+		log_warn("cdisplay", "display_windows", NULL, "unknown Windows virtual key: %u", code);
+		return DISPLAY_KEY_UNKNOWN;
+	}
+}
+
+static display_modifier_t display_windows_modifier_from_key(display_key_t key)
+{
+	switch (key) {
+	case DISPLAY_KEY_LEFT_SHIFT:
+	case DISPLAY_KEY_RIGHT_SHIFT:
+		return DISPLAY_MOD_SHIFT;
+	case DISPLAY_KEY_CAPS_LOCK:
+		return DISPLAY_MOD_CAPS_LOCK;
+	case DISPLAY_KEY_LEFT_CONTROL:
+	case DISPLAY_KEY_RIGHT_CONTROL:
+		return DISPLAY_MOD_CONTROL;
+	case DISPLAY_KEY_LEFT_ALT:
+	case DISPLAY_KEY_RIGHT_ALT:
+		return DISPLAY_MOD_ALT;
+	case DISPLAY_KEY_NUM_LOCK:
+		return DISPLAY_MOD_NUM_LOCK;
+	case DISPLAY_KEY_LEFT_SUPER:
+	case DISPLAY_KEY_RIGHT_SUPER:
+		return DISPLAY_MOD_SUPER;
+	default:
+		return DISPLAY_MOD_NONE;
+	}
+}
+
+static void display_windows_rebuild_modifiers(window_windows_t *wwindows)
+{
+	display_modifier_t modifiers = wwindows->lock_modifiers;
+
+	if (wwindows->keys[DISPLAY_KEY_LEFT_SHIFT] || wwindows->keys[DISPLAY_KEY_RIGHT_SHIFT]) {
+		modifiers = (display_modifier_t)(modifiers | DISPLAY_MOD_SHIFT);
+	}
+	if (wwindows->keys[DISPLAY_KEY_LEFT_CONTROL] || wwindows->keys[DISPLAY_KEY_RIGHT_CONTROL]) {
+		modifiers = (display_modifier_t)(modifiers | DISPLAY_MOD_CONTROL);
+	}
+	if (wwindows->keys[DISPLAY_KEY_LEFT_ALT] || wwindows->keys[DISPLAY_KEY_RIGHT_ALT]) {
+		modifiers = (display_modifier_t)(modifiers | DISPLAY_MOD_ALT);
+	}
+	if (wwindows->keys[DISPLAY_KEY_LEFT_SUPER] || wwindows->keys[DISPLAY_KEY_RIGHT_SUPER]) {
+		modifiers = (display_modifier_t)(modifiers | DISPLAY_MOD_SUPER);
+	}
+
+	wwindows->modifiers = modifiers;
+}
+
+static void display_windows_update_modifiers(window_windows_t *wwindows, display_key_t key, int down, int repeat)
+{
+	display_modifier_t modifier = display_windows_modifier_from_key(key);
+	if (modifier == DISPLAY_MOD_NONE) {
+		return;
+	}
+
+	if (key == DISPLAY_KEY_CAPS_LOCK || key == DISPLAY_KEY_NUM_LOCK) {
+		if (down && !repeat) {
+			wwindows->lock_modifiers = (display_modifier_t)(wwindows->lock_modifiers ^ modifier);
+			display_windows_rebuild_modifiers(wwindows);
+		}
+		return;
+	}
+
+	if (key > DISPLAY_KEY_UNKNOWN && key < __DISPLAY_KEY_MAX) {
+		wwindows->keys[key] = down ? 1 : 0;
+		display_windows_rebuild_modifiers(wwindows);
+	}
+}
+
+static int display_windows_translate_key_message(display_windows_t *dwindows, const MSG *msg, display_event_t *event)
+{
+	window_t *wnd = display_windows_window_from_hwnd(dwindows, msg->hwnd);
+	if (wnd == NULL || wnd->data == NULL) {
+		return 1;
+	}
+
+	window_windows_t *wwindows = wnd->data;
+	int down		    = msg->message == WM_KEYDOWN || msg->message == WM_SYSKEYDOWN;
+	int repeat		    = (msg->lParam & (1l << 30)) != 0;
+
+	event->type   = down ? DISPLAY_EVENT_KEY_DOWN : DISPLAY_EVENT_KEY_UP;
+	event->window = (u32)(uintptr_t)msg->hwnd;
+	event->key    = display_windows_key_from_message(msg);
+	display_windows_update_modifiers(wwindows, event->key, down, repeat);
+	event->modifiers = wwindows->modifiers;
+
+	return 0;
+}
+
+static int display_windows_translate_message(display_windows_t *dwindows, const MSG *msg, display_event_t *event)
 {
 	*event = (display_event_t){0};
 
 	switch (msg->message) {
+	case WM_KEYDOWN:
+	case WM_KEYUP:
+	case WM_SYSKEYDOWN:
+	case WM_SYSKEYUP:
+		return display_windows_translate_key_message(dwindows, msg, event);
 	case WM_CLOSE:
 		event->type   = DISPLAY_EVENT_CLOSE;
 		event->window = (u32)(uintptr_t)msg->hwnd;
@@ -265,7 +491,7 @@ static int display_windows_poll_event(display_t *display, display_event_t *event
 
 	MSG msg;
 	while (dwindows->PeekMessageA(&msg, NULL, 0, 0, PM_REMOVE)) {
-		if (display_windows_translate_message(&msg, event) == 0) {
+		if (display_windows_translate_message(dwindows, &msg, event) == 0) {
 			return 0;
 		}
 		display_windows_dispatch_message(dwindows, &msg);
@@ -288,7 +514,7 @@ static int display_windows_wait_event(display_t *display, display_event_t *event
 
 	MSG msg;
 	while (dwindows->GetMessageA(&msg, NULL, 0, 0) > 0) {
-		if (display_windows_translate_message(&msg, event) == 0) {
+		if (display_windows_translate_message(dwindows, &msg, event) == 0) {
 			return 0;
 		}
 		display_windows_dispatch_message(dwindows, &msg);

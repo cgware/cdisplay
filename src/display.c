@@ -147,6 +147,7 @@ static const char *s_key_str[] = {
 	[DISPLAY_KEY_NUM_LOCK]	    = "num lock",
 	[DISPLAY_KEY_SCROLL_LOCK]   = "scroll lock",
 	[DISPLAY_KEY_PAUSE]	    = "pause",
+	[DISPLAY_KEY_PRINT_SCREEN]  = "print screen",
 	[DISPLAY_KEY_INSERT]	    = "insert",
 	[DISPLAY_KEY_DELETE]	    = "delete",
 	[DISPLAY_KEY_HOME]	    = "home",
