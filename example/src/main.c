@@ -2,6 +2,7 @@
 #include "fs.h"
 #include "log.h"
 #include "mem.h"
+#include "platform.h"
 #include "print.h"
 #include "proc.h"
 #include "sock.h"
@@ -106,7 +107,13 @@ int main()
 	display_t display	    = {0};
 	example_window_t windows[2] = {0};
 
-	display_driver_t *drv = find_display_driver(STRV("X11"));
+#if defined(C_WIN)
+	strv_t driver_name = STRV("windows");
+#else
+	strv_t driver_name = STRV("X11");
+#endif
+
+	display_driver_t *drv = find_display_driver(driver_name);
 	if (drv == NULL) {
 		c_printf("X11 display driver not found\n");
 		cleanup(&display, windows, 2, &fs, &proc, &ss);
