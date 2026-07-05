@@ -17,6 +17,7 @@ typedef BOOL(WINAPI *adjust_window_rect_ex_t)(LPRECT, DWORD, BOOL, DWORD);
 typedef BOOL(WINAPI *get_window_rect_t)(HWND, LPRECT);
 typedef HMONITOR(WINAPI *monitor_from_window_t)(HWND, DWORD);
 typedef BOOL(WINAPI *get_monitor_infoa_t)(HMONITOR, LPMONITORINFO);
+typedef BOOL(WINAPI *screen_to_client_t)(HWND, LPPOINT);
 typedef BOOL(WINAPI *peek_messagea_t)(LPMSG, HWND, UINT, UINT, UINT);
 typedef BOOL(WINAPI *get_messagea_t)(LPMSG, HWND, UINT, UINT);
 typedef BOOL(WINAPI *translate_message_t)(const MSG *);
@@ -58,6 +59,7 @@ typedef struct display_windows_s {
 	get_window_rect_t GetWindowRect;
 	monitor_from_window_t MonitorFromWindow;
 	get_monitor_infoa_t GetMonitorInfoA;
+	screen_to_client_t ScreenToClient;
 	peek_messagea_t PeekMessageA;
 	get_messagea_t GetMessageA;
 	translate_message_t TranslateMessage;
@@ -149,6 +151,7 @@ static int display_windows_load_user32(display_windows_t *dwindows)
 	    display_windows_load_proc(dwindows, (FARPROC *)&dwindows->GetWindowRect, "GetWindowRect") ||
 	    display_windows_load_proc(dwindows, (FARPROC *)&dwindows->MonitorFromWindow, "MonitorFromWindow") ||
 	    display_windows_load_proc(dwindows, (FARPROC *)&dwindows->GetMonitorInfoA, "GetMonitorInfoA") ||
+	    display_windows_load_proc(dwindows, (FARPROC *)&dwindows->ScreenToClient, "ScreenToClient") ||
 	    display_windows_load_proc(dwindows, (FARPROC *)&dwindows->PeekMessageA, "PeekMessageA") ||
 	    display_windows_load_proc(dwindows, (FARPROC *)&dwindows->GetMessageA, "GetMessageA") ||
 	    display_windows_load_proc(dwindows, (FARPROC *)&dwindows->TranslateMessage, "TranslateMessage") ||
@@ -404,6 +407,162 @@ static int display_windows_translate_key_message(display_windows_t *dwindows, co
 	return 0;
 }
 
+static short display_windows_i16_lparam(LPARAM value)
+{
+	return (short)(value & 0xffff);
+}
+
+static int display_windows_mouse_point(display_windows_t *dwindows, const MSG *msg, int screen, u16 *x, u16 *y)
+{
+	POINT point = {
+		.x = display_windows_i16_lparam(msg->lParam),
+		.y = display_windows_i16_lparam(msg->lParam >> 16),
+	};
+
+	if (screen && !dwindows->ScreenToClient(msg->hwnd, &point)) {
+		return 1;
+	}
+
+	*x = (u16)point.x;
+	*y = (u16)point.y;
+
+	return 0;
+}
+
+static display_mouse_t display_windows_mouse_from_message(const MSG *msg)
+{
+	switch (msg->message) {
+	case WM_LBUTTONDOWN:
+	case WM_LBUTTONUP:
+	case WM_LBUTTONDBLCLK:
+		return DISPLAY_MOUSE_LEFT;
+	case WM_MBUTTONDOWN:
+	case WM_MBUTTONUP:
+	case WM_MBUTTONDBLCLK:
+		return DISPLAY_MOUSE_MIDDLE;
+	case WM_RBUTTONDOWN:
+	case WM_RBUTTONUP:
+	case WM_RBUTTONDBLCLK:
+		return DISPLAY_MOUSE_RIGHT;
+	case WM_XBUTTONDOWN:
+	case WM_XBUTTONUP:
+	case WM_XBUTTONDBLCLK:
+		switch (HIWORD(msg->wParam)) {
+		case XBUTTON1:
+			return DISPLAY_MOUSE_BACK;
+		case XBUTTON2:
+			return DISPLAY_MOUSE_FORWARD;
+		default:
+			return DISPLAY_MOUSE_UNKNOWN;
+		}
+	case WM_MOUSEWHEEL:
+		return GET_WHEEL_DELTA_WPARAM(msg->wParam) > 0 ? DISPLAY_MOUSE_WHEEL_UP : DISPLAY_MOUSE_WHEEL_DOWN;
+	case WM_MOUSEHWHEEL:
+		return GET_WHEEL_DELTA_WPARAM(msg->wParam) > 0 ? DISPLAY_MOUSE_WHEEL_RIGHT : DISPLAY_MOUSE_WHEEL_LEFT;
+	default:
+		return DISPLAY_MOUSE_UNKNOWN;
+	}
+}
+
+static int display_windows_mouse_is_down(UINT message)
+{
+	switch (message) {
+	case WM_LBUTTONDOWN:
+	case WM_LBUTTONDBLCLK:
+	case WM_MBUTTONDOWN:
+	case WM_MBUTTONDBLCLK:
+	case WM_RBUTTONDOWN:
+	case WM_RBUTTONDBLCLK:
+	case WM_XBUTTONDOWN:
+	case WM_XBUTTONDBLCLK:
+	case WM_MOUSEWHEEL:
+	case WM_MOUSEHWHEEL:
+		return 1;
+	default:
+		return 0;
+	}
+}
+
+static display_modifier_t display_windows_mouse_modifier(display_mouse_t button)
+{
+	switch (button) {
+	case DISPLAY_MOUSE_LEFT:
+		return DISPLAY_MOD_MOUSE_LEFT;
+	case DISPLAY_MOUSE_MIDDLE:
+		return DISPLAY_MOD_MOUSE_MIDDLE;
+	case DISPLAY_MOUSE_RIGHT:
+		return DISPLAY_MOD_MOUSE_RIGHT;
+	case DISPLAY_MOUSE_WHEEL_UP:
+		return DISPLAY_MOD_MOUSE_WHEEL_UP;
+	case DISPLAY_MOUSE_WHEEL_DOWN:
+		return DISPLAY_MOD_MOUSE_WHEEL_DOWN;
+	default:
+		return DISPLAY_MOD_NONE;
+	}
+}
+
+static void display_windows_rebuild_mouse_modifiers(window_windows_t *wwindows, WPARAM state)
+{
+	display_modifier_t modifiers = wwindows->modifiers;
+
+	modifiers = (display_modifier_t)(modifiers &
+					 ~(DISPLAY_MOD_MOUSE_LEFT | DISPLAY_MOD_MOUSE_MIDDLE | DISPLAY_MOD_MOUSE_RIGHT |
+					   DISPLAY_MOD_MOUSE_WHEEL_UP | DISPLAY_MOD_MOUSE_WHEEL_DOWN));
+
+	if (state & MK_LBUTTON) {
+		modifiers = (display_modifier_t)(modifiers | DISPLAY_MOD_MOUSE_LEFT);
+	}
+	if (state & MK_MBUTTON) {
+		modifiers = (display_modifier_t)(modifiers | DISPLAY_MOD_MOUSE_MIDDLE);
+	}
+	if (state & MK_RBUTTON) {
+		modifiers = (display_modifier_t)(modifiers | DISPLAY_MOD_MOUSE_RIGHT);
+	}
+
+	wwindows->modifiers = modifiers;
+}
+
+static int display_windows_translate_mouse_message(display_windows_t *dwindows, const MSG *msg, display_event_t *event)
+{
+	window_t *wnd = display_windows_window_from_hwnd(dwindows, msg->hwnd);
+	if (wnd == NULL || wnd->data == NULL) {
+		return 1;
+	}
+
+	window_windows_t *wwindows = wnd->data;
+	int wheel		    = msg->message == WM_MOUSEWHEEL || msg->message == WM_MOUSEHWHEEL;
+
+	event->window = (u32)(uintptr_t)msg->hwnd;
+	if (display_windows_mouse_point(dwindows, msg, wheel, &event->x, &event->y)) {
+		return 1;
+	}
+
+	if (msg->message == WM_MOUSEMOVE) {
+		display_windows_rebuild_mouse_modifiers(wwindows, msg->wParam);
+		event->type	 = DISPLAY_EVENT_MOUSE_MOVE;
+		event->modifiers = wwindows->modifiers;
+		return 0;
+	}
+
+	event->button = display_windows_mouse_from_message(msg);
+	if (event->button == DISPLAY_MOUSE_UNKNOWN) {
+		return 1;
+	}
+
+	if (wheel) {
+		display_modifier_t modifier = display_windows_mouse_modifier(event->button);
+		event->type		   = DISPLAY_EVENT_MOUSE_DOWN;
+		event->modifiers	   = (display_modifier_t)(wwindows->modifiers | modifier);
+		return 0;
+	}
+
+	display_windows_rebuild_mouse_modifiers(wwindows, msg->wParam);
+	event->type	 = display_windows_mouse_is_down(msg->message) ? DISPLAY_EVENT_MOUSE_DOWN : DISPLAY_EVENT_MOUSE_UP;
+	event->modifiers = wwindows->modifiers;
+
+	return 0;
+}
+
 static int display_windows_translate_message(display_windows_t *dwindows, const MSG *msg, display_event_t *event)
 {
 	*event = (display_event_t){0};
@@ -414,6 +573,22 @@ static int display_windows_translate_message(display_windows_t *dwindows, const 
 	case WM_SYSKEYDOWN:
 	case WM_SYSKEYUP:
 		return display_windows_translate_key_message(dwindows, msg, event);
+	case WM_MOUSEMOVE:
+	case WM_LBUTTONDOWN:
+	case WM_LBUTTONUP:
+	case WM_LBUTTONDBLCLK:
+	case WM_MBUTTONDOWN:
+	case WM_MBUTTONUP:
+	case WM_MBUTTONDBLCLK:
+	case WM_RBUTTONDOWN:
+	case WM_RBUTTONUP:
+	case WM_RBUTTONDBLCLK:
+	case WM_XBUTTONDOWN:
+	case WM_XBUTTONUP:
+	case WM_XBUTTONDBLCLK:
+	case WM_MOUSEWHEEL:
+	case WM_MOUSEHWHEEL:
+		return display_windows_translate_mouse_message(dwindows, msg, event);
 	case WM_CLOSE:
 		event->type   = DISPLAY_EVENT_CLOSE;
 		event->window = (u32)(uintptr_t)msg->hwnd;
