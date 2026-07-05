@@ -105,6 +105,7 @@ int main()
 	sock_init(&ss, 0, 0, ALLOC_STD);
 
 	display_t display	    = {0};
+	size_t windows_cnt	    = 2;
 	example_window_t windows[2] = {0};
 
 #if defined(C_WIN)
@@ -116,41 +117,44 @@ int main()
 	display_driver_t *drv = find_display_driver(driver_name);
 	if (drv == NULL) {
 		c_printf("X11 display driver not found\n");
-		cleanup(&display, windows, 2, &fs, &proc, &ss);
+		cleanup(&display, windows, windows_cnt, &fs, &proc, &ss);
 		mem_print(DST_STD());
 		return 1;
 	}
 
 	if (display_init(&display, drv, &fs, &proc, &ss, ALLOC_STD) == NULL) {
 		c_printf("failed to initialize display\n");
-		cleanup(&display, windows, 2, &fs, &proc, &ss);
+		cleanup(&display, windows, windows_cnt, &fs, &proc, &ss);
 		mem_print(DST_STD());
 		return 1;
 	}
 
-	if (window_init(&windows[0].wnd, &display, 0, 0, 640, 480) == NULL ||
-	    window_init(&windows[1].wnd, &display, 100, 100, 640, 480) == NULL) {
-		c_printf("failed to create windows\n");
-		cleanup(&display, windows, 2, &fs, &proc, &ss);
-		mem_print(DST_STD());
-		return 1;
+	for (size_t i = 0; i < windows_cnt; i++) {
+		if (window_init(&windows[i].wnd, &display, 100 * i, 100 * i, 640, 480) == NULL) {
+			c_printf("failed to create window\n");
+			cleanup(&display, windows, windows_cnt, &fs, &proc, &ss);
+			mem_print(DST_STD());
+			return 1;
+		}
 	}
 
-	if (window_show(&windows[0].wnd) || window_show(&windows[1].wnd)) {
-		c_printf("failed to show windows\n");
-		cleanup(&display, windows, 2, &fs, &proc, &ss);
-		mem_print(DST_STD());
-		return 1;
+	for (size_t i = 0; i < windows_cnt; i++) {
+		if (window_show(&windows[i].wnd)) {
+			c_printf("failed to show window\n");
+			cleanup(&display, windows, windows_cnt, &fs, &proc, &ss);
+			mem_print(DST_STD());
+			return 1;
+		}
 	}
 
-	for (size_t i = 0; i < 2; i++) {
+	for (size_t i = 0; i < windows_cnt; i++) {
 		windows[i].id	      = window_id(&windows[i].wnd);
 		windows[i].open	      = 1;
 		windows[i].fullscreen = 0;
 		c_printf("window[%zu]=%u\n", i, windows[i].id);
 	}
 
-	int open = 2;
+	int open = windows_cnt;
 	while (open > 0) {
 		display_event_t event = {0};
 		if (display_wait_event(&display, &event)) {
@@ -159,7 +163,7 @@ int main()
 
 		display_event_log(&event);
 
-		example_window_t *window = find_window(windows, 2, event.window);
+		example_window_t *window = find_window(windows, windows_cnt, event.window);
 		if (window == NULL) {
 			continue;
 		}
@@ -189,7 +193,7 @@ int main()
 		}
 	}
 
-	cleanup(&display, windows, 2, &fs, &proc, &ss);
+	cleanup(&display, windows, windows_cnt, &fs, &proc, &ss);
 
 	mem_print(DST_STD());
 

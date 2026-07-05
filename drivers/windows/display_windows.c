@@ -14,6 +14,9 @@ typedef BOOL(WINAPI *update_window_t)(HWND);
 typedef BOOL(WINAPI *set_window_texta_t)(HWND, LPCSTR);
 typedef BOOL(WINAPI *set_window_pos_t)(HWND, HWND, int, int, int, int, UINT);
 typedef BOOL(WINAPI *adjust_window_rect_ex_t)(LPRECT, DWORD, BOOL, DWORD);
+typedef BOOL(WINAPI *get_window_rect_t)(HWND, LPRECT);
+typedef HMONITOR(WINAPI *monitor_from_window_t)(HWND, DWORD);
+typedef BOOL(WINAPI *get_monitor_infoa_t)(HMONITOR, LPMONITORINFO);
 typedef BOOL(WINAPI *peek_messagea_t)(LPMSG, HWND, UINT, UINT, UINT);
 typedef BOOL(WINAPI *get_messagea_t)(LPMSG, HWND, UINT, UINT);
 typedef BOOL(WINAPI *translate_message_t)(const MSG *);
@@ -35,6 +38,10 @@ typedef struct display_windows_wndproc_api_s {
 	#define DISPLAY_WINDOWS_SET_WINDOW_LONG_PTR "SetWindowLongA"
 #endif
 
+#define DISPLAY_WINDOWS_STYLE_NORMAL WS_OVERLAPPEDWINDOW
+#define DISPLAY_WINDOWS_STYLE_BORDERLESS WS_POPUP
+#define DISPLAY_WINDOWS_EX_STYLE_NORMAL 0
+
 typedef struct display_windows_s {
 	HMODULE user32;
 	HINSTANCE instance;
@@ -48,6 +55,9 @@ typedef struct display_windows_s {
 	set_window_texta_t SetWindowTextA;
 	set_window_pos_t SetWindowPos;
 	adjust_window_rect_ex_t AdjustWindowRectEx;
+	get_window_rect_t GetWindowRect;
+	monitor_from_window_t MonitorFromWindow;
+	get_monitor_infoa_t GetMonitorInfoA;
 	peek_messagea_t PeekMessageA;
 	get_messagea_t GetMessageA;
 	translate_message_t TranslateMessage;
@@ -61,6 +71,11 @@ typedef struct display_windows_s {
 typedef struct window_windows_s {
 	HWND handle;
 	int visible;
+	int borderless;
+	int fullscreen;
+	DWORD style;
+	DWORD ex_style;
+	RECT restore_rect;
 	display_modifier_t modifiers;
 	display_modifier_t lock_modifiers;
 	u8 keys[__DISPLAY_KEY_MAX];
@@ -131,6 +146,9 @@ static int display_windows_load_user32(display_windows_t *dwindows)
 	    display_windows_load_proc(dwindows, (FARPROC *)&dwindows->SetWindowTextA, "SetWindowTextA") ||
 	    display_windows_load_proc(dwindows, (FARPROC *)&dwindows->SetWindowPos, "SetWindowPos") ||
 	    display_windows_load_proc(dwindows, (FARPROC *)&dwindows->AdjustWindowRectEx, "AdjustWindowRectEx") ||
+	    display_windows_load_proc(dwindows, (FARPROC *)&dwindows->GetWindowRect, "GetWindowRect") ||
+	    display_windows_load_proc(dwindows, (FARPROC *)&dwindows->MonitorFromWindow, "MonitorFromWindow") ||
+	    display_windows_load_proc(dwindows, (FARPROC *)&dwindows->GetMonitorInfoA, "GetMonitorInfoA") ||
 	    display_windows_load_proc(dwindows, (FARPROC *)&dwindows->PeekMessageA, "PeekMessageA") ||
 	    display_windows_load_proc(dwindows, (FARPROC *)&dwindows->GetMessageA, "GetMessageA") ||
 	    display_windows_load_proc(dwindows, (FARPROC *)&dwindows->TranslateMessage, "TranslateMessage") ||
@@ -418,6 +436,57 @@ static int display_windows_dispatch_message(display_windows_t *dwindows, const M
 	return 0;
 }
 
+static int display_windows_message_needs_dispatch(UINT message)
+{
+	switch (message) {
+	case WM_CLOSE:
+		return 0;
+	default:
+		return 1;
+	}
+}
+
+static int display_windows_set_style(display_windows_t *dwindows, window_windows_t *wwindows, DWORD style)
+{
+	DWORD native_style = style;
+	if (wwindows->visible) {
+		native_style |= WS_VISIBLE;
+	}
+
+	if (dwindows->SetWindowLongPtrA(wwindows->handle, GWL_STYLE, (LONG_PTR)native_style) == 0) {
+		return 1;
+	}
+
+	wwindows->style = style;
+	return 0;
+}
+
+static int display_windows_apply_frame(display_windows_t *dwindows, window_windows_t *wwindows, const RECT *rect, UINT flags)
+{
+	int x	  = 0;
+	int y	  = 0;
+	int width = 0;
+	int height = 0;
+
+	flags |= SWP_FRAMECHANGED;
+
+	if (rect == NULL) {
+		flags |= SWP_NOMOVE | SWP_NOSIZE;
+	} else {
+		x      = rect->left;
+		y      = rect->top;
+		width  = rect->right - rect->left;
+		height = rect->bottom - rect->top;
+	}
+
+	return dwindows->SetWindowPos(wwindows->handle, NULL, x, y, width, height, flags) ? 0 : 1;
+}
+
+static DWORD display_windows_window_style(const window_windows_t *wwindows)
+{
+	return wwindows->borderless ? DISPLAY_WINDOWS_STYLE_BORDERLESS : DISPLAY_WINDOWS_STYLE_NORMAL;
+}
+
 static int display_windows_init(display_t *display)
 {
 	if (display == NULL) {
@@ -492,6 +561,9 @@ static int display_windows_poll_event(display_t *display, display_event_t *event
 	MSG msg;
 	while (dwindows->PeekMessageA(&msg, NULL, 0, 0, PM_REMOVE)) {
 		if (display_windows_translate_message(dwindows, &msg, event) == 0) {
+			if (display_windows_message_needs_dispatch(msg.message)) {
+				display_windows_dispatch_message(dwindows, &msg);
+			}
 			return 0;
 		}
 		display_windows_dispatch_message(dwindows, &msg);
@@ -515,6 +587,9 @@ static int display_windows_wait_event(display_t *display, display_event_t *event
 	MSG msg;
 	while (dwindows->GetMessageA(&msg, NULL, 0, 0) > 0) {
 		if (display_windows_translate_message(dwindows, &msg, event) == 0) {
+			if (display_windows_message_needs_dispatch(msg.message)) {
+				display_windows_dispatch_message(dwindows, &msg);
+			}
 			return 0;
 		}
 		display_windows_dispatch_message(dwindows, &msg);
@@ -539,19 +614,20 @@ static int display_windows_window_init(window_t *wnd, u16 x, u16 y, u16 width, u
 	display_windows_t *dwindows = wnd->display->data;
 	window_windows_t *wwindows = wnd->data;
 
-	DWORD style	= WS_OVERLAPPEDWINDOW;
-	DWORD ex_style = 0;
-	RECT rect	= {0, 0, width, height};
-	if (!dwindows->AdjustWindowRectEx(&rect, style, FALSE, ex_style)) {
+	wwindows->style    = DISPLAY_WINDOWS_STYLE_NORMAL;
+	wwindows->ex_style = DISPLAY_WINDOWS_EX_STYLE_NORMAL;
+
+	RECT rect = {0, 0, width, height};
+	if (!dwindows->AdjustWindowRectEx(&rect, wwindows->style, FALSE, wwindows->ex_style)) {
 		mem_free(wnd->data, sizeof(window_windows_t));
 		wnd->data = NULL;
 		return 1;
 	}
 
-	wwindows->handle = dwindows->CreateWindowExA(ex_style,
+	wwindows->handle = dwindows->CreateWindowExA(wwindows->ex_style,
 						     "cdisplay_window",
 						     "cdisplay",
-						     style,
+						     wwindows->style,
 						     x,
 						     y,
 						     rect.right - rect.left,
@@ -644,10 +720,8 @@ static int display_windows_window_set_size(window_t *wnd, u16 width, u16 height)
 	display_windows_t *dwindows = wnd->display->data;
 	window_windows_t *wwindows = wnd->data;
 
-	DWORD style	= WS_OVERLAPPEDWINDOW;
-	DWORD ex_style = 0;
-	RECT rect	= {0, 0, width, height};
-	if (!dwindows->AdjustWindowRectEx(&rect, style, FALSE, ex_style)) {
+	RECT rect = {0, 0, width, height};
+	if (!dwindows->AdjustWindowRectEx(&rect, wwindows->style, FALSE, wwindows->ex_style)) {
 		return 1;
 	}
 
@@ -659,9 +733,34 @@ static int display_windows_window_set_size(window_t *wnd, u16 width, u16 height)
 
 static int display_windows_window_set_borderless(window_t *wnd, int borderless)
 {
-	(void)borderless;
+	if (wnd == NULL || wnd->display == NULL || wnd->display->data == NULL || wnd->data == NULL) {
+		return 1;
+	}
 
-	if (wnd == NULL || wnd->data == NULL) {
+	display_windows_t *dwindows = wnd->display->data;
+	window_windows_t *wwindows = wnd->data;
+	int enabled		    = borderless != 0;
+
+	if (wwindows->borderless == enabled) {
+		return 0;
+	}
+
+	wwindows->borderless = enabled;
+
+	if (wwindows->fullscreen) {
+		return 0;
+	}
+
+	DWORD old_style = wwindows->style;
+	DWORD style	= display_windows_window_style(wwindows);
+	if (display_windows_set_style(dwindows, wwindows, style)) {
+		wwindows->borderless = !enabled;
+		return 1;
+	}
+
+	if (display_windows_apply_frame(dwindows, wwindows, NULL, SWP_NOACTIVATE | SWP_NOZORDER)) {
+		display_windows_set_style(dwindows, wwindows, old_style);
+		wwindows->borderless = !enabled;
 		return 1;
 	}
 
@@ -670,12 +769,55 @@ static int display_windows_window_set_borderless(window_t *wnd, int borderless)
 
 static int display_windows_window_set_fullscreen(window_t *wnd, int fullscreen)
 {
-	(void)fullscreen;
-
-	if (wnd == NULL || wnd->data == NULL) {
+	if (wnd == NULL || wnd->display == NULL || wnd->display->data == NULL || wnd->data == NULL) {
 		return 1;
 	}
 
+	display_windows_t *dwindows = wnd->display->data;
+	window_windows_t *wwindows = wnd->data;
+	int enabled		    = fullscreen != 0;
+
+	if (wwindows->fullscreen == enabled) {
+		return 0;
+	}
+
+	if (enabled) {
+		if (!dwindows->GetWindowRect(wwindows->handle, &wwindows->restore_rect)) {
+			return 1;
+		}
+
+		HMONITOR monitor = dwindows->MonitorFromWindow(wwindows->handle, MONITOR_DEFAULTTONEAREST);
+		MONITORINFO info = {0};
+		info.cbSize	 = sizeof(info);
+		if (monitor == NULL || !dwindows->GetMonitorInfoA(monitor, &info)) {
+			return 1;
+		}
+
+		DWORD old_style = wwindows->style;
+		if (display_windows_set_style(dwindows, wwindows, DISPLAY_WINDOWS_STYLE_BORDERLESS)) {
+			return 1;
+		}
+
+		if (display_windows_apply_frame(dwindows, wwindows, &info.rcMonitor, SWP_SHOWWINDOW)) {
+			display_windows_set_style(dwindows, wwindows, old_style);
+			return 1;
+		}
+
+		wwindows->fullscreen = 1;
+		return 0;
+	}
+
+	DWORD style = display_windows_window_style(wwindows);
+	if (display_windows_set_style(dwindows, wwindows, style)) {
+		return 1;
+	}
+
+	if (display_windows_apply_frame(dwindows, wwindows, &wwindows->restore_rect, SWP_SHOWWINDOW)) {
+		display_windows_set_style(dwindows, wwindows, DISPLAY_WINDOWS_STYLE_BORDERLESS);
+		return 1;
+	}
+
+	wwindows->fullscreen = 0;
 	return 0;
 }
 
