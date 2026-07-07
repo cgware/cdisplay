@@ -130,7 +130,7 @@ int main()
 	}
 
 	for (size_t i = 0; i < windows_cnt; i++) {
-		if (window_init(&windows[i].wnd, &display, 100 * i, 100 * i, 640, 480) == NULL) {
+		if (window_init(&windows[i].wnd, &display, 100 * (u16)i, 100 * (u16)i, 640, 480) == NULL) {
 			c_printf("failed to create window\n");
 			cleanup(&display, windows, windows_cnt, &fs, &proc, &ss);
 			mem_print(DST_STD());
@@ -154,7 +154,7 @@ int main()
 		c_printf("window[%zu]=%u\n", i, windows[i].id);
 	}
 
-	int open = windows_cnt;
+	int open = (int)windows_cnt;
 	while (open > 0) {
 		display_event_t event = {0};
 		if (display_wait_event(&display, &event)) {

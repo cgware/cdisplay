@@ -44,7 +44,8 @@ typedef struct display_windows_wndproc_api_s {
 #define DISPLAY_WINDOWS_EX_STYLE_NORMAL 0
 
 typedef struct display_windows_s {
-	HMODULE user32;
+	proc_t *proc;
+	void *user32;
 	HINSTANCE instance;
 	ATOM window_class;
 	register_class_exa_t RegisterClassExA;
@@ -120,11 +121,10 @@ static LRESULT CALLBACK display_windows_wndproc(HWND hwnd, UINT message, WPARAM 
 	return 0;
 }
 
-static int display_windows_load_proc(display_windows_t *dwindows, FARPROC *proc, const char *name)
+static int display_windows_load_proc(display_windows_t *dwindows, void **sym, strv_t name)
 {
-	*proc = GetProcAddress(dwindows->user32, name);
-	if (*proc == NULL) {
-		log_error("cdisplay", "display_windows", NULL, "failed to load user32 symbol: %s", name);
+	if (proc_dlsym(dwindows->proc, dwindows->user32, name, sym)) {
+		log_error("cdisplay", "display_windows", NULL, "failed to load user32 symbol: %.*s", name.len, name.data);
 		return 1;
 	}
 
@@ -133,33 +133,32 @@ static int display_windows_load_proc(display_windows_t *dwindows, FARPROC *proc,
 
 static int display_windows_load_user32(display_windows_t *dwindows)
 {
-	dwindows->user32 = LoadLibraryA("user32.dll");
-	if (dwindows->user32 == NULL) {
+	if (proc_dlopen(dwindows->proc, STRV("user32.dll"), &dwindows->user32)) {
 		log_error("cdisplay", "display_windows", NULL, "failed to load user32.dll");
 		return 1;
 	}
 
-	if (display_windows_load_proc(dwindows, (FARPROC *)&dwindows->RegisterClassExA, "RegisterClassExA") ||
-	    display_windows_load_proc(dwindows, (FARPROC *)&dwindows->UnregisterClassA, "UnregisterClassA") ||
-	    display_windows_load_proc(dwindows, (FARPROC *)&dwindows->CreateWindowExA, "CreateWindowExA") ||
-	    display_windows_load_proc(dwindows, (FARPROC *)&dwindows->DestroyWindow, "DestroyWindow") ||
-	    display_windows_load_proc(dwindows, (FARPROC *)&dwindows->ShowWindow, "ShowWindow") ||
-	    display_windows_load_proc(dwindows, (FARPROC *)&dwindows->UpdateWindow, "UpdateWindow") ||
-	    display_windows_load_proc(dwindows, (FARPROC *)&dwindows->SetWindowTextA, "SetWindowTextA") ||
-	    display_windows_load_proc(dwindows, (FARPROC *)&dwindows->SetWindowPos, "SetWindowPos") ||
-	    display_windows_load_proc(dwindows, (FARPROC *)&dwindows->AdjustWindowRectEx, "AdjustWindowRectEx") ||
-	    display_windows_load_proc(dwindows, (FARPROC *)&dwindows->GetWindowRect, "GetWindowRect") ||
-	    display_windows_load_proc(dwindows, (FARPROC *)&dwindows->MonitorFromWindow, "MonitorFromWindow") ||
-	    display_windows_load_proc(dwindows, (FARPROC *)&dwindows->GetMonitorInfoA, "GetMonitorInfoA") ||
-	    display_windows_load_proc(dwindows, (FARPROC *)&dwindows->ScreenToClient, "ScreenToClient") ||
-	    display_windows_load_proc(dwindows, (FARPROC *)&dwindows->PeekMessageA, "PeekMessageA") ||
-	    display_windows_load_proc(dwindows, (FARPROC *)&dwindows->GetMessageA, "GetMessageA") ||
-	    display_windows_load_proc(dwindows, (FARPROC *)&dwindows->TranslateMessage, "TranslateMessage") ||
-	    display_windows_load_proc(dwindows, (FARPROC *)&dwindows->DispatchMessageA, "DispatchMessageA") ||
-	    display_windows_load_proc(dwindows, (FARPROC *)&dwindows->DefWindowProcA, "DefWindowProcA") ||
-	    display_windows_load_proc(dwindows, (FARPROC *)&dwindows->GetWindowLongPtrA, DISPLAY_WINDOWS_GET_WINDOW_LONG_PTR) ||
-	    display_windows_load_proc(dwindows, (FARPROC *)&dwindows->SetWindowLongPtrA, DISPLAY_WINDOWS_SET_WINDOW_LONG_PTR)) {
-		FreeLibrary(dwindows->user32);
+	if (display_windows_load_proc(dwindows, (void **)&dwindows->RegisterClassExA, STRV("RegisterClassExA")) ||
+	    display_windows_load_proc(dwindows, (void **)&dwindows->UnregisterClassA, STRV("UnregisterClassA")) ||
+	    display_windows_load_proc(dwindows, (void **)&dwindows->CreateWindowExA, STRV("CreateWindowExA")) ||
+	    display_windows_load_proc(dwindows, (void **)&dwindows->DestroyWindow, STRV("DestroyWindow")) ||
+	    display_windows_load_proc(dwindows, (void **)&dwindows->ShowWindow, STRV("ShowWindow")) ||
+	    display_windows_load_proc(dwindows, (void **)&dwindows->UpdateWindow, STRV("UpdateWindow")) ||
+	    display_windows_load_proc(dwindows, (void **)&dwindows->SetWindowTextA, STRV("SetWindowTextA")) ||
+	    display_windows_load_proc(dwindows, (void **)&dwindows->SetWindowPos, STRV("SetWindowPos")) ||
+	    display_windows_load_proc(dwindows, (void **)&dwindows->AdjustWindowRectEx, STRV("AdjustWindowRectEx")) ||
+	    display_windows_load_proc(dwindows, (void **)&dwindows->GetWindowRect, STRV("GetWindowRect")) ||
+	    display_windows_load_proc(dwindows, (void **)&dwindows->MonitorFromWindow, STRV("MonitorFromWindow")) ||
+	    display_windows_load_proc(dwindows, (void **)&dwindows->GetMonitorInfoA, STRV("GetMonitorInfoA")) ||
+	    display_windows_load_proc(dwindows, (void **)&dwindows->ScreenToClient, STRV("ScreenToClient")) ||
+	    display_windows_load_proc(dwindows, (void **)&dwindows->PeekMessageA, STRV("PeekMessageA")) ||
+	    display_windows_load_proc(dwindows, (void **)&dwindows->GetMessageA, STRV("GetMessageA")) ||
+	    display_windows_load_proc(dwindows, (void **)&dwindows->TranslateMessage, STRV("TranslateMessage")) ||
+	    display_windows_load_proc(dwindows, (void **)&dwindows->DispatchMessageA, STRV("DispatchMessageA")) ||
+	    display_windows_load_proc(dwindows, (void **)&dwindows->DefWindowProcA, STRV("DefWindowProcA")) ||
+	    display_windows_load_proc(dwindows, (void **)&dwindows->GetWindowLongPtrA, STRV(DISPLAY_WINDOWS_GET_WINDOW_LONG_PTR)) ||
+	    display_windows_load_proc(dwindows, (void **)&dwindows->SetWindowLongPtrA, STRV(DISPLAY_WINDOWS_SET_WINDOW_LONG_PTR))) {
+		proc_dlclose(dwindows->proc, dwindows->user32);
 		dwindows->user32 = NULL;
 		return 1;
 	}
@@ -675,11 +674,16 @@ static int display_windows_init(display_t *display)
 	mem_set(display->data, 0, sizeof(display_windows_t));
 
 	display_windows_t *dwindows = display->data;
-	dwindows->instance	    = GetModuleHandleA(NULL);
+	dwindows->proc		    = display->proc;
+	if (proc_dlmain(dwindows->proc, (void **)&dwindows->instance)) {
+		mem_free(display->data, sizeof(display_windows_t));
+		display->data = NULL;
+		return 1;
+	}
 
 	if (display_windows_load_user32(dwindows)) {
 		if (dwindows->user32 != NULL) {
-			FreeLibrary(dwindows->user32);
+			proc_dlclose(dwindows->proc, dwindows->user32);
 		}
 		mem_free(display->data, sizeof(display_windows_t));
 		display->data = NULL;
@@ -690,7 +694,7 @@ static int display_windows_init(display_t *display)
 
 	if (display_windows_register_class(dwindows)) {
 		s_wndproc_api = NULL;
-		FreeLibrary(dwindows->user32);
+		proc_dlclose(dwindows->proc, dwindows->user32);
 		mem_free(display->data, sizeof(display_windows_t));
 		display->data = NULL;
 		return 1;
@@ -714,7 +718,7 @@ static int display_windows_free(display_t *display)
 			s_wndproc_api = NULL;
 		}
 		if (dwindows->user32 != NULL) {
-			FreeLibrary(dwindows->user32);
+			proc_dlclose(dwindows->proc, dwindows->user32);
 		}
 		mem_free(dwindows, sizeof(display_windows_t));
 	}
