@@ -1479,9 +1479,9 @@ static int configure_window(window_t *wnd, u32 value_mask, const u32 *values, si
 	return 0;
 }
 
-static int display_x11_poll_event(display_t *display, display_event_t *event)
+static int display_x11_poll_events(display_t *display)
 {
-	if (display == NULL || event == NULL) {
+	if (display == NULL) {
 		return 1;
 	}
 
@@ -1492,25 +1492,34 @@ static int display_x11_poll_event(display_t *display, display_event_t *event)
 	}
 
 	int ret;
+	display_event_t event = {0};
 	do {
-		ret = read_x11_event(display, event);
+		ret = read_x11_event(display, &event);
 	} while (ret == X11_EVENT_IGNORED);
 
 	ret = sock_set_flags(display->ss, dx11->sock, flags) ? 1 : ret;
+	if (ret == 0) {
+		display_emit_event(display, &event);
+	}
 
 	return ret;
 }
 
-static int display_x11_wait_event(display_t *display, display_event_t *event)
+static int display_x11_wait_events(display_t *display)
 {
-	if (display == NULL || event == NULL) {
+	if (display == NULL) {
 		return 1;
 	}
 
 	int ret;
+	display_event_t event = {0};
 	do {
-		ret = read_x11_event(display, event);
+		ret = read_x11_event(display, &event);
 	} while (ret == X11_EVENT_IGNORED);
+
+	if (ret == 0) {
+		display_emit_event(display, &event);
+	}
 
 	return ret;
 }
@@ -1701,8 +1710,8 @@ static display_driver_t display_x11 = {
 	.name		       = "X11",
 	.init		       = display_x11_init,
 	.free		       = display_x11_free,
-	.poll_event	       = display_x11_poll_event,
-	.wait_event	       = display_x11_wait_event,
+	.poll_events	       = display_x11_poll_events,
+	.wait_events	       = display_x11_wait_events,
 	.window_init	       = display_x11_window_init,
 	.window_free	       = display_x11_window_free,
 	.window_id	       = display_x11_window_id,

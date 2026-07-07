@@ -10,8 +10,8 @@ typedef struct display_driver_s {
 	const char *name;
 	int (*init)(display_t *display);
 	int (*free)(display_t *display);
-	int (*poll_event)(display_t *display, display_event_t *event);
-	int (*wait_event)(display_t *display, display_event_t *event);
+	int (*poll_events)(display_t *display);
+	int (*wait_events)(display_t *display);
 	int (*window_init)(window_t *window, u16 x, u16 y, u16 width, u16 height);
 	int (*window_free)(window_t *window);
 	u32 (*window_id)(window_t *window);
@@ -26,6 +26,8 @@ typedef struct display_driver_s {
 	sock_t *ss;
 	alloc_t alloc;
 } display_driver_t;
+
+void display_emit_event(display_t *display, const display_event_t *event);
 
 #define DISPLAY_DRIVER_TYPE 1
 

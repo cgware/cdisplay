@@ -53,6 +53,8 @@ typedef struct t_windows_state_s {
 } t_windows_state_t;
 
 static t_windows_state_t t_windows;
+static int t_windows_event_calls;
+static display_event_t t_windows_event;
 
 static void t_windows_reset(void)
 {
@@ -62,6 +64,16 @@ static void t_windows_reset(void)
 		.rect	 = {11, 22, 333, 444},
 		.monitor = {0, 0, 1920, 1080},
 	};
+	t_windows_event_calls = 0;
+	t_windows_event	     = (display_event_t){0};
+}
+
+static void t_windows_event_cb(display_t *display, const display_event_t *event, void *user)
+{
+	(void)display;
+	(void)user;
+	t_windows_event_calls++;
+	t_windows_event = *event;
 }
 
 static display_driver_t *t_windows_driver(void)
@@ -256,11 +268,11 @@ static LRESULT WINAPI t_DispatchMessageA(const MSG *msg)
 
 static LRESULT WINAPI t_DefWindowProcA(HWND hwnd, UINT message, WPARAM wparam, LPARAM lparam)
 {
-	(void)hwnd;
-	(void)message;
-	(void)wparam;
 	(void)lparam;
 	t_windows.def_window_proc_calls++;
+	if (message == WM_NCLBUTTONDOWN && wparam == HTCLOSE && t_windows.wndproc != NULL) {
+		return t_windows.wndproc(hwnd, WM_SYSCOMMAND, SC_CLOSE, 0);
+	}
 	return 0;
 }
 
@@ -345,6 +357,7 @@ static int t_windows_open(display_t *display, window_t *window, fs_t *fs, proc_t
 	if (display_init(display, drv, fs, proc, ss, ALLOC_STD) == NULL) {
 		return 1;
 	}
+	display_set_event_callback(display, t_windows_event_cb, NULL);
 	if (window != NULL && window_init(window, display, 10, 20, 640, 480) == NULL) {
 		display_free(display);
 		return 1;
@@ -656,9 +669,9 @@ TEST(display_windows_poll_event_returns_key)
 	EXPECT_EQ(t_windows_open(&display, &window, &fs, &proc, &ss), 0);
 	t_windows_push(t_windows.hwnd, WM_KEYDOWN, VK_F11, 0);
 
-	EXPECT_EQ(display_poll_event(&display, &event), 0);
-	EXPECT_EQ(event.type, DISPLAY_EVENT_KEY_DOWN);
-	EXPECT_EQ(event.key, DISPLAY_KEY_F11);
+	EXPECT_EQ(display_poll_events(&display), 0);
+	EXPECT_EQ(t_windows_event.type, DISPLAY_EVENT_KEY_DOWN);
+	EXPECT_EQ(t_windows_event.key, DISPLAY_KEY_F11);
 	EXPECT_EQ(t_windows.dispatch_message_calls, 1);
 
 	window_free(&window);
@@ -684,11 +697,11 @@ TEST(display_windows_poll_event_returns_mouse_move)
 	EXPECT_EQ(t_windows_open(&display, &window, &fs, &proc, &ss), 0);
 	t_windows_push(t_windows.hwnd, WM_MOUSEMOVE, MK_LBUTTON, t_windows_point(7, 8));
 
-	EXPECT_EQ(display_poll_event(&display, &event), 0);
-	EXPECT_EQ(event.type, DISPLAY_EVENT_MOUSE_MOVE);
-	EXPECT_EQ(event.x, 7);
-	EXPECT_EQ(event.y, 8);
-	EXPECT_EQ(event.modifiers, DISPLAY_MOD_MOUSE_LEFT);
+	EXPECT_EQ(display_poll_events(&display), 0);
+	EXPECT_EQ(t_windows_event.type, DISPLAY_EVENT_MOUSE_MOVE);
+	EXPECT_EQ(t_windows_event.x, 7);
+	EXPECT_EQ(t_windows_event.y, 8);
+	EXPECT_EQ(t_windows_event.modifiers, DISPLAY_MOD_MOUSE_LEFT);
 
 	window_free(&window);
 	display_free(&display);
@@ -713,10 +726,10 @@ TEST(display_windows_poll_event_returns_mouse_button)
 	EXPECT_EQ(t_windows_open(&display, &window, &fs, &proc, &ss), 0);
 	t_windows_push(t_windows.hwnd, WM_RBUTTONDOWN, MK_RBUTTON, t_windows_point(9, 10));
 
-	EXPECT_EQ(display_poll_event(&display, &event), 0);
-	EXPECT_EQ(event.type, DISPLAY_EVENT_MOUSE_DOWN);
-	EXPECT_EQ(event.button, DISPLAY_MOUSE_RIGHT);
-	EXPECT_EQ(event.modifiers, DISPLAY_MOD_MOUSE_RIGHT);
+	EXPECT_EQ(display_poll_events(&display), 0);
+	EXPECT_EQ(t_windows_event.type, DISPLAY_EVENT_MOUSE_DOWN);
+	EXPECT_EQ(t_windows_event.button, DISPLAY_MOUSE_RIGHT);
+	EXPECT_EQ(t_windows_event.modifiers, DISPLAY_MOD_MOUSE_RIGHT);
 
 	window_free(&window);
 	display_free(&display);
@@ -741,12 +754,132 @@ TEST(display_windows_poll_event_returns_mouse_wheel)
 	EXPECT_EQ(t_windows_open(&display, &window, &fs, &proc, &ss), 0);
 	t_windows_push(t_windows.hwnd, WM_MOUSEWHEEL, ((WPARAM)WHEEL_DELTA << 16), t_windows_point(30, 50));
 
-	EXPECT_EQ(display_poll_event(&display, &event), 0);
-	EXPECT_EQ(event.type, DISPLAY_EVENT_MOUSE_DOWN);
-	EXPECT_EQ(event.button, DISPLAY_MOUSE_WHEEL_UP);
-	EXPECT_EQ(event.x, 20);
-	EXPECT_EQ(event.y, 30);
+	EXPECT_EQ(display_poll_events(&display), 0);
+	EXPECT_EQ(t_windows_event.type, DISPLAY_EVENT_MOUSE_DOWN);
+	EXPECT_EQ(t_windows_event.button, DISPLAY_MOUSE_WHEEL_UP);
+	EXPECT_EQ(t_windows_event.x, 20);
+	EXPECT_EQ(t_windows_event.y, 30);
 	EXPECT_EQ(t_windows.screen_to_client_calls, 1);
+
+	window_free(&window);
+	display_free(&display);
+	t_windows_env_free(&fs, &proc, &ss);
+
+	END;
+}
+
+TEST(display_windows_poll_event_returns_nonclient_mouse_move)
+{
+	START;
+
+	t_windows_reset();
+	fs_t fs	    = {0};
+	proc_t proc = {0};
+	sock_t ss   = {0};
+	t_windows_env_init(&fs, &proc, &ss);
+	display_t display = {0};
+	window_t window	  = {0};
+	display_event_t event = {0};
+
+	EXPECT_EQ(t_windows_open(&display, &window, &fs, &proc, &ss), 0);
+	t_windows_push(t_windows.hwnd, WM_NCMOUSEMOVE, HTCLOSE, t_windows_point(30, 50));
+
+	EXPECT_EQ(display_poll_events(&display), 0);
+	EXPECT_EQ(t_windows_event.type, DISPLAY_EVENT_MOUSE_MOVE);
+	EXPECT_EQ(t_windows_event.x, 20);
+	EXPECT_EQ(t_windows_event.y, 30);
+	EXPECT_EQ(t_windows.screen_to_client_calls, 1);
+	EXPECT_EQ(t_windows.dispatch_message_calls, 1);
+
+	window_free(&window);
+	display_free(&display);
+	t_windows_env_free(&fs, &proc, &ss);
+
+	END;
+}
+
+TEST(display_windows_poll_event_returns_nonclient_mouse_button)
+{
+	START;
+
+	t_windows_reset();
+	fs_t fs	    = {0};
+	proc_t proc = {0};
+	sock_t ss   = {0};
+	t_windows_env_init(&fs, &proc, &ss);
+	display_t display = {0};
+	window_t window	  = {0};
+	display_event_t event = {0};
+
+	EXPECT_EQ(t_windows_open(&display, &window, &fs, &proc, &ss), 0);
+	t_windows_push(t_windows.hwnd, WM_NCLBUTTONDOWN, HTCAPTION, t_windows_point(30, 50));
+
+	EXPECT_EQ(display_poll_events(&display), 0);
+	EXPECT_EQ(t_windows_event.type, DISPLAY_EVENT_MOUSE_DOWN);
+	EXPECT_EQ(t_windows_event.button, DISPLAY_MOUSE_LEFT);
+	EXPECT_EQ(t_windows_event.x, 20);
+	EXPECT_EQ(t_windows_event.y, 30);
+	EXPECT_EQ(t_windows_event.modifiers, DISPLAY_MOD_MOUSE_LEFT);
+	EXPECT_EQ(t_windows.dispatch_message_calls, 1);
+
+	window_free(&window);
+	display_free(&display);
+	t_windows_env_free(&fs, &proc, &ss);
+
+	END;
+}
+
+TEST(display_windows_poll_event_returns_close_from_nonclient_close_button)
+{
+	START;
+
+	t_windows_reset();
+	fs_t fs	    = {0};
+	proc_t proc = {0};
+	sock_t ss   = {0};
+	t_windows_env_init(&fs, &proc, &ss);
+	display_t display = {0};
+	window_t window	  = {0};
+	display_event_t event = {0};
+
+	EXPECT_EQ(t_windows_open(&display, &window, &fs, &proc, &ss), 0);
+	int def_window_proc_calls = t_windows.def_window_proc_calls;
+	t_windows_push(t_windows.hwnd, WM_NCLBUTTONDOWN, HTCLOSE, t_windows_point(30, 50));
+
+	EXPECT_EQ(display_poll_events(&display), 0);
+	EXPECT_EQ(t_windows_event.type, DISPLAY_EVENT_CLOSE);
+	EXPECT_EQ(t_windows_event.window, (u32)(uintptr_t)t_windows.hwnd);
+	EXPECT_EQ(t_windows.dispatch_message_calls, 1);
+	EXPECT_EQ(t_windows.def_window_proc_calls, def_window_proc_calls + 1);
+
+	window_free(&window);
+	display_free(&display);
+	t_windows_env_free(&fs, &proc, &ss);
+
+	END;
+}
+
+TEST(display_windows_poll_event_skips_silent_system_messages)
+{
+	START;
+
+	t_windows_reset();
+	fs_t fs	    = {0};
+	proc_t proc = {0};
+	sock_t ss   = {0};
+	t_windows_env_init(&fs, &proc, &ss);
+	display_t display = {0};
+	window_t window	  = {0};
+	display_event_t event = {0};
+
+	EXPECT_EQ(t_windows_open(&display, &window, &fs, &proc, &ss), 0);
+	t_windows_push(t_windows.hwnd, 0x0060, 6, 0);
+	t_windows_push(t_windows.hwnd, WM_TIMER, 1, 0);
+	t_windows_push(t_windows.hwnd, WM_CLOSE, 0, 0);
+
+	EXPECT_EQ(display_poll_events(&display), 0);
+	EXPECT_EQ(t_windows_event.type, DISPLAY_EVENT_CLOSE);
+	EXPECT_EQ(t_windows.dispatch_message_calls, 2);
 
 	window_free(&window);
 	display_free(&display);
@@ -771,8 +904,36 @@ TEST(display_windows_wait_event_returns_close_without_dispatch)
 	EXPECT_EQ(t_windows_open(&display, &window, &fs, &proc, &ss), 0);
 	t_windows_push(t_windows.hwnd, WM_CLOSE, 0, 0);
 
-	EXPECT_EQ(display_wait_event(&display, &event), 0);
-	EXPECT_EQ(event.type, DISPLAY_EVENT_CLOSE);
+	EXPECT_EQ(display_wait_events(&display), 0);
+	EXPECT_EQ(t_windows_event.type, DISPLAY_EVENT_CLOSE);
+	EXPECT_EQ(t_windows.dispatch_message_calls, 0);
+
+	window_free(&window);
+	display_free(&display);
+	t_windows_env_free(&fs, &proc, &ss);
+
+	END;
+}
+
+TEST(display_windows_wait_event_returns_syscommand_close_without_dispatch)
+{
+	START;
+
+	t_windows_reset();
+	fs_t fs	    = {0};
+	proc_t proc = {0};
+	sock_t ss   = {0};
+	t_windows_env_init(&fs, &proc, &ss);
+	display_t display = {0};
+	window_t window	  = {0};
+	display_event_t event = {0};
+
+	EXPECT_EQ(t_windows_open(&display, &window, &fs, &proc, &ss), 0);
+	t_windows_push(t_windows.hwnd, WM_SYSCOMMAND, SC_CLOSE, 0);
+
+	EXPECT_EQ(display_wait_events(&display), 0);
+	EXPECT_EQ(t_windows_event.type, DISPLAY_EVENT_CLOSE);
+	EXPECT_EQ(t_windows_event.window, (u32)(uintptr_t)t_windows.hwnd);
 	EXPECT_EQ(t_windows.dispatch_message_calls, 0);
 
 	window_free(&window);
@@ -802,7 +963,12 @@ STEST(display_windows)
 	RUN(display_windows_poll_event_returns_mouse_move);
 	RUN(display_windows_poll_event_returns_mouse_button);
 	RUN(display_windows_poll_event_returns_mouse_wheel);
+	RUN(display_windows_poll_event_returns_nonclient_mouse_move);
+	RUN(display_windows_poll_event_returns_nonclient_mouse_button);
+	RUN(display_windows_poll_event_returns_close_from_nonclient_close_button);
+	RUN(display_windows_poll_event_skips_silent_system_messages);
 	RUN(display_windows_wait_event_returns_close_without_dispatch);
+	RUN(display_windows_wait_event_returns_syscommand_close_without_dispatch);
 
 	SEND;
 }

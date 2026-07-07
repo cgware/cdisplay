@@ -170,19 +170,25 @@ typedef struct display_event_s {
 	display_modifier_t modifiers;
 } display_event_t;
 
-typedef struct display_s {
+typedef struct display_s display_t;
+typedef void (*display_event_cb_t)(display_t *display, const display_event_t *event, void *user);
+
+struct display_s {
 	const struct display_driver_s *drv;
 	fs_t *fs;
 	proc_t *proc;
 	sock_t *ss;
 	alloc_t alloc;
+	display_event_cb_t event_cb;
+	void *event_user;
 	void *data;
-} display_t;
+};
 
 display_t *display_init(display_t *display, struct display_driver_s *drv, fs_t *fs, proc_t *proc, sock_t *ss, alloc_t alloc);
 void display_free(display_t *display);
-int display_poll_event(display_t *display, display_event_t *event);
-int display_wait_event(display_t *display, display_event_t *event);
+int display_set_event_callback(display_t *display, display_event_cb_t cb, void *user);
+int display_poll_events(display_t *display);
+int display_wait_events(display_t *display);
 const char *display_event_type_name(display_event_type_t type);
 const char *display_key_name(display_key_t key);
 const char *display_mouse_name(display_mouse_t button);

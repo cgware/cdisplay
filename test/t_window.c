@@ -41,17 +41,15 @@ static int t_window_display_free(display_t *display)
 	return 0;
 }
 
-static int t_window_poll_event(display_t *display, display_event_t *event)
+static int t_window_poll_events(display_t *display)
 {
 	(void)display;
-	(void)event;
 	return 1;
 }
 
-static int t_window_wait_event(display_t *display, display_event_t *event)
+static int t_window_wait_events(display_t *display)
 {
 	(void)display;
-	(void)event;
 	return 1;
 }
 
@@ -139,8 +137,8 @@ static display_driver_t t_window_driver = {
 	.name		       = "test",
 	.init		       = t_window_display_init,
 	.free		       = t_window_display_free,
-	.poll_event	       = t_window_poll_event,
-	.wait_event	       = t_window_wait_event,
+	.poll_events	       = t_window_poll_events,
+	.wait_events	       = t_window_wait_events,
 	.window_init	       = t_window_driver_init,
 	.window_free	       = t_window_driver_free,
 	.window_id	       = t_window_driver_id,

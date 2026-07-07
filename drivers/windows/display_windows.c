@@ -42,6 +42,7 @@ typedef struct display_windows_wndproc_api_s {
 #define DISPLAY_WINDOWS_STYLE_NORMAL WS_OVERLAPPEDWINDOW
 #define DISPLAY_WINDOWS_STYLE_BORDERLESS WS_POPUP
 #define DISPLAY_WINDOWS_EX_STYLE_NORMAL 0
+#define DISPLAY_WINDOWS_WM_INTERNAL_0X0060 0x0060
 
 typedef struct display_windows_s {
 	proc_t *proc;
@@ -69,6 +70,7 @@ typedef struct display_windows_s {
 	get_window_long_ptra_t GetWindowLongPtrA;
 	set_window_long_ptra_t SetWindowLongPtrA;
 	display_windows_wndproc_api_t wndproc_api;
+	size_t emitted;
 } display_windows_t;
 
 typedef struct window_windows_s {
@@ -85,6 +87,26 @@ typedef struct window_windows_s {
 } window_windows_t;
 
 static display_windows_wndproc_api_t *s_wndproc_api;
+
+static void display_windows_emit_event(display_t *display, const display_event_t *event)
+{
+	display_windows_t *dwindows = display == NULL ? NULL : display->data;
+	if (dwindows != NULL) {
+		dwindows->emitted++;
+	}
+
+	display_emit_event(display, event);
+}
+
+static void display_windows_wndproc_emit_close(display_t *display, HWND hwnd)
+{
+	display_event_t event = {
+		.type	= DISPLAY_EVENT_CLOSE,
+		.window = (u32)(uintptr_t)hwnd,
+	};
+
+	display_windows_emit_event(display, &event);
+}
 
 static LRESULT CALLBACK display_windows_wndproc(HWND hwnd, UINT message, WPARAM wparam, LPARAM lparam)
 {
@@ -105,6 +127,14 @@ static LRESULT CALLBACK display_windows_wndproc(HWND hwnd, UINT message, WPARAM 
 		if (wnd != NULL && wnd->display != NULL) {
 			dwindows = wnd->display->data;
 		}
+	}
+
+	if (dwindows != NULL && (message == WM_CLOSE || (message == WM_SYSCOMMAND && (wparam & 0xfff0) == SC_CLOSE))) {
+		window_t *wnd = (window_t *)dwindows->GetWindowLongPtrA(hwnd, GWLP_USERDATA);
+		if (wnd != NULL) {
+			display_windows_wndproc_emit_close(wnd->display, hwnd);
+		}
+		return 0;
 	}
 
 	if (message == WM_NCDESTROY && dwindows != NULL && dwindows->SetWindowLongPtrA != NULL) {
@@ -434,18 +464,30 @@ static display_mouse_t display_windows_mouse_from_message(const MSG *msg)
 	case WM_LBUTTONDOWN:
 	case WM_LBUTTONUP:
 	case WM_LBUTTONDBLCLK:
+	case WM_NCLBUTTONDOWN:
+	case WM_NCLBUTTONUP:
+	case WM_NCLBUTTONDBLCLK:
 		return DISPLAY_MOUSE_LEFT;
 	case WM_MBUTTONDOWN:
 	case WM_MBUTTONUP:
 	case WM_MBUTTONDBLCLK:
+	case WM_NCMBUTTONDOWN:
+	case WM_NCMBUTTONUP:
+	case WM_NCMBUTTONDBLCLK:
 		return DISPLAY_MOUSE_MIDDLE;
 	case WM_RBUTTONDOWN:
 	case WM_RBUTTONUP:
 	case WM_RBUTTONDBLCLK:
+	case WM_NCRBUTTONDOWN:
+	case WM_NCRBUTTONUP:
+	case WM_NCRBUTTONDBLCLK:
 		return DISPLAY_MOUSE_RIGHT;
 	case WM_XBUTTONDOWN:
 	case WM_XBUTTONUP:
 	case WM_XBUTTONDBLCLK:
+	case WM_NCXBUTTONDOWN:
+	case WM_NCXBUTTONUP:
+	case WM_NCXBUTTONDBLCLK:
 		switch (HIWORD(msg->wParam)) {
 		case XBUTTON1:
 			return DISPLAY_MOUSE_BACK;
@@ -474,8 +516,38 @@ static int display_windows_mouse_is_down(UINT message)
 	case WM_RBUTTONDBLCLK:
 	case WM_XBUTTONDOWN:
 	case WM_XBUTTONDBLCLK:
+	case WM_NCLBUTTONDOWN:
+	case WM_NCLBUTTONDBLCLK:
+	case WM_NCMBUTTONDOWN:
+	case WM_NCMBUTTONDBLCLK:
+	case WM_NCRBUTTONDOWN:
+	case WM_NCRBUTTONDBLCLK:
+	case WM_NCXBUTTONDOWN:
+	case WM_NCXBUTTONDBLCLK:
 	case WM_MOUSEWHEEL:
 	case WM_MOUSEHWHEEL:
+		return 1;
+	default:
+		return 0;
+	}
+}
+
+static int display_windows_mouse_is_nonclient(UINT message)
+{
+	switch (message) {
+	case WM_NCMOUSEMOVE:
+	case WM_NCLBUTTONDOWN:
+	case WM_NCLBUTTONUP:
+	case WM_NCLBUTTONDBLCLK:
+	case WM_NCMBUTTONDOWN:
+	case WM_NCMBUTTONUP:
+	case WM_NCMBUTTONDBLCLK:
+	case WM_NCRBUTTONDOWN:
+	case WM_NCRBUTTONUP:
+	case WM_NCRBUTTONDBLCLK:
+	case WM_NCXBUTTONDOWN:
+	case WM_NCXBUTTONUP:
+	case WM_NCXBUTTONDBLCLK:
 		return 1;
 	default:
 		return 0;
@@ -530,14 +602,17 @@ static int display_windows_translate_mouse_message(display_windows_t *dwindows, 
 
 	window_windows_t *wwindows = wnd->data;
 	int wheel		    = msg->message == WM_MOUSEWHEEL || msg->message == WM_MOUSEHWHEEL;
+	int nonclient		    = display_windows_mouse_is_nonclient(msg->message);
 
 	event->window = (u32)(uintptr_t)msg->hwnd;
-	if (display_windows_mouse_point(dwindows, msg, wheel, &event->x, &event->y)) {
+	if (display_windows_mouse_point(dwindows, msg, wheel || nonclient, &event->x, &event->y)) {
 		return 1;
 	}
 
-	if (msg->message == WM_MOUSEMOVE) {
-		display_windows_rebuild_mouse_modifiers(wwindows, msg->wParam);
+	if (msg->message == WM_MOUSEMOVE || msg->message == WM_NCMOUSEMOVE) {
+		if (!nonclient) {
+			display_windows_rebuild_mouse_modifiers(wwindows, msg->wParam);
+		}
 		event->type	 = DISPLAY_EVENT_MOUSE_MOVE;
 		event->modifiers = wwindows->modifiers;
 		return 0;
@@ -555,7 +630,16 @@ static int display_windows_translate_mouse_message(display_windows_t *dwindows, 
 		return 0;
 	}
 
-	display_windows_rebuild_mouse_modifiers(wwindows, msg->wParam);
+	if (nonclient) {
+		display_modifier_t modifier = display_windows_mouse_modifier(event->button);
+		if (display_windows_mouse_is_down(msg->message)) {
+			wwindows->modifiers = (display_modifier_t)(wwindows->modifiers | modifier);
+		} else {
+			wwindows->modifiers = (display_modifier_t)(wwindows->modifiers & ~modifier);
+		}
+	} else {
+		display_windows_rebuild_mouse_modifiers(wwindows, msg->wParam);
+	}
 	event->type	 = display_windows_mouse_is_down(msg->message) ? DISPLAY_EVENT_MOUSE_DOWN : DISPLAY_EVENT_MOUSE_UP;
 	event->modifiers = wwindows->modifiers;
 
@@ -587,7 +671,27 @@ static int display_windows_translate_message(display_windows_t *dwindows, const 
 	case WM_XBUTTONDBLCLK:
 	case WM_MOUSEWHEEL:
 	case WM_MOUSEHWHEEL:
+	case WM_NCMOUSEMOVE:
+	case WM_NCLBUTTONDOWN:
+	case WM_NCLBUTTONUP:
+	case WM_NCLBUTTONDBLCLK:
+	case WM_NCMBUTTONDOWN:
+	case WM_NCMBUTTONUP:
+	case WM_NCMBUTTONDBLCLK:
+	case WM_NCRBUTTONDOWN:
+	case WM_NCRBUTTONUP:
+	case WM_NCRBUTTONDBLCLK:
+	case WM_NCXBUTTONDOWN:
+	case WM_NCXBUTTONUP:
+	case WM_NCXBUTTONDBLCLK:
 		return display_windows_translate_mouse_message(dwindows, msg, event);
+	case WM_SYSCOMMAND:
+		if ((msg->wParam & 0xfff0) != SC_CLOSE) {
+			return 1;
+		}
+		event->type   = DISPLAY_EVENT_CLOSE;
+		event->window = (u32)(uintptr_t)msg->hwnd;
+		return 0;
 	case WM_CLOSE:
 		event->type   = DISPLAY_EVENT_CLOSE;
 		event->window = (u32)(uintptr_t)msg->hwnd;
@@ -603,6 +707,17 @@ static int display_windows_translate_message(display_windows_t *dwindows, const 
 	}
 }
 
+static int display_windows_message_is_silent(UINT message)
+{
+	switch (message) {
+	case WM_TIMER:
+	case DISPLAY_WINDOWS_WM_INTERNAL_0X0060:
+		return 1;
+	default:
+		return 0;
+	}
+}
+
 static int display_windows_dispatch_message(display_windows_t *dwindows, const MSG *msg)
 {
 	dwindows->TranslateMessage(msg);
@@ -610,10 +725,24 @@ static int display_windows_dispatch_message(display_windows_t *dwindows, const M
 	return 0;
 }
 
+static void display_windows_log_unhandled_message(const MSG *msg)
+{
+	log_warn(
+	    "cdisplay",
+	    "display_windows",
+	    NULL,
+	    "unhandled Windows message: hwnd=%p message=%u wParam=%p lParam=%p",
+	    msg->hwnd,
+	    msg->message,
+	    (void *)(uintptr_t)msg->wParam,
+	    (void *)(uintptr_t)msg->lParam);
+}
+
 static int display_windows_message_needs_dispatch(UINT message)
 {
 	switch (message) {
 	case WM_CLOSE:
+	case WM_SYSCOMMAND:
 		return 0;
 	default:
 		return 1;
@@ -726,9 +855,9 @@ static int display_windows_free(display_t *display)
 	return 0;
 }
 
-static int display_windows_poll_event(display_t *display, display_event_t *event)
+static int display_windows_poll_events(display_t *display)
 {
-	if (display == NULL || event == NULL) {
+	if (display == NULL) {
 		return 1;
 	}
 
@@ -739,22 +868,33 @@ static int display_windows_poll_event(display_t *display, display_event_t *event
 
 	MSG msg;
 	while (dwindows->PeekMessageA(&msg, NULL, 0, 0, PM_REMOVE)) {
-		if (display_windows_translate_message(dwindows, &msg, event) == 0) {
+		display_event_t event = {0};
+		size_t emitted		= dwindows->emitted;
+		if (display_windows_translate_message(dwindows, &msg, &event) == 0) {
 			if (display_windows_message_needs_dispatch(msg.message)) {
 				display_windows_dispatch_message(dwindows, &msg);
+				if (dwindows->emitted != emitted) {
+					return 0;
+				}
 			}
+			display_windows_emit_event(display, &event);
 			return 0;
 		}
+		if (!display_windows_message_is_silent(msg.message)) {
+			display_windows_log_unhandled_message(&msg);
+		}
 		display_windows_dispatch_message(dwindows, &msg);
+		if (dwindows->emitted != emitted) {
+			return 0;
+		}
 	}
 
-	*event = (display_event_t){0};
-	return 1;
+	return 0;
 }
 
-static int display_windows_wait_event(display_t *display, display_event_t *event)
+static int display_windows_wait_events(display_t *display)
 {
-	if (display == NULL || event == NULL) {
+	if (display == NULL) {
 		return 1;
 	}
 
@@ -765,16 +905,27 @@ static int display_windows_wait_event(display_t *display, display_event_t *event
 
 	MSG msg;
 	while (dwindows->GetMessageA(&msg, NULL, 0, 0) > 0) {
-		if (display_windows_translate_message(dwindows, &msg, event) == 0) {
+		display_event_t event = {0};
+		size_t emitted		= dwindows->emitted;
+		if (display_windows_translate_message(dwindows, &msg, &event) == 0) {
 			if (display_windows_message_needs_dispatch(msg.message)) {
 				display_windows_dispatch_message(dwindows, &msg);
+				if (dwindows->emitted != emitted) {
+					return 0;
+				}
 			}
+			display_windows_emit_event(display, &event);
 			return 0;
 		}
+		if (!display_windows_message_is_silent(msg.message)) {
+			display_windows_log_unhandled_message(&msg);
+		}
 		display_windows_dispatch_message(dwindows, &msg);
+		if (dwindows->emitted != emitted) {
+			return 0;
+		}
 	}
 
-	*event = (display_event_t){0};
 	return 1;
 }
 
@@ -1035,8 +1186,8 @@ static display_driver_t display_windows = {
 	.name		       = "windows",
 	.init		       = display_windows_init,
 	.free		       = display_windows_free,
-	.poll_event	       = display_windows_poll_event,
-	.wait_event	       = display_windows_wait_event,
+	.poll_events	       = display_windows_poll_events,
+	.wait_events	       = display_windows_wait_events,
 	.window_init	       = display_windows_window_init,
 	.window_free	       = display_windows_window_free,
 	.window_id	       = display_windows_window_id,

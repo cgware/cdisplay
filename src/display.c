@@ -21,6 +21,8 @@ display_t *display_init(display_t *display, struct display_driver_s *drv, fs_t *
 		display->proc  = NULL;
 		display->ss    = NULL;
 		display->alloc = (alloc_t){0};
+		display->event_cb   = NULL;
+		display->event_user = NULL;
 		display->data  = NULL;
 		return NULL;
 	}
@@ -40,25 +42,47 @@ void display_free(display_t *display)
 	display->proc  = NULL;
 	display->ss    = NULL;
 	display->alloc = (alloc_t){0};
+	display->event_cb   = NULL;
+	display->event_user = NULL;
 	display->data  = NULL;
 }
 
-int display_poll_event(display_t *display, display_event_t *event)
+int display_set_event_callback(display_t *display, display_event_cb_t cb, void *user)
 {
-	if (display == NULL || display->drv == NULL || display->drv->poll_event == NULL || event == NULL) {
+	if (display == NULL) {
 		return 1;
 	}
 
-	return display->drv->poll_event(display, event);
+	display->event_cb   = cb;
+	display->event_user = user;
+	return 0;
 }
 
-int display_wait_event(display_t *display, display_event_t *event)
+int display_poll_events(display_t *display)
 {
-	if (display == NULL || display->drv == NULL || display->drv->wait_event == NULL || event == NULL) {
+	if (display == NULL || display->drv == NULL || display->drv->poll_events == NULL) {
 		return 1;
 	}
 
-	return display->drv->wait_event(display, event);
+	return display->drv->poll_events(display);
+}
+
+int display_wait_events(display_t *display)
+{
+	if (display == NULL || display->drv == NULL || display->drv->wait_events == NULL) {
+		return 1;
+	}
+
+	return display->drv->wait_events(display);
+}
+
+void display_emit_event(display_t *display, const display_event_t *event)
+{
+	if (display == NULL || event == NULL || display->event_cb == NULL) {
+		return;
+	}
+
+	display->event_cb(display, event, display->event_user);
 }
 
 const char *display_event_type_name(display_event_type_t type)

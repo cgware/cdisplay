@@ -94,6 +94,23 @@ static display_driver_t *t_x11_driver(void)
 	return NULL;
 }
 
+static int t_x11_event_calls;
+static display_event_t t_x11_event;
+
+static void t_x11_event_reset(void)
+{
+	t_x11_event_calls = 0;
+	t_x11_event	  = (display_event_t){0};
+}
+
+static void t_x11_event_cb(display_t *display, const display_event_t *event, void *user)
+{
+	(void)display;
+	(void)user;
+	t_x11_event_calls++;
+	t_x11_event = *event;
+}
+
 static void t_x11_env_init(fs_t *fs, proc_t *proc, sock_t *ss)
 {
 	fs_init(fs, 8, 1, ALLOC_STD);
@@ -444,6 +461,8 @@ static void t_x11_open_window(display_driver_t *drv, fs_t *fs, proc_t *proc, soc
 	t_x11_script_setup(ss, *server);
 	log_set_quiet(0, 1);
 	display_init(display, drv, fs, proc, ss, ALLOC_STD);
+	t_x11_event_reset();
+	display_set_event_callback(display, t_x11_event_cb, NULL);
 	window_init(window, display, 0, 0, 640, 480);
 	log_set_quiet(0, 0);
 	sock_accept(ss, *server, peer);
@@ -1563,15 +1582,12 @@ TEST(display_x11_poll_event_no_event)
 	window_t window	      = {0};
 	void *server	      = NULL;
 	void *peer	      = NULL;
-	display_event_t event = {
-		.type = DISPLAY_EVENT_CLOSE,
-	};
 
 	t_x11_open_window(drv, &fs, &proc, &ss, &display, &window, &server, &peer);
 	log_set_quiet(0, 1);
-	EXPECT_EQ(display_poll_event(&display, &event), 1);
+	EXPECT_EQ(display_poll_events(&display), 1);
 	log_set_quiet(0, 0);
-	EXPECT_EQ(event.type, DISPLAY_EVENT_NONE);
+	EXPECT_EQ(t_x11_event.type, DISPLAY_EVENT_NONE);
 
 	window_free(&window);
 	display_free(&display);
@@ -1587,10 +1603,9 @@ TEST(display_x11_poll_event_null_display)
 	START;
 
 	display_driver_t *drv = t_x11_driver();
-	display_event_t event = {0};
 
 	EXPECT_NE(drv, NULL);
-	EXPECT_EQ(drv->poll_event(NULL, &event), 1);
+	EXPECT_EQ(drv->poll_events(NULL), 1);
 
 	END;
 }
@@ -1603,7 +1618,7 @@ TEST(display_x11_poll_event_null_event)
 	display_t display     = {0};
 
 	EXPECT_NE(drv, NULL);
-	EXPECT_EQ(drv->poll_event(&display, NULL), 1);
+	EXPECT_EQ(drv->poll_events(&display), 1);
 
 	END;
 }
@@ -1621,13 +1636,12 @@ TEST(display_x11_poll_event_get_flags_failure)
 	void *server	      = NULL;
 	void *peer	      = NULL;
 	sock_t *display_ss    = NULL;
-	display_event_t event = {0};
 
 	t_x11_open_window(drv, &fs, &proc, &ss, &display, &window, &server, &peer);
 	display_ss = display.ss;
 	display.ss = NULL;
 
-	EXPECT_EQ(drv->poll_event(&display, &event), 1);
+	EXPECT_EQ(drv->poll_events(&display), 1);
 
 	display.ss = display_ss;
 	window_free(&window);
@@ -1644,10 +1658,9 @@ TEST(display_x11_wait_event_null_display)
 	START;
 
 	display_driver_t *drv = t_x11_driver();
-	display_event_t event = {0};
 
 	EXPECT_NE(drv, NULL);
-	EXPECT_EQ(drv->wait_event(NULL, &event), 1);
+	EXPECT_EQ(drv->wait_events(NULL), 1);
 
 	END;
 }
@@ -1660,7 +1673,7 @@ TEST(display_x11_wait_event_null_event)
 	display_t display     = {0};
 
 	EXPECT_NE(drv, NULL);
-	EXPECT_EQ(drv->wait_event(&display, NULL), 1);
+	EXPECT_EQ(drv->wait_events(&display), 1);
 
 	END;
 }
@@ -1677,13 +1690,12 @@ TEST(display_x11_wait_event_unknown_event)
 	window_t window	      = {0};
 	void *server	      = NULL;
 	void *peer	      = NULL;
-	display_event_t event = {0};
 
 	t_x11_open_window(drv, &fs, &proc, &ss, &display, &window, &server, &peer);
 	t_x11_write_unknown_event(&ss, peer);
 
 	log_set_quiet(0, 1);
-	EXPECT_EQ(display_wait_event(&display, &event), 1);
+	EXPECT_EQ(display_wait_events(&display), 1);
 	log_set_quiet(0, 0);
 
 	window_free(&window);
@@ -1707,18 +1719,17 @@ TEST(display_x11_wait_event_configure_notify)
 	window_t window	      = {0};
 	void *server	      = NULL;
 	void *peer	      = NULL;
-	display_event_t event = {0};
 
 	t_x11_open_window(drv, &fs, &proc, &ss, &display, &window, &server, &peer);
 	t_x11_write_configure_event(&ss, peer, 0x00100000, 10, 20, 640, 480);
 
-	EXPECT_EQ(display_wait_event(&display, &event), 0);
-	EXPECT_EQ(event.type, DISPLAY_EVENT_RESIZE);
-	EXPECT_EQ(event.window, 0x00100000);
-	EXPECT_EQ(event.x, 10);
-	EXPECT_EQ(event.y, 20);
-	EXPECT_EQ(event.width, 640);
-	EXPECT_EQ(event.height, 480);
+	EXPECT_EQ(display_wait_events(&display), 0);
+	EXPECT_EQ(t_x11_event.type, DISPLAY_EVENT_RESIZE);
+	EXPECT_EQ(t_x11_event.window, 0x00100000);
+	EXPECT_EQ(t_x11_event.x, 10);
+	EXPECT_EQ(t_x11_event.y, 20);
+	EXPECT_EQ(t_x11_event.width, 640);
+	EXPECT_EQ(t_x11_event.height, 480);
 
 	window_free(&window);
 	display_free(&display);
@@ -1741,19 +1752,18 @@ TEST(display_x11_wait_event_skips_expose)
 	window_t window	      = {0};
 	void *server	      = NULL;
 	void *peer	      = NULL;
-	display_event_t event = {0};
 
 	t_x11_open_window(drv, &fs, &proc, &ss, &display, &window, &server, &peer);
 	t_x11_write_expose_event(&ss, peer, 0x00100000);
 	t_x11_write_configure_event(&ss, peer, 0x00100000, 10, 20, 640, 480);
 
-	EXPECT_EQ(display_wait_event(&display, &event), 0);
-	EXPECT_EQ(event.type, DISPLAY_EVENT_RESIZE);
-	EXPECT_EQ(event.window, 0x00100000);
-	EXPECT_EQ(event.x, 10);
-	EXPECT_EQ(event.y, 20);
-	EXPECT_EQ(event.width, 640);
-	EXPECT_EQ(event.height, 480);
+	EXPECT_EQ(display_wait_events(&display), 0);
+	EXPECT_EQ(t_x11_event.type, DISPLAY_EVENT_RESIZE);
+	EXPECT_EQ(t_x11_event.window, 0x00100000);
+	EXPECT_EQ(t_x11_event.x, 10);
+	EXPECT_EQ(t_x11_event.y, 20);
+	EXPECT_EQ(t_x11_event.width, 640);
+	EXPECT_EQ(t_x11_event.height, 480);
 
 	window_free(&window);
 	display_free(&display);
@@ -1776,19 +1786,18 @@ TEST(display_x11_wait_event_skips_map_notify)
 	window_t window	      = {0};
 	void *server	      = NULL;
 	void *peer	      = NULL;
-	display_event_t event = {0};
 
 	t_x11_open_window(drv, &fs, &proc, &ss, &display, &window, &server, &peer);
 	t_x11_write_map_event(&ss, peer, 0x00100000);
 	t_x11_write_configure_event(&ss, peer, 0x00100000, 10, 20, 640, 480);
 
-	EXPECT_EQ(display_wait_event(&display, &event), 0);
-	EXPECT_EQ(event.type, DISPLAY_EVENT_RESIZE);
-	EXPECT_EQ(event.window, 0x00100000);
-	EXPECT_EQ(event.x, 10);
-	EXPECT_EQ(event.y, 20);
-	EXPECT_EQ(event.width, 640);
-	EXPECT_EQ(event.height, 480);
+	EXPECT_EQ(display_wait_events(&display), 0);
+	EXPECT_EQ(t_x11_event.type, DISPLAY_EVENT_RESIZE);
+	EXPECT_EQ(t_x11_event.window, 0x00100000);
+	EXPECT_EQ(t_x11_event.x, 10);
+	EXPECT_EQ(t_x11_event.y, 20);
+	EXPECT_EQ(t_x11_event.width, 640);
+	EXPECT_EQ(t_x11_event.height, 480);
 
 	window_free(&window);
 	display_free(&display);
@@ -1811,19 +1820,18 @@ TEST(display_x11_wait_event_skips_unmap_notify)
 	window_t window	      = {0};
 	void *server	      = NULL;
 	void *peer	      = NULL;
-	display_event_t event = {0};
 
 	t_x11_open_window(drv, &fs, &proc, &ss, &display, &window, &server, &peer);
 	t_x11_write_unmap_event(&ss, peer, 0x00100000);
 	t_x11_write_configure_event(&ss, peer, 0x00100000, 10, 20, 640, 480);
 
-	EXPECT_EQ(display_wait_event(&display, &event), 0);
-	EXPECT_EQ(event.type, DISPLAY_EVENT_RESIZE);
-	EXPECT_EQ(event.window, 0x00100000);
-	EXPECT_EQ(event.x, 10);
-	EXPECT_EQ(event.y, 20);
-	EXPECT_EQ(event.width, 640);
-	EXPECT_EQ(event.height, 480);
+	EXPECT_EQ(display_wait_events(&display), 0);
+	EXPECT_EQ(t_x11_event.type, DISPLAY_EVENT_RESIZE);
+	EXPECT_EQ(t_x11_event.window, 0x00100000);
+	EXPECT_EQ(t_x11_event.x, 10);
+	EXPECT_EQ(t_x11_event.y, 20);
+	EXPECT_EQ(t_x11_event.width, 640);
+	EXPECT_EQ(t_x11_event.height, 480);
 
 	window_free(&window);
 	display_free(&display);
@@ -1846,19 +1854,18 @@ TEST(display_x11_wait_event_skips_reparent_notify)
 	window_t window	      = {0};
 	void *server	      = NULL;
 	void *peer	      = NULL;
-	display_event_t event = {0};
 
 	t_x11_open_window(drv, &fs, &proc, &ss, &display, &window, &server, &peer);
 	t_x11_write_reparent_event(&ss, peer, 0x00100000);
 	t_x11_write_configure_event(&ss, peer, 0x00100000, 10, 20, 640, 480);
 
-	EXPECT_EQ(display_wait_event(&display, &event), 0);
-	EXPECT_EQ(event.type, DISPLAY_EVENT_RESIZE);
-	EXPECT_EQ(event.window, 0x00100000);
-	EXPECT_EQ(event.x, 10);
-	EXPECT_EQ(event.y, 20);
-	EXPECT_EQ(event.width, 640);
-	EXPECT_EQ(event.height, 480);
+	EXPECT_EQ(display_wait_events(&display), 0);
+	EXPECT_EQ(t_x11_event.type, DISPLAY_EVENT_RESIZE);
+	EXPECT_EQ(t_x11_event.window, 0x00100000);
+	EXPECT_EQ(t_x11_event.x, 10);
+	EXPECT_EQ(t_x11_event.y, 20);
+	EXPECT_EQ(t_x11_event.width, 640);
+	EXPECT_EQ(t_x11_event.height, 480);
 
 	window_free(&window);
 	display_free(&display);
@@ -1881,19 +1888,18 @@ TEST(display_x11_wait_event_skips_mapping_notify)
 	window_t window	      = {0};
 	void *server	      = NULL;
 	void *peer	      = NULL;
-	display_event_t event = {0};
 
 	t_x11_open_window(drv, &fs, &proc, &ss, &display, &window, &server, &peer);
 	t_x11_write_mapping_event(&ss, peer);
 	t_x11_write_configure_event(&ss, peer, 0x00100000, 10, 20, 640, 480);
 
-	EXPECT_EQ(display_wait_event(&display, &event), 0);
-	EXPECT_EQ(event.type, DISPLAY_EVENT_RESIZE);
-	EXPECT_EQ(event.window, 0x00100000);
-	EXPECT_EQ(event.x, 10);
-	EXPECT_EQ(event.y, 20);
-	EXPECT_EQ(event.width, 640);
-	EXPECT_EQ(event.height, 480);
+	EXPECT_EQ(display_wait_events(&display), 0);
+	EXPECT_EQ(t_x11_event.type, DISPLAY_EVENT_RESIZE);
+	EXPECT_EQ(t_x11_event.window, 0x00100000);
+	EXPECT_EQ(t_x11_event.x, 10);
+	EXPECT_EQ(t_x11_event.y, 20);
+	EXPECT_EQ(t_x11_event.width, 640);
+	EXPECT_EQ(t_x11_event.height, 480);
 
 	window_free(&window);
 	display_free(&display);
@@ -1916,14 +1922,13 @@ TEST(display_x11_wait_event_client_message_close)
 	window_t window	      = {0};
 	void *server	      = NULL;
 	void *peer	      = NULL;
-	display_event_t event = {0};
 
 	t_x11_open_window(drv, &fs, &proc, &ss, &display, &window, &server, &peer);
 	t_x11_write_client_event(&ss, peer, 0x00100000);
 
-	EXPECT_EQ(display_wait_event(&display, &event), 0);
-	EXPECT_EQ(event.type, DISPLAY_EVENT_CLOSE);
-	EXPECT_EQ(event.window, 0x00100000);
+	EXPECT_EQ(display_wait_events(&display), 0);
+	EXPECT_EQ(t_x11_event.type, DISPLAY_EVENT_CLOSE);
+	EXPECT_EQ(t_x11_event.window, 0x00100000);
 
 	window_free(&window);
 	display_free(&display);
@@ -1946,15 +1951,14 @@ TEST(display_x11_wait_event_skips_unknown_client_message)
 	window_t window	      = {0};
 	void *server	      = NULL;
 	void *peer	      = NULL;
-	display_event_t event = {0};
 
 	t_x11_open_window(drv, &fs, &proc, &ss, &display, &window, &server, &peer);
 	t_x11_write_unknown_client_event(&ss, peer, 0x00100000);
 	t_x11_write_configure_event(&ss, peer, 0x00100000, 10, 20, 640, 480);
 
-	EXPECT_EQ(display_wait_event(&display, &event), 0);
-	EXPECT_EQ(event.type, DISPLAY_EVENT_RESIZE);
-	EXPECT_EQ(event.window, 0x00100000);
+	EXPECT_EQ(display_wait_events(&display), 0);
+	EXPECT_EQ(t_x11_event.type, DISPLAY_EVENT_RESIZE);
+	EXPECT_EQ(t_x11_event.window, 0x00100000);
 
 	window_free(&window);
 	display_free(&display);
@@ -1977,7 +1981,6 @@ TEST(display_x11_wait_event_inputs)
 	window_t window	      = {0};
 	void *server	      = NULL;
 	void *peer	      = NULL;
-	display_event_t event = {0};
 
 	t_x11_open_window(drv, &fs, &proc, &ss, &display, &window, &server, &peer);
 	t_x11_write_key_event(&ss, peer, 2, 38, 0x00100000, 11, 22, 1);
@@ -1989,46 +1992,46 @@ TEST(display_x11_wait_event_inputs)
 	t_x11_write_key_event(&ss, peer, 5, 1, 0x00100000, 14, 25, 8);
 	t_x11_write_motion_event(&ss, peer, 0x00100000, 15, 26, 16);
 
-	EXPECT_EQ(display_wait_event(&display, &event), 0);
-	EXPECT_EQ(event.type, DISPLAY_EVENT_KEY_DOWN);
-	EXPECT_EQ(event.window, 0x00100000);
-	EXPECT_EQ(event.key, DISPLAY_KEY_A);
-	EXPECT_EQ(event.x, 11);
-	EXPECT_EQ(event.y, 22);
-	EXPECT_EQ(event.modifiers, DISPLAY_MOD_SHIFT);
+	EXPECT_EQ(display_wait_events(&display), 0);
+	EXPECT_EQ(t_x11_event.type, DISPLAY_EVENT_KEY_DOWN);
+	EXPECT_EQ(t_x11_event.window, 0x00100000);
+	EXPECT_EQ(t_x11_event.key, DISPLAY_KEY_A);
+	EXPECT_EQ(t_x11_event.x, 11);
+	EXPECT_EQ(t_x11_event.y, 22);
+	EXPECT_EQ(t_x11_event.modifiers, DISPLAY_MOD_SHIFT);
 
-	EXPECT_EQ(display_wait_event(&display, &event), 0);
-	EXPECT_EQ(event.type, DISPLAY_EVENT_KEY_UP);
-	EXPECT_EQ(event.key, DISPLAY_KEY_A);
-	EXPECT_EQ(event.modifiers, DISPLAY_MOD_CAPS_LOCK);
+	EXPECT_EQ(display_wait_events(&display), 0);
+	EXPECT_EQ(t_x11_event.type, DISPLAY_EVENT_KEY_UP);
+	EXPECT_EQ(t_x11_event.key, DISPLAY_KEY_A);
+	EXPECT_EQ(t_x11_event.modifiers, DISPLAY_MOD_CAPS_LOCK);
 
-	EXPECT_EQ(display_wait_event(&display, &event), 0);
-	EXPECT_EQ(event.type, DISPLAY_EVENT_KEY_DOWN);
-	EXPECT_EQ(event.key, DISPLAY_KEY_ESCAPE);
+	EXPECT_EQ(display_wait_events(&display), 0);
+	EXPECT_EQ(t_x11_event.type, DISPLAY_EVENT_KEY_DOWN);
+	EXPECT_EQ(t_x11_event.key, DISPLAY_KEY_ESCAPE);
 
-	EXPECT_EQ(display_wait_event(&display, &event), 0);
-	EXPECT_EQ(event.type, DISPLAY_EVENT_KEY_DOWN);
-	EXPECT_EQ(event.key, DISPLAY_KEY_F1);
+	EXPECT_EQ(display_wait_events(&display), 0);
+	EXPECT_EQ(t_x11_event.type, DISPLAY_EVENT_KEY_DOWN);
+	EXPECT_EQ(t_x11_event.key, DISPLAY_KEY_F1);
 
-	EXPECT_EQ(display_wait_event(&display, &event), 0);
-	EXPECT_EQ(event.type, DISPLAY_EVENT_KEY_DOWN);
-	EXPECT_EQ(event.key, DISPLAY_KEY_UNKNOWN);
+	EXPECT_EQ(display_wait_events(&display), 0);
+	EXPECT_EQ(t_x11_event.type, DISPLAY_EVENT_KEY_DOWN);
+	EXPECT_EQ(t_x11_event.key, DISPLAY_KEY_UNKNOWN);
 
-	EXPECT_EQ(display_wait_event(&display, &event), 0);
-	EXPECT_EQ(event.type, DISPLAY_EVENT_MOUSE_DOWN);
-	EXPECT_EQ(event.button, DISPLAY_MOUSE_LEFT);
-	EXPECT_EQ(event.modifiers, DISPLAY_MOD_CONTROL);
+	EXPECT_EQ(display_wait_events(&display), 0);
+	EXPECT_EQ(t_x11_event.type, DISPLAY_EVENT_MOUSE_DOWN);
+	EXPECT_EQ(t_x11_event.button, DISPLAY_MOUSE_LEFT);
+	EXPECT_EQ(t_x11_event.modifiers, DISPLAY_MOD_CONTROL);
 
-	EXPECT_EQ(display_wait_event(&display, &event), 0);
-	EXPECT_EQ(event.type, DISPLAY_EVENT_MOUSE_UP);
-	EXPECT_EQ(event.button, DISPLAY_MOUSE_LEFT);
-	EXPECT_EQ(event.modifiers, DISPLAY_MOD_ALT);
+	EXPECT_EQ(display_wait_events(&display), 0);
+	EXPECT_EQ(t_x11_event.type, DISPLAY_EVENT_MOUSE_UP);
+	EXPECT_EQ(t_x11_event.button, DISPLAY_MOUSE_LEFT);
+	EXPECT_EQ(t_x11_event.modifiers, DISPLAY_MOD_ALT);
 
-	EXPECT_EQ(display_wait_event(&display, &event), 0);
-	EXPECT_EQ(event.type, DISPLAY_EVENT_MOUSE_MOVE);
-	EXPECT_EQ(event.x, 15);
-	EXPECT_EQ(event.y, 26);
-	EXPECT_EQ(event.modifiers, DISPLAY_MOD_NUM_LOCK);
+	EXPECT_EQ(display_wait_events(&display), 0);
+	EXPECT_EQ(t_x11_event.type, DISPLAY_EVENT_MOUSE_MOVE);
+	EXPECT_EQ(t_x11_event.x, 15);
+	EXPECT_EQ(t_x11_event.y, 26);
+	EXPECT_EQ(t_x11_event.modifiers, DISPLAY_MOD_NUM_LOCK);
 
 	window_free(&window);
 	display_free(&display);
@@ -2051,7 +2054,6 @@ TEST(display_x11_wait_event_mouse_buttons)
 	window_t window	      = {0};
 	void *server	      = NULL;
 	void *peer	      = NULL;
-	display_event_t event = {0};
 
 	t_x11_open_window(drv, &fs, &proc, &ss, &display, &window, &server, &peer);
 	t_x11_write_key_event(&ss, peer, 4, 2, 0x00100000, 10, 20, 1);
@@ -2064,41 +2066,41 @@ TEST(display_x11_wait_event_mouse_buttons)
 	t_x11_write_key_event(&ss, peer, 4, 9, 0x00100000, 17, 27, 8);
 	t_x11_write_key_event(&ss, peer, 4, 10, 0x00100000, 18, 28, 9);
 
-	EXPECT_EQ(display_wait_event(&display, &event), 0);
-	EXPECT_EQ(event.type, DISPLAY_EVENT_MOUSE_DOWN);
-	EXPECT_EQ(event.button, DISPLAY_MOUSE_MIDDLE);
+	EXPECT_EQ(display_wait_events(&display), 0);
+	EXPECT_EQ(t_x11_event.type, DISPLAY_EVENT_MOUSE_DOWN);
+	EXPECT_EQ(t_x11_event.button, DISPLAY_MOUSE_MIDDLE);
 
-	EXPECT_EQ(display_wait_event(&display, &event), 0);
-	EXPECT_EQ(event.type, DISPLAY_EVENT_MOUSE_DOWN);
-	EXPECT_EQ(event.button, DISPLAY_MOUSE_RIGHT);
+	EXPECT_EQ(display_wait_events(&display), 0);
+	EXPECT_EQ(t_x11_event.type, DISPLAY_EVENT_MOUSE_DOWN);
+	EXPECT_EQ(t_x11_event.button, DISPLAY_MOUSE_RIGHT);
 
-	EXPECT_EQ(display_wait_event(&display, &event), 0);
-	EXPECT_EQ(event.type, DISPLAY_EVENT_MOUSE_DOWN);
-	EXPECT_EQ(event.button, DISPLAY_MOUSE_WHEEL_UP);
+	EXPECT_EQ(display_wait_events(&display), 0);
+	EXPECT_EQ(t_x11_event.type, DISPLAY_EVENT_MOUSE_DOWN);
+	EXPECT_EQ(t_x11_event.button, DISPLAY_MOUSE_WHEEL_UP);
 
-	EXPECT_EQ(display_wait_event(&display, &event), 0);
-	EXPECT_EQ(event.type, DISPLAY_EVENT_MOUSE_DOWN);
-	EXPECT_EQ(event.button, DISPLAY_MOUSE_WHEEL_DOWN);
+	EXPECT_EQ(display_wait_events(&display), 0);
+	EXPECT_EQ(t_x11_event.type, DISPLAY_EVENT_MOUSE_DOWN);
+	EXPECT_EQ(t_x11_event.button, DISPLAY_MOUSE_WHEEL_DOWN);
 
-	EXPECT_EQ(display_wait_event(&display, &event), 0);
-	EXPECT_EQ(event.type, DISPLAY_EVENT_MOUSE_DOWN);
-	EXPECT_EQ(event.button, DISPLAY_MOUSE_WHEEL_LEFT);
+	EXPECT_EQ(display_wait_events(&display), 0);
+	EXPECT_EQ(t_x11_event.type, DISPLAY_EVENT_MOUSE_DOWN);
+	EXPECT_EQ(t_x11_event.button, DISPLAY_MOUSE_WHEEL_LEFT);
 
-	EXPECT_EQ(display_wait_event(&display, &event), 0);
-	EXPECT_EQ(event.type, DISPLAY_EVENT_MOUSE_DOWN);
-	EXPECT_EQ(event.button, DISPLAY_MOUSE_WHEEL_RIGHT);
+	EXPECT_EQ(display_wait_events(&display), 0);
+	EXPECT_EQ(t_x11_event.type, DISPLAY_EVENT_MOUSE_DOWN);
+	EXPECT_EQ(t_x11_event.button, DISPLAY_MOUSE_WHEEL_RIGHT);
 
-	EXPECT_EQ(display_wait_event(&display, &event), 0);
-	EXPECT_EQ(event.type, DISPLAY_EVENT_MOUSE_DOWN);
-	EXPECT_EQ(event.button, DISPLAY_MOUSE_BACK);
+	EXPECT_EQ(display_wait_events(&display), 0);
+	EXPECT_EQ(t_x11_event.type, DISPLAY_EVENT_MOUSE_DOWN);
+	EXPECT_EQ(t_x11_event.button, DISPLAY_MOUSE_BACK);
 
-	EXPECT_EQ(display_wait_event(&display, &event), 0);
-	EXPECT_EQ(event.type, DISPLAY_EVENT_MOUSE_DOWN);
-	EXPECT_EQ(event.button, DISPLAY_MOUSE_FORWARD);
+	EXPECT_EQ(display_wait_events(&display), 0);
+	EXPECT_EQ(t_x11_event.type, DISPLAY_EVENT_MOUSE_DOWN);
+	EXPECT_EQ(t_x11_event.button, DISPLAY_MOUSE_FORWARD);
 
-	EXPECT_EQ(display_wait_event(&display, &event), 0);
-	EXPECT_EQ(event.type, DISPLAY_EVENT_MOUSE_DOWN);
-	EXPECT_EQ(event.button, DISPLAY_MOUSE_UNKNOWN);
+	EXPECT_EQ(display_wait_events(&display), 0);
+	EXPECT_EQ(t_x11_event.type, DISPLAY_EVENT_MOUSE_DOWN);
+	EXPECT_EQ(t_x11_event.button, DISPLAY_MOUSE_UNKNOWN);
 
 	window_free(&window);
 	display_free(&display);
@@ -2121,7 +2123,6 @@ TEST(display_x11_wait_event_extended_keys)
 	window_t window	      = {0};
 	void *server	      = NULL;
 	void *peer	      = NULL;
-	display_event_t event = {0};
 
 	t_x11_open_window(drv, &fs, &proc, &ss, &display, &window, &server, &peer);
 	t_x11_write_key_event(&ss, peer, 2, 30, 0x00100000, 10, 20, 0);
@@ -2133,37 +2134,37 @@ TEST(display_x11_wait_event_extended_keys)
 	t_x11_write_key_event(&ss, peer, 2, 36, 0x00100000, 10, 20, 0);
 	t_x11_write_key_event(&ss, peer, 2, 37, 0x00100000, 10, 20, 0);
 
-	EXPECT_EQ(display_wait_event(&display, &event), 0);
-	EXPECT_EQ(event.type, DISPLAY_EVENT_KEY_DOWN);
-	EXPECT_EQ(event.key, DISPLAY_KEY_SCROLL_LOCK);
+	EXPECT_EQ(display_wait_events(&display), 0);
+	EXPECT_EQ(t_x11_event.type, DISPLAY_EVENT_KEY_DOWN);
+	EXPECT_EQ(t_x11_event.key, DISPLAY_KEY_SCROLL_LOCK);
 
-	EXPECT_EQ(display_wait_event(&display, &event), 0);
-	EXPECT_EQ(event.type, DISPLAY_EVENT_KEY_DOWN);
-	EXPECT_EQ(event.key, DISPLAY_KEY_PAUSE);
+	EXPECT_EQ(display_wait_events(&display), 0);
+	EXPECT_EQ(t_x11_event.type, DISPLAY_EVENT_KEY_DOWN);
+	EXPECT_EQ(t_x11_event.key, DISPLAY_KEY_PAUSE);
 
-	EXPECT_EQ(display_wait_event(&display, &event), 0);
-	EXPECT_EQ(event.type, DISPLAY_EVENT_KEY_DOWN);
-	EXPECT_EQ(event.key, DISPLAY_KEY_INSERT);
+	EXPECT_EQ(display_wait_events(&display), 0);
+	EXPECT_EQ(t_x11_event.type, DISPLAY_EVENT_KEY_DOWN);
+	EXPECT_EQ(t_x11_event.key, DISPLAY_KEY_INSERT);
 
-	EXPECT_EQ(display_wait_event(&display, &event), 0);
-	EXPECT_EQ(event.type, DISPLAY_EVENT_KEY_DOWN);
-	EXPECT_EQ(event.key, DISPLAY_KEY_DELETE);
+	EXPECT_EQ(display_wait_events(&display), 0);
+	EXPECT_EQ(t_x11_event.type, DISPLAY_EVENT_KEY_DOWN);
+	EXPECT_EQ(t_x11_event.key, DISPLAY_KEY_DELETE);
 
-	EXPECT_EQ(display_wait_event(&display, &event), 0);
-	EXPECT_EQ(event.type, DISPLAY_EVENT_KEY_DOWN);
-	EXPECT_EQ(event.key, DISPLAY_KEY_HOME);
+	EXPECT_EQ(display_wait_events(&display), 0);
+	EXPECT_EQ(t_x11_event.type, DISPLAY_EVENT_KEY_DOWN);
+	EXPECT_EQ(t_x11_event.key, DISPLAY_KEY_HOME);
 
-	EXPECT_EQ(display_wait_event(&display, &event), 0);
-	EXPECT_EQ(event.type, DISPLAY_EVENT_KEY_DOWN);
-	EXPECT_EQ(event.key, DISPLAY_KEY_END);
+	EXPECT_EQ(display_wait_events(&display), 0);
+	EXPECT_EQ(t_x11_event.type, DISPLAY_EVENT_KEY_DOWN);
+	EXPECT_EQ(t_x11_event.key, DISPLAY_KEY_END);
 
-	EXPECT_EQ(display_wait_event(&display, &event), 0);
-	EXPECT_EQ(event.type, DISPLAY_EVENT_KEY_DOWN);
-	EXPECT_EQ(event.key, DISPLAY_KEY_PAGE_UP);
+	EXPECT_EQ(display_wait_events(&display), 0);
+	EXPECT_EQ(t_x11_event.type, DISPLAY_EVENT_KEY_DOWN);
+	EXPECT_EQ(t_x11_event.key, DISPLAY_KEY_PAGE_UP);
 
-	EXPECT_EQ(display_wait_event(&display, &event), 0);
-	EXPECT_EQ(event.type, DISPLAY_EVENT_KEY_DOWN);
-	EXPECT_EQ(event.key, DISPLAY_KEY_PAGE_DOWN);
+	EXPECT_EQ(display_wait_events(&display), 0);
+	EXPECT_EQ(t_x11_event.type, DISPLAY_EVENT_KEY_DOWN);
+	EXPECT_EQ(t_x11_event.key, DISPLAY_KEY_PAGE_DOWN);
 
 	window_free(&window);
 	display_free(&display);
@@ -2186,7 +2187,6 @@ TEST(display_x11_wait_event_keypad_keys)
 	window_t window	      = {0};
 	void *server	      = NULL;
 	void *peer	      = NULL;
-	display_event_t event = {0};
 	u8 setup[72]	      = {0};
 	u8 atom_reply[256]    = {0};
 	buf_t keyboard	      = {0};
@@ -2206,6 +2206,8 @@ TEST(display_x11_wait_event_keypad_keys)
 		&ss, server, 1, setup, sizeof(setup), keyboard.data, keyboard.used, atom_reply, sizeof(atom_reply));
 	log_set_quiet(0, 1);
 	EXPECT_EQ(display_init(&display, drv, &fs, &proc, &ss, ALLOC_STD), &display);
+	t_x11_event_reset();
+	display_set_event_callback(&display, t_x11_event_cb, NULL);
 	EXPECT_EQ(window_init(&window, &display, 0, 0, 640, 480), &window);
 	log_set_quiet(0, 0);
 	sock_accept(&ss, server, &peer);
@@ -2214,95 +2216,95 @@ TEST(display_x11_wait_event_keypad_keys)
 		t_x11_write_key_event(&ss, peer, 2, keycode, 0x00100000, 10, 20, 0);
 	}
 
-	EXPECT_EQ(display_wait_event(&display, &event), 0);
-	EXPECT_EQ(event.key, DISPLAY_KEY_GRAVE);
+	EXPECT_EQ(display_wait_events(&display), 0);
+	EXPECT_EQ(t_x11_event.key, DISPLAY_KEY_GRAVE);
 
-	EXPECT_EQ(display_wait_event(&display, &event), 0);
-	EXPECT_EQ(event.key, DISPLAY_KEY_EQUAL);
+	EXPECT_EQ(display_wait_events(&display), 0);
+	EXPECT_EQ(t_x11_event.key, DISPLAY_KEY_EQUAL);
 
-	EXPECT_EQ(display_wait_event(&display, &event), 0);
-	EXPECT_EQ(event.key, DISPLAY_KEY_MINUS);
+	EXPECT_EQ(display_wait_events(&display), 0);
+	EXPECT_EQ(t_x11_event.key, DISPLAY_KEY_MINUS);
 
-	EXPECT_EQ(display_wait_event(&display, &event), 0);
-	EXPECT_EQ(event.key, DISPLAY_KEY_LEFT_BRACKET);
+	EXPECT_EQ(display_wait_events(&display), 0);
+	EXPECT_EQ(t_x11_event.key, DISPLAY_KEY_LEFT_BRACKET);
 
-	EXPECT_EQ(display_wait_event(&display, &event), 0);
-	EXPECT_EQ(event.key, DISPLAY_KEY_RIGHT_BRACKET);
+	EXPECT_EQ(display_wait_events(&display), 0);
+	EXPECT_EQ(t_x11_event.key, DISPLAY_KEY_RIGHT_BRACKET);
 
-	EXPECT_EQ(display_wait_event(&display, &event), 0);
-	EXPECT_EQ(event.key, DISPLAY_KEY_BACKSLASH);
+	EXPECT_EQ(display_wait_events(&display), 0);
+	EXPECT_EQ(t_x11_event.key, DISPLAY_KEY_BACKSLASH);
 
-	EXPECT_EQ(display_wait_event(&display, &event), 0);
-	EXPECT_EQ(event.key, DISPLAY_KEY_SEMICOLON);
+	EXPECT_EQ(display_wait_events(&display), 0);
+	EXPECT_EQ(t_x11_event.key, DISPLAY_KEY_SEMICOLON);
 
-	EXPECT_EQ(display_wait_event(&display, &event), 0);
-	EXPECT_EQ(event.key, DISPLAY_KEY_APOSTROPHE);
+	EXPECT_EQ(display_wait_events(&display), 0);
+	EXPECT_EQ(t_x11_event.key, DISPLAY_KEY_APOSTROPHE);
 
-	EXPECT_EQ(display_wait_event(&display, &event), 0);
-	EXPECT_EQ(event.key, DISPLAY_KEY_COMMA);
+	EXPECT_EQ(display_wait_events(&display), 0);
+	EXPECT_EQ(t_x11_event.key, DISPLAY_KEY_COMMA);
 
-	EXPECT_EQ(display_wait_event(&display, &event), 0);
-	EXPECT_EQ(event.key, DISPLAY_KEY_PERIOD);
+	EXPECT_EQ(display_wait_events(&display), 0);
+	EXPECT_EQ(t_x11_event.key, DISPLAY_KEY_PERIOD);
 
-	EXPECT_EQ(display_wait_event(&display, &event), 0);
-	EXPECT_EQ(event.key, DISPLAY_KEY_SLASH);
+	EXPECT_EQ(display_wait_events(&display), 0);
+	EXPECT_EQ(t_x11_event.key, DISPLAY_KEY_SLASH);
 
-	EXPECT_EQ(display_wait_event(&display, &event), 0);
-	EXPECT_EQ(event.key, DISPLAY_KEY_MENU);
+	EXPECT_EQ(display_wait_events(&display), 0);
+	EXPECT_EQ(t_x11_event.key, DISPLAY_KEY_MENU);
 
-	EXPECT_EQ(display_wait_event(&display, &event), 0);
-	EXPECT_EQ(event.key, DISPLAY_KEY_KP_DIVIDE);
+	EXPECT_EQ(display_wait_events(&display), 0);
+	EXPECT_EQ(t_x11_event.key, DISPLAY_KEY_KP_DIVIDE);
 
-	EXPECT_EQ(display_wait_event(&display, &event), 0);
-	EXPECT_EQ(event.key, DISPLAY_KEY_KP_MULTIPLY);
+	EXPECT_EQ(display_wait_events(&display), 0);
+	EXPECT_EQ(t_x11_event.key, DISPLAY_KEY_KP_MULTIPLY);
 
-	EXPECT_EQ(display_wait_event(&display, &event), 0);
-	EXPECT_EQ(event.key, DISPLAY_KEY_KP_SUBTRACT);
+	EXPECT_EQ(display_wait_events(&display), 0);
+	EXPECT_EQ(t_x11_event.key, DISPLAY_KEY_KP_SUBTRACT);
 
-	EXPECT_EQ(display_wait_event(&display, &event), 0);
-	EXPECT_EQ(event.key, DISPLAY_KEY_KP_ADD);
+	EXPECT_EQ(display_wait_events(&display), 0);
+	EXPECT_EQ(t_x11_event.key, DISPLAY_KEY_KP_ADD);
 
-	EXPECT_EQ(display_wait_event(&display, &event), 0);
-	EXPECT_EQ(event.key, DISPLAY_KEY_KP_ENTER);
+	EXPECT_EQ(display_wait_events(&display), 0);
+	EXPECT_EQ(t_x11_event.key, DISPLAY_KEY_KP_ENTER);
 
-	EXPECT_EQ(display_wait_event(&display, &event), 0);
-	EXPECT_EQ(event.key, DISPLAY_KEY_KP_0);
+	EXPECT_EQ(display_wait_events(&display), 0);
+	EXPECT_EQ(t_x11_event.key, DISPLAY_KEY_KP_0);
 
-	EXPECT_EQ(display_wait_event(&display, &event), 0);
-	EXPECT_EQ(event.key, DISPLAY_KEY_KP_1);
+	EXPECT_EQ(display_wait_events(&display), 0);
+	EXPECT_EQ(t_x11_event.key, DISPLAY_KEY_KP_1);
 
-	EXPECT_EQ(display_wait_event(&display, &event), 0);
-	EXPECT_EQ(event.key, DISPLAY_KEY_KP_2);
+	EXPECT_EQ(display_wait_events(&display), 0);
+	EXPECT_EQ(t_x11_event.key, DISPLAY_KEY_KP_2);
 
-	EXPECT_EQ(display_wait_event(&display, &event), 0);
-	EXPECT_EQ(event.key, DISPLAY_KEY_KP_3);
+	EXPECT_EQ(display_wait_events(&display), 0);
+	EXPECT_EQ(t_x11_event.key, DISPLAY_KEY_KP_3);
 
-	EXPECT_EQ(display_wait_event(&display, &event), 0);
-	EXPECT_EQ(event.key, DISPLAY_KEY_KP_4);
+	EXPECT_EQ(display_wait_events(&display), 0);
+	EXPECT_EQ(t_x11_event.key, DISPLAY_KEY_KP_4);
 
-	EXPECT_EQ(display_wait_event(&display, &event), 0);
-	EXPECT_EQ(event.key, DISPLAY_KEY_KP_5);
+	EXPECT_EQ(display_wait_events(&display), 0);
+	EXPECT_EQ(t_x11_event.key, DISPLAY_KEY_KP_5);
 
-	EXPECT_EQ(display_wait_event(&display, &event), 0);
-	EXPECT_EQ(event.key, DISPLAY_KEY_KP_6);
+	EXPECT_EQ(display_wait_events(&display), 0);
+	EXPECT_EQ(t_x11_event.key, DISPLAY_KEY_KP_6);
 
-	EXPECT_EQ(display_wait_event(&display, &event), 0);
-	EXPECT_EQ(event.key, DISPLAY_KEY_KP_7);
+	EXPECT_EQ(display_wait_events(&display), 0);
+	EXPECT_EQ(t_x11_event.key, DISPLAY_KEY_KP_7);
 
-	EXPECT_EQ(display_wait_event(&display, &event), 0);
-	EXPECT_EQ(event.key, DISPLAY_KEY_KP_8);
+	EXPECT_EQ(display_wait_events(&display), 0);
+	EXPECT_EQ(t_x11_event.key, DISPLAY_KEY_KP_8);
 
-	EXPECT_EQ(display_wait_event(&display, &event), 0);
-	EXPECT_EQ(event.key, DISPLAY_KEY_KP_9);
+	EXPECT_EQ(display_wait_events(&display), 0);
+	EXPECT_EQ(t_x11_event.key, DISPLAY_KEY_KP_9);
 
-	EXPECT_EQ(display_wait_event(&display, &event), 0);
-	EXPECT_EQ(event.key, DISPLAY_KEY_KP_DECIMAL);
+	EXPECT_EQ(display_wait_events(&display), 0);
+	EXPECT_EQ(t_x11_event.key, DISPLAY_KEY_KP_DECIMAL);
 
-	EXPECT_EQ(display_wait_event(&display, &event), 0);
-	EXPECT_EQ(event.key, DISPLAY_KEY_KP_0);
+	EXPECT_EQ(display_wait_events(&display), 0);
+	EXPECT_EQ(t_x11_event.key, DISPLAY_KEY_KP_0);
 
-	EXPECT_EQ(display_wait_event(&display, &event), 0);
-	EXPECT_EQ(event.key, DISPLAY_KEY_KP_DECIMAL);
+	EXPECT_EQ(display_wait_events(&display), 0);
+	EXPECT_EQ(t_x11_event.key, DISPLAY_KEY_KP_DECIMAL);
 
 	window_free(&window);
 	display_free(&display);
@@ -2326,15 +2328,14 @@ TEST(display_x11_wait_event_modifiers)
 	window_t window	      = {0};
 	void *server	      = NULL;
 	void *peer	      = NULL;
-	display_event_t event = {0};
 
 	t_x11_open_window(drv, &fs, &proc, &ss, &display, &window, &server, &peer);
 	t_x11_write_key_event(&ss, peer, 2, 38, 0x00100000, 11, 22, 64 | 256 | 512 | 1024 | 2048 | 4096);
 
-	EXPECT_EQ(display_wait_event(&display, &event), 0);
-	EXPECT_EQ(event.type, DISPLAY_EVENT_KEY_DOWN);
-	EXPECT_EQ(event.key, DISPLAY_KEY_A);
-	EXPECT_EQ(event.modifiers,
+	EXPECT_EQ(display_wait_events(&display), 0);
+	EXPECT_EQ(t_x11_event.type, DISPLAY_EVENT_KEY_DOWN);
+	EXPECT_EQ(t_x11_event.key, DISPLAY_KEY_A);
+	EXPECT_EQ(t_x11_event.modifiers,
 		  DISPLAY_MOD_SUPER | DISPLAY_MOD_MOUSE_LEFT | DISPLAY_MOD_MOUSE_MIDDLE | DISPLAY_MOD_MOUSE_RIGHT |
 			  DISPLAY_MOD_MOUSE_WHEEL_UP | DISPLAY_MOD_MOUSE_WHEEL_DOWN);
 
@@ -2359,24 +2360,23 @@ TEST(display_x11_wait_event_focus_and_close)
 	window_t window	      = {0};
 	void *server	      = NULL;
 	void *peer	      = NULL;
-	display_event_t event = {0};
 
 	t_x11_open_window(drv, &fs, &proc, &ss, &display, &window, &server, &peer);
 	t_x11_write_focus_event(&ss, peer, 9, 0x00100000);
 	t_x11_write_focus_event(&ss, peer, 10, 0x00100000);
 	t_x11_write_destroy_event(&ss, peer, 0x00100000);
 
-	EXPECT_EQ(display_wait_event(&display, &event), 0);
-	EXPECT_EQ(event.type, DISPLAY_EVENT_FOCUS_GAINED);
-	EXPECT_EQ(event.window, 0x00100000);
+	EXPECT_EQ(display_wait_events(&display), 0);
+	EXPECT_EQ(t_x11_event.type, DISPLAY_EVENT_FOCUS_GAINED);
+	EXPECT_EQ(t_x11_event.window, 0x00100000);
 
-	EXPECT_EQ(display_wait_event(&display, &event), 0);
-	EXPECT_EQ(event.type, DISPLAY_EVENT_FOCUS_LOST);
-	EXPECT_EQ(event.window, 0x00100000);
+	EXPECT_EQ(display_wait_events(&display), 0);
+	EXPECT_EQ(t_x11_event.type, DISPLAY_EVENT_FOCUS_LOST);
+	EXPECT_EQ(t_x11_event.window, 0x00100000);
 
-	EXPECT_EQ(display_wait_event(&display, &event), 0);
-	EXPECT_EQ(event.type, DISPLAY_EVENT_CLOSE);
-	EXPECT_EQ(event.window, 0x00100000);
+	EXPECT_EQ(display_wait_events(&display), 0);
+	EXPECT_EQ(t_x11_event.type, DISPLAY_EVENT_CLOSE);
+	EXPECT_EQ(t_x11_event.window, 0x00100000);
 
 	window_free(&window);
 	display_free(&display);
@@ -3640,3 +3640,4 @@ STEST(display_x11)
 
 	SEND;
 }
+

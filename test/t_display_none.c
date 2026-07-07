@@ -59,20 +59,19 @@ TEST(display_none_window_init_null_window)
 	END;
 }
 
-TEST(display_none_poll_event_null_display)
+TEST(display_none_poll_events_null_display)
 {
 	START;
 
 	display_driver_t *drv = t_none_driver();
-	display_event_t event = {0};
 
 	EXPECT_NE(drv, NULL);
-	EXPECT_EQ(drv->poll_event(NULL, &event), 1);
+	EXPECT_EQ(drv->poll_events(NULL), 1);
 
 	END;
 }
 
-TEST(display_none_poll_event_null_event)
+TEST(display_none_poll_events_empty)
 {
 	START;
 
@@ -80,41 +79,20 @@ TEST(display_none_poll_event_null_event)
 	display_t display     = {0};
 
 	EXPECT_NE(drv, NULL);
-	EXPECT_EQ(drv->poll_event(&display, NULL), 1);
+	EXPECT_EQ(drv->poll_events(&display), 0);
 
 	END;
 }
 
-TEST(display_none_poll_event_empty)
+TEST(display_none_wait_events_empty)
 {
 	START;
 
 	display_driver_t *drv = t_none_driver();
 	display_t display     = {0};
-	display_event_t event = {
-		.type = DISPLAY_EVENT_CLOSE,
-	};
 
 	EXPECT_NE(drv, NULL);
-	EXPECT_EQ(drv->poll_event(&display, &event), 1);
-	EXPECT_EQ(event.type, DISPLAY_EVENT_NONE);
-
-	END;
-}
-
-TEST(display_none_wait_event_empty)
-{
-	START;
-
-	display_driver_t *drv = t_none_driver();
-	display_t display     = {0};
-	display_event_t event = {
-		.type = DISPLAY_EVENT_CLOSE,
-	};
-
-	EXPECT_NE(drv, NULL);
-	EXPECT_EQ(drv->wait_event(&display, &event), 1);
-	EXPECT_EQ(event.type, DISPLAY_EVENT_NONE);
+	EXPECT_EQ(drv->wait_events(&display), 0);
 
 	END;
 }
@@ -366,10 +344,9 @@ STEST(display_none)
 	RUN(display_none_init_null_display);
 	RUN(display_none_free_null_display);
 	RUN(display_none_window_init_null_window);
-	RUN(display_none_poll_event_null_display);
-	RUN(display_none_poll_event_null_event);
-	RUN(display_none_poll_event_empty);
-	RUN(display_none_wait_event_empty);
+	RUN(display_none_poll_events_null_display);
+	RUN(display_none_poll_events_empty);
+	RUN(display_none_wait_events_empty);
 	RUN(display_none_window_free_null_window);
 	RUN(display_none_window_id_null_window);
 	RUN(display_none_window_id);

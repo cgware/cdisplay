@@ -18,19 +18,18 @@ static int display_none_free(display_t *display)
 	return 0;
 }
 
-static int display_none_poll_event(display_t *display, display_event_t *event)
+static int display_none_poll_events(display_t *display)
 {
-	if (display == NULL || event == NULL) {
+	if (display == NULL) {
 		return 1;
 	}
 
-	*event = (display_event_t){0};
-	return 1;
+	return 0;
 }
 
-static int display_none_wait_event(display_t *display, display_event_t *event)
+static int display_none_wait_events(display_t *display)
 {
-	return display_none_poll_event(display, event);
+	return display_none_poll_events(display);
 }
 
 static int display_none_window_init(window_t *wnd, u16 x, u16 y, u16 width, u16 height)
@@ -144,8 +143,8 @@ static display_driver_t display_none = {
 	.name		       = "none",
 	.init		       = display_none_init,
 	.free		       = display_none_free,
-	.poll_event	       = display_none_poll_event,
-	.wait_event	       = display_none_wait_event,
+	.poll_events	       = display_none_poll_events,
+	.wait_events	       = display_none_wait_events,
 	.window_init	       = display_none_window_init,
 	.window_free	       = display_none_window_free,
 	.window_id	       = display_none_window_id,

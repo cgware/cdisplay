@@ -6,11 +6,13 @@
 
 static int t_display_init_calls;
 static int t_display_free_calls;
-static int t_display_poll_event_calls;
-static int t_display_wait_event_calls;
+static int t_display_poll_events_calls;
+static int t_display_wait_events_calls;
 static int t_display_init_ret;
-static int t_display_poll_event_ret;
-static int t_display_wait_event_ret;
+static int t_display_poll_events_ret;
+static int t_display_wait_events_ret;
+static int t_display_event_calls;
+static display_event_t t_display_event;
 static int t_display_log_calls;
 static int t_display_log_level;
 static const char *t_display_log_pkg;
@@ -32,20 +34,24 @@ static int t_display_driver_free(display_t *display)
 	return 0;
 }
 
-static int t_display_poll_event(display_t *display, display_event_t *event)
+static int t_display_poll_events(display_t *display)
 {
-	(void)display;
-	t_display_poll_event_calls++;
-	event->type = DISPLAY_EVENT_CLOSE;
-	return t_display_poll_event_ret;
+	t_display_poll_events_calls++;
+	display_event_t event = {
+		.type = DISPLAY_EVENT_CLOSE,
+	};
+	display_emit_event(display, &event);
+	return t_display_poll_events_ret;
 }
 
-static int t_display_wait_event(display_t *display, display_event_t *event)
+static int t_display_wait_events(display_t *display)
 {
-	(void)display;
-	t_display_wait_event_calls++;
-	event->type = DISPLAY_EVENT_RESIZE;
-	return t_display_wait_event_ret;
+	t_display_wait_events_calls++;
+	display_event_t event = {
+		.type = DISPLAY_EVENT_RESIZE,
+	};
+	display_emit_event(display, &event);
+	return t_display_wait_events_ret;
 }
 
 static int t_display_window_init(window_t *window, u16 x, u16 y, u16 width, u16 height)
@@ -68,8 +74,8 @@ static display_driver_t t_display_driver = {
 	.name	     = "test",
 	.init	     = t_display_driver_init,
 	.free	     = t_display_driver_free,
-	.poll_event  = t_display_poll_event,
-	.wait_event  = t_display_wait_event,
+	.poll_events = t_display_poll_events,
+	.wait_events = t_display_wait_events,
 	.window_init = t_display_window_init,
 	.window_free = t_display_window_free,
 };
@@ -78,17 +84,27 @@ static void t_display_reset(void)
 {
 	t_display_init_calls	   = 0;
 	t_display_free_calls	   = 0;
-	t_display_poll_event_calls = 0;
-	t_display_wait_event_calls = 0;
+	t_display_poll_events_calls = 0;
+	t_display_wait_events_calls = 0;
 	t_display_init_ret	   = 0;
-	t_display_poll_event_ret   = 0;
-	t_display_wait_event_ret   = 0;
+	t_display_poll_events_ret   = 0;
+	t_display_wait_events_ret   = 0;
+	t_display_event_calls	    = 0;
+	t_display_event		    = (display_event_t){0};
 	t_display_log_calls	   = 0;
 	t_display_log_level	   = 0;
 	t_display_log_pkg	   = NULL;
 	t_display_log_file	   = NULL;
 	t_display_log_message[0]   = 0;
 	t_display_log_state	   = (log_t){0};
+}
+
+static void t_display_event_cb(display_t *display, const display_event_t *event, void *user)
+{
+	(void)display;
+	(void)user;
+	t_display_event_calls++;
+	t_display_event = *event;
 }
 
 static size_t t_display_log(log_event_t *ev)
@@ -309,43 +325,55 @@ TEST(display_free_clears_fields)
 	END;
 }
 
-TEST(display_poll_event_null_display)
+TEST(display_set_event_callback_null_display)
 {
 	START;
 
-	display_event_t event = {0};
-
-	EXPECT_EQ(display_poll_event(NULL, &event), 1);
+	EXPECT_EQ(display_set_event_callback(NULL, t_display_event_cb, NULL), 1);
 
 	END;
 }
 
-TEST(display_poll_event_null_event)
+TEST(display_set_event_callback_sets_fields)
 {
 	START;
 
-	display_t display = {
-		.drv = &t_display_driver,
+	t_display_reset();
+	display_t display = {0};
+	display_event_t event = {
+		.type = DISPLAY_EVENT_CLOSE,
 	};
 
-	EXPECT_EQ(display_poll_event(&display, NULL), 1);
+	EXPECT_EQ(display_set_event_callback(&display, t_display_event_cb, (void *)0x1234), 0);
+	EXPECT_EQ(display.event_user, (void *)0x1234);
+	display_emit_event(&display, &event);
+	EXPECT_EQ(t_display_event_calls, 1);
+	EXPECT_EQ(t_display_event.type, DISPLAY_EVENT_CLOSE);
 
 	END;
 }
 
-TEST(display_poll_event_without_driver)
+TEST(display_poll_events_null_display)
 {
 	START;
 
-	display_t display     = {0};
-	display_event_t event = {0};
-
-	EXPECT_EQ(display_poll_event(&display, &event), 1);
+	EXPECT_EQ(display_poll_events(NULL), 1);
 
 	END;
 }
 
-TEST(display_poll_event_calls_driver)
+TEST(display_poll_events_without_driver)
+{
+	START;
+
+	display_t display = {0};
+
+	EXPECT_EQ(display_poll_events(&display), 1);
+
+	END;
+}
+
+TEST(display_poll_events_calls_driver)
 {
 	START;
 
@@ -353,68 +381,52 @@ TEST(display_poll_event_calls_driver)
 	display_t display = {
 		.drv = &t_display_driver,
 	};
-	display_event_t event = {0};
+	display_set_event_callback(&display, t_display_event_cb, NULL);
 
-	EXPECT_EQ(display_poll_event(&display, &event), 0);
-	EXPECT_EQ(t_display_poll_event_calls, 1);
-	EXPECT_EQ(event.type, DISPLAY_EVENT_CLOSE);
+	EXPECT_EQ(display_poll_events(&display), 0);
+	EXPECT_EQ(t_display_poll_events_calls, 1);
+	EXPECT_EQ(t_display_event_calls, 1);
+	EXPECT_EQ(t_display_event.type, DISPLAY_EVENT_CLOSE);
 
 	END;
 }
 
-TEST(display_poll_event_returns_driver_result)
+TEST(display_poll_events_returns_driver_result)
 {
 	START;
 
 	t_display_reset();
-	t_display_poll_event_ret = 1;
+	t_display_poll_events_ret = 1;
 	display_t display	 = {
 		       .drv = &t_display_driver,
 	       };
-	display_event_t event = {0};
 
-	EXPECT_EQ(display_poll_event(&display, &event), 1);
+	EXPECT_EQ(display_poll_events(&display), 1);
 
 	END;
 }
 
-TEST(display_wait_event_null_display)
+TEST(display_wait_events_null_display)
 {
 	START;
 
-	display_event_t event = {0};
-
-	EXPECT_EQ(display_wait_event(NULL, &event), 1);
+	EXPECT_EQ(display_wait_events(NULL), 1);
 
 	END;
 }
 
-TEST(display_wait_event_null_event)
+TEST(display_wait_events_without_driver)
 {
 	START;
 
-	display_t display = {
-		.drv = &t_display_driver,
-	};
+	display_t display = {0};
 
-	EXPECT_EQ(display_wait_event(&display, NULL), 1);
+	EXPECT_EQ(display_wait_events(&display), 1);
 
 	END;
 }
 
-TEST(display_wait_event_without_driver)
-{
-	START;
-
-	display_t display     = {0};
-	display_event_t event = {0};
-
-	EXPECT_EQ(display_wait_event(&display, &event), 1);
-
-	END;
-}
-
-TEST(display_wait_event_calls_driver)
+TEST(display_wait_events_calls_driver)
 {
 	START;
 
@@ -422,27 +434,27 @@ TEST(display_wait_event_calls_driver)
 	display_t display = {
 		.drv = &t_display_driver,
 	};
-	display_event_t event = {0};
+	display_set_event_callback(&display, t_display_event_cb, NULL);
 
-	EXPECT_EQ(display_wait_event(&display, &event), 0);
-	EXPECT_EQ(t_display_wait_event_calls, 1);
-	EXPECT_EQ(event.type, DISPLAY_EVENT_RESIZE);
+	EXPECT_EQ(display_wait_events(&display), 0);
+	EXPECT_EQ(t_display_wait_events_calls, 1);
+	EXPECT_EQ(t_display_event_calls, 1);
+	EXPECT_EQ(t_display_event.type, DISPLAY_EVENT_RESIZE);
 
 	END;
 }
 
-TEST(display_wait_event_returns_driver_result)
+TEST(display_wait_events_returns_driver_result)
 {
 	START;
 
 	t_display_reset();
-	t_display_wait_event_ret = 1;
+	t_display_wait_events_ret = 1;
 	display_t display	 = {
 		       .drv = &t_display_driver,
 	       };
-	display_event_t event = {0};
 
-	EXPECT_EQ(display_wait_event(&display, &event), 1);
+	EXPECT_EQ(display_wait_events(&display), 1);
 
 	END;
 }
@@ -832,16 +844,16 @@ STEST(display)
 	RUN(display_free_without_driver);
 	RUN(display_free_calls_driver);
 	RUN(display_free_clears_fields);
-	RUN(display_poll_event_null_display);
-	RUN(display_poll_event_null_event);
-	RUN(display_poll_event_without_driver);
-	RUN(display_poll_event_calls_driver);
-	RUN(display_poll_event_returns_driver_result);
-	RUN(display_wait_event_null_display);
-	RUN(display_wait_event_null_event);
-	RUN(display_wait_event_without_driver);
-	RUN(display_wait_event_calls_driver);
-	RUN(display_wait_event_returns_driver_result);
+	RUN(display_set_event_callback_null_display);
+	RUN(display_set_event_callback_sets_fields);
+	RUN(display_poll_events_null_display);
+	RUN(display_poll_events_without_driver);
+	RUN(display_poll_events_calls_driver);
+	RUN(display_poll_events_returns_driver_result);
+	RUN(display_wait_events_null_display);
+	RUN(display_wait_events_without_driver);
+	RUN(display_wait_events_calls_driver);
+	RUN(display_wait_events_returns_driver_result);
 	RUN(display_event_type_name_values);
 	RUN(display_key_name_values);
 	RUN(display_mouse_name_values);

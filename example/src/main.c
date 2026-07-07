@@ -15,6 +15,12 @@ typedef struct example_window_s {
 	int fullscreen;
 } example_window_t;
 
+typedef struct example_state_s {
+	example_window_t *windows;
+	size_t count;
+	int open;
+} example_state_t;
+
 static display_driver_t *find_display_driver(strv_t name)
 {
 	for (driver_t *i = DRIVER_START; i < DRIVER_END; i++) {
@@ -66,6 +72,47 @@ static void toggle_fullscreen(example_window_t *window)
 	}
 
 	window->fullscreen = fullscreen;
+}
+
+static void on_display_event(display_t *display, const display_event_t *event, void *user)
+{
+	(void)display;
+
+	example_state_t *state = user;
+	if (state == NULL || event == NULL) {
+		return;
+	}
+
+	display_event_log(event);
+
+	example_window_t *window = find_window(state->windows, state->count, event->window);
+	if (window == NULL) {
+		return;
+	}
+
+	switch (event->type) {
+	case DISPLAY_EVENT_CLOSE: {
+		close_window(window, &state->open);
+		return;
+	}
+	case DISPLAY_EVENT_KEY_DOWN: {
+		switch (event->key) {
+		case DISPLAY_KEY_ESCAPE: {
+			close_window(window, &state->open);
+			return;
+		}
+		case DISPLAY_KEY_F11: {
+			toggle_fullscreen(window);
+			break;
+		}
+		default:
+			break;
+		}
+		break;
+	}
+	default:
+		break;
+	}
 }
 
 static void cleanup(display_t *display, example_window_t *windows, size_t count, fs_t *fs, proc_t *proc, sock_t *ss)
@@ -154,41 +201,15 @@ int main()
 		c_printf("window[%zu]=%u\n", i, windows[i].id);
 	}
 
-	int open = (int)windows_cnt;
-	while (open > 0) {
-		display_event_t event = {0};
-		if (display_wait_event(&display, &event)) {
-			break;
-		}
+	example_state_t state = {
+		.windows = windows,
+		.count	 = windows_cnt,
+		.open	 = (int)windows_cnt,
+	};
+	display_set_event_callback(&display, on_display_event, &state);
 
-		display_event_log(&event);
-
-		example_window_t *window = find_window(windows, windows_cnt, event.window);
-		if (window == NULL) {
-			continue;
-		}
-
-		switch (event.type) {
-		case DISPLAY_EVENT_CLOSE: {
-			close_window(window, &open);
-			continue;
-		}
-		case DISPLAY_EVENT_KEY_DOWN: {
-			switch (event.key) {
-			case DISPLAY_KEY_ESCAPE: {
-				close_window(window, &open);
-				continue;
-			}
-			case DISPLAY_KEY_F11: {
-				toggle_fullscreen(window);
-				break;
-			}
-			default:
-				break;
-			}
-			break;
-		}
-		default:
+	while (state.open > 0) {
+		if (display_wait_events(&display)) {
 			break;
 		}
 	}
