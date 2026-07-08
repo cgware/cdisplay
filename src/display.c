@@ -16,14 +16,14 @@ display_t *display_init(display_t *display, struct display_driver_s *drv, fs_t *
 	display->alloc = alloc;
 
 	if (display->drv->init(display)) {
-		display->drv   = NULL;
-		display->fs    = NULL;
-		display->proc  = NULL;
-		display->ss    = NULL;
-		display->alloc = (alloc_t){0};
+		display->drv	    = NULL;
+		display->fs	    = NULL;
+		display->proc	    = NULL;
+		display->ss	    = NULL;
+		display->alloc	    = (alloc_t){0};
 		display->event_cb   = NULL;
 		display->event_user = NULL;
-		display->data  = NULL;
+		display->data	    = NULL;
 		return NULL;
 	}
 
@@ -37,14 +37,14 @@ void display_free(display_t *display)
 	}
 
 	display->drv->free(display);
-	display->drv   = NULL;
-	display->fs    = NULL;
-	display->proc  = NULL;
-	display->ss    = NULL;
-	display->alloc = (alloc_t){0};
+	display->drv	    = NULL;
+	display->fs	    = NULL;
+	display->proc	    = NULL;
+	display->ss	    = NULL;
+	display->alloc	    = (alloc_t){0};
 	display->event_cb   = NULL;
 	display->event_user = NULL;
-	display->data  = NULL;
+	display->data	    = NULL;
 }
 
 int display_set_event_callback(display_t *display, display_event_cb_t cb, void *user)

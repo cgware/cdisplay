@@ -65,7 +65,7 @@ static void t_windows_reset(void)
 		.monitor = {0, 0, 1920, 1080},
 	};
 	t_windows_event_calls = 0;
-	t_windows_event	     = (display_event_t){0};
+	t_windows_event	      = (display_event_t){0};
 }
 
 static void t_windows_event_cb(display_t *display, const display_event_t *event, void *user)
@@ -107,9 +107,8 @@ static BOOL WINAPI t_UnregisterClassA(LPCSTR name, HINSTANCE instance)
 	return TRUE;
 }
 
-static HWND WINAPI t_CreateWindowExA(
-	DWORD ex_style, LPCSTR class_name, LPCSTR title, DWORD style, int x, int y, int width, int height, HWND parent, HMENU menu,
-	HINSTANCE instance, LPVOID param)
+static HWND WINAPI t_CreateWindowExA(DWORD ex_style, LPCSTR class_name, LPCSTR title, DWORD style, int x, int y, int width, int height,
+				     HWND parent, HMENU menu, HINSTANCE instance, LPVOID param)
 {
 	(void)class_name;
 	(void)parent;
@@ -118,13 +117,13 @@ static HWND WINAPI t_CreateWindowExA(
 
 	t_windows.create_window_calls++;
 	t_windows.create_ex_style = ex_style;
-	t_windows.create_style    = style;
-	t_windows.create_x	     = x;
-	t_windows.create_y	     = y;
-	t_windows.create_width    = width;
-	t_windows.create_height   = height;
-	t_windows.create_title    = title;
-	t_windows.style	     = style;
+	t_windows.create_style	  = style;
+	t_windows.create_x	  = x;
+	t_windows.create_y	  = y;
+	t_windows.create_width	  = width;
+	t_windows.create_height	  = height;
+	t_windows.create_title	  = title;
+	t_windows.style		  = style;
 
 	if (t_windows.wndproc != NULL) {
 		CREATESTRUCTA create = {
@@ -171,11 +170,11 @@ static BOOL WINAPI t_SetWindowPos(HWND hwnd, HWND after, int x, int y, int width
 	(void)hwnd;
 	(void)after;
 	t_windows.set_window_pos_calls++;
-	t_windows.pos_x	    = x;
-	t_windows.pos_y	    = y;
-	t_windows.pos_width = width;
+	t_windows.pos_x	     = x;
+	t_windows.pos_y	     = y;
+	t_windows.pos_width  = width;
 	t_windows.pos_height = height;
-	t_windows.pos_flags = flags;
+	t_windows.pos_flags  = flags;
 	return TRUE;
 }
 
@@ -294,12 +293,12 @@ static LONG_PTR WINAPI t_SetWindowLongPtrA(HWND hwnd, int index, LONG_PTR value)
 	(void)hwnd;
 	switch (index) {
 	case GWLP_USERDATA: {
-		LONG_PTR old = t_windows.userdata;
+		LONG_PTR old	   = t_windows.userdata;
 		t_windows.userdata = value;
 		return old;
 	}
 	case GWL_STYLE: {
-		LONG_PTR old = t_windows.style;
+		LONG_PTR old	= t_windows.style;
 		t_windows.style = value;
 		return old;
 	}
@@ -336,7 +335,7 @@ static void t_windows_set_symbols(proc_t *proc)
 static void t_windows_env_init(fs_t *fs, proc_t *proc, sock_t *ss)
 {
 	fs_init(fs, 0, 1, ALLOC_STD);
-	proc_init(proc, 256, 1);
+	proc_init(proc, 256, 1, ALLOC_STD);
 	sock_init(ss, 0, 1, ALLOC_STD);
 	t_windows_set_symbols(proc);
 }
@@ -418,7 +417,7 @@ TEST(display_windows_init_fails_without_symbols)
 	proc_t proc = {0};
 	sock_t ss   = {0};
 	fs_init(&fs, 0, 1, ALLOC_STD);
-	proc_init(&proc, 256, 1);
+	proc_init(&proc, 256, 1, ALLOC_STD);
 	sock_init(&ss, 0, 1, ALLOC_STD);
 	display_t display     = {0};
 	display_driver_t *drv = t_windows_driver();
@@ -662,8 +661,8 @@ TEST(display_windows_poll_event_returns_key)
 	proc_t proc = {0};
 	sock_t ss   = {0};
 	t_windows_env_init(&fs, &proc, &ss);
-	display_t display = {0};
-	window_t window	  = {0};
+	display_t display     = {0};
+	window_t window	      = {0};
 	display_event_t event = {0};
 
 	EXPECT_EQ(t_windows_open(&display, &window, &fs, &proc, &ss), 0);
@@ -690,8 +689,8 @@ TEST(display_windows_poll_event_returns_mouse_move)
 	proc_t proc = {0};
 	sock_t ss   = {0};
 	t_windows_env_init(&fs, &proc, &ss);
-	display_t display = {0};
-	window_t window	  = {0};
+	display_t display     = {0};
+	window_t window	      = {0};
 	display_event_t event = {0};
 
 	EXPECT_EQ(t_windows_open(&display, &window, &fs, &proc, &ss), 0);
@@ -719,8 +718,8 @@ TEST(display_windows_poll_event_returns_mouse_button)
 	proc_t proc = {0};
 	sock_t ss   = {0};
 	t_windows_env_init(&fs, &proc, &ss);
-	display_t display = {0};
-	window_t window	  = {0};
+	display_t display     = {0};
+	window_t window	      = {0};
 	display_event_t event = {0};
 
 	EXPECT_EQ(t_windows_open(&display, &window, &fs, &proc, &ss), 0);
@@ -747,8 +746,8 @@ TEST(display_windows_poll_event_returns_mouse_wheel)
 	proc_t proc = {0};
 	sock_t ss   = {0};
 	t_windows_env_init(&fs, &proc, &ss);
-	display_t display = {0};
-	window_t window	  = {0};
+	display_t display     = {0};
+	window_t window	      = {0};
 	display_event_t event = {0};
 
 	EXPECT_EQ(t_windows_open(&display, &window, &fs, &proc, &ss), 0);
@@ -777,8 +776,8 @@ TEST(display_windows_poll_event_returns_nonclient_mouse_move)
 	proc_t proc = {0};
 	sock_t ss   = {0};
 	t_windows_env_init(&fs, &proc, &ss);
-	display_t display = {0};
-	window_t window	  = {0};
+	display_t display     = {0};
+	window_t window	      = {0};
 	display_event_t event = {0};
 
 	EXPECT_EQ(t_windows_open(&display, &window, &fs, &proc, &ss), 0);
@@ -807,8 +806,8 @@ TEST(display_windows_poll_event_returns_nonclient_mouse_button)
 	proc_t proc = {0};
 	sock_t ss   = {0};
 	t_windows_env_init(&fs, &proc, &ss);
-	display_t display = {0};
-	window_t window	  = {0};
+	display_t display     = {0};
+	window_t window	      = {0};
 	display_event_t event = {0};
 
 	EXPECT_EQ(t_windows_open(&display, &window, &fs, &proc, &ss), 0);
@@ -838,8 +837,8 @@ TEST(display_windows_poll_event_returns_close_from_nonclient_close_button)
 	proc_t proc = {0};
 	sock_t ss   = {0};
 	t_windows_env_init(&fs, &proc, &ss);
-	display_t display = {0};
-	window_t window	  = {0};
+	display_t display     = {0};
+	window_t window	      = {0};
 	display_event_t event = {0};
 
 	EXPECT_EQ(t_windows_open(&display, &window, &fs, &proc, &ss), 0);
@@ -868,8 +867,8 @@ TEST(display_windows_poll_event_skips_silent_system_messages)
 	proc_t proc = {0};
 	sock_t ss   = {0};
 	t_windows_env_init(&fs, &proc, &ss);
-	display_t display = {0};
-	window_t window	  = {0};
+	display_t display     = {0};
+	window_t window	      = {0};
 	display_event_t event = {0};
 
 	EXPECT_EQ(t_windows_open(&display, &window, &fs, &proc, &ss), 0);
@@ -897,8 +896,8 @@ TEST(display_windows_wait_event_returns_close_without_dispatch)
 	proc_t proc = {0};
 	sock_t ss   = {0};
 	t_windows_env_init(&fs, &proc, &ss);
-	display_t display = {0};
-	window_t window	  = {0};
+	display_t display     = {0};
+	window_t window	      = {0};
 	display_event_t event = {0};
 
 	EXPECT_EQ(t_windows_open(&display, &window, &fs, &proc, &ss), 0);
@@ -924,8 +923,8 @@ TEST(display_windows_wait_event_returns_syscommand_close_without_dispatch)
 	proc_t proc = {0};
 	sock_t ss   = {0};
 	t_windows_env_init(&fs, &proc, &ss);
-	display_t display = {0};
-	window_t window	  = {0};
+	display_t display     = {0};
+	window_t window	      = {0};
 	display_event_t event = {0};
 
 	EXPECT_EQ(t_windows_open(&display, &window, &fs, &proc, &ss), 0);

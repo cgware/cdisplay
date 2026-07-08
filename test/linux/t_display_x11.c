@@ -114,7 +114,7 @@ static void t_x11_event_cb(display_t *display, const display_event_t *event, voi
 static void t_x11_env_init(fs_t *fs, proc_t *proc, sock_t *ss)
 {
 	fs_init(fs, 8, 1, ALLOC_STD);
-	proc_init(proc, 64, 1);
+	proc_init(proc, 64, 1, ALLOC_STD);
 	sock_init(ss, 8, 1, ALLOC_STD);
 	proc->hostname = STR("host");
 }
@@ -290,6 +290,7 @@ static void t_x11_keyboard_mapping(buf_t *buf)
 	cbuf_set_u32le(keysyms, 28 * 4, 0xff55);
 	cbuf_set_u32le(keysyms, 29 * 4, 0xff56);
 	cbuf_set_u32le(keysyms, 30 * 4, 'a');
+	cbuf_set_u32le(keysyms, 31 * 4, 0xff61);
 
 	buf_add(buf, sizeof(reply), reply, NULL);
 	buf_add(buf, sizeof(keysyms), keysyms, NULL);
@@ -1598,6 +1599,40 @@ TEST(display_x11_poll_event_no_event)
 	END;
 }
 
+TEST(display_x11_poll_event_configure_notify)
+{
+	START;
+
+	display_driver_t *drv = t_x11_driver();
+	fs_t fs		      = {0};
+	proc_t proc	      = {0};
+	sock_t ss	      = {0};
+	display_t display     = {0};
+	window_t window	      = {0};
+	void *server	      = NULL;
+	void *peer	      = NULL;
+
+	t_x11_open_window(drv, &fs, &proc, &ss, &display, &window, &server, &peer);
+	t_x11_write_configure_event(&ss, peer, 0x00100000, 10, 20, 640, 480);
+
+	EXPECT_EQ(display_poll_events(&display), 0);
+	EXPECT_EQ(t_x11_event_calls, 1);
+	EXPECT_EQ(t_x11_event.type, DISPLAY_EVENT_RESIZE);
+	EXPECT_EQ(t_x11_event.window, 0x00100000);
+	EXPECT_EQ(t_x11_event.x, 10);
+	EXPECT_EQ(t_x11_event.y, 20);
+	EXPECT_EQ(t_x11_event.width, 640);
+	EXPECT_EQ(t_x11_event.height, 480);
+
+	window_free(&window);
+	display_free(&display);
+	sock_close(&ss, peer);
+	sock_close(&ss, server);
+	t_x11_env_free(&fs, &proc, &ss);
+
+	END;
+}
+
 TEST(display_x11_poll_event_null_display)
 {
 	START;
@@ -2128,6 +2163,7 @@ TEST(display_x11_wait_event_extended_keys)
 	t_x11_write_key_event(&ss, peer, 2, 30, 0x00100000, 10, 20, 0);
 	t_x11_write_key_event(&ss, peer, 2, 31, 0x00100000, 10, 20, 0);
 	t_x11_write_key_event(&ss, peer, 2, 32, 0x00100000, 10, 20, 0);
+	t_x11_write_key_event(&ss, peer, 2, 39, 0x00100000, 10, 20, 0);
 	t_x11_write_key_event(&ss, peer, 2, 33, 0x00100000, 10, 20, 0);
 	t_x11_write_key_event(&ss, peer, 2, 34, 0x00100000, 10, 20, 0);
 	t_x11_write_key_event(&ss, peer, 2, 35, 0x00100000, 10, 20, 0);
@@ -2145,6 +2181,10 @@ TEST(display_x11_wait_event_extended_keys)
 	EXPECT_EQ(display_wait_events(&display), 0);
 	EXPECT_EQ(t_x11_event.type, DISPLAY_EVENT_KEY_DOWN);
 	EXPECT_EQ(t_x11_event.key, DISPLAY_KEY_INSERT);
+
+	EXPECT_EQ(display_wait_events(&display), 0);
+	EXPECT_EQ(t_x11_event.type, DISPLAY_EVENT_KEY_DOWN);
+	EXPECT_EQ(t_x11_event.key, DISPLAY_KEY_PRINT_SCREEN);
 
 	EXPECT_EQ(display_wait_events(&display), 0);
 	EXPECT_EQ(t_x11_event.type, DISPLAY_EVENT_KEY_DOWN);
@@ -3290,7 +3330,7 @@ TEST(display_x11_init_socket_open_failure)
 
 	log_set_quiet(0, 1);
 	fs_init(&fs, 8, 1, ALLOC_STD);
-	proc_init(&proc, 64, 1);
+	proc_init(&proc, 64, 1, ALLOC_STD);
 	sock_init(&ss, 0, 1, t_alloc(&state));
 	proc.hostname = STR("host");
 	t_x11_set_display(&proc, STRV(":0"));
@@ -3579,6 +3619,7 @@ STEST(display_x11)
 	RUN(display_x11_window_hide_null_data);
 	RUN(display_x11_window_hide_write_failure);
 	RUN(display_x11_poll_event_no_event);
+	RUN(display_x11_poll_event_configure_notify);
 	RUN(display_x11_poll_event_null_display);
 	RUN(display_x11_poll_event_null_event);
 	RUN(display_x11_poll_event_get_flags_failure);
@@ -3640,4 +3681,3 @@ STEST(display_x11)
 
 	SEND;
 }
-

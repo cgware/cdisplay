@@ -82,21 +82,21 @@ static display_driver_t t_display_driver = {
 
 static void t_display_reset(void)
 {
-	t_display_init_calls	   = 0;
-	t_display_free_calls	   = 0;
+	t_display_init_calls	    = 0;
+	t_display_free_calls	    = 0;
 	t_display_poll_events_calls = 0;
 	t_display_wait_events_calls = 0;
-	t_display_init_ret	   = 0;
+	t_display_init_ret	    = 0;
 	t_display_poll_events_ret   = 0;
 	t_display_wait_events_ret   = 0;
 	t_display_event_calls	    = 0;
 	t_display_event		    = (display_event_t){0};
-	t_display_log_calls	   = 0;
-	t_display_log_level	   = 0;
-	t_display_log_pkg	   = NULL;
-	t_display_log_file	   = NULL;
-	t_display_log_message[0]   = 0;
-	t_display_log_state	   = (log_t){0};
+	t_display_log_calls	    = 0;
+	t_display_log_level	    = 0;
+	t_display_log_pkg	    = NULL;
+	t_display_log_file	    = NULL;
+	t_display_log_message[0]    = 0;
+	t_display_log_state	    = (log_t){0};
 }
 
 static void t_display_event_cb(display_t *display, const display_event_t *event, void *user)
@@ -339,7 +339,7 @@ TEST(display_set_event_callback_sets_fields)
 	START;
 
 	t_display_reset();
-	display_t display = {0};
+	display_t display     = {0};
 	display_event_t event = {
 		.type = DISPLAY_EVENT_CLOSE,
 	};
@@ -397,9 +397,9 @@ TEST(display_poll_events_returns_driver_result)
 
 	t_display_reset();
 	t_display_poll_events_ret = 1;
-	display_t display	 = {
-		       .drv = &t_display_driver,
-	       };
+	display_t display	  = {
+		.drv = &t_display_driver,
+	};
 
 	EXPECT_EQ(display_poll_events(&display), 1);
 
@@ -450,9 +450,9 @@ TEST(display_wait_events_returns_driver_result)
 
 	t_display_reset();
 	t_display_wait_events_ret = 1;
-	display_t display	 = {
-		       .drv = &t_display_driver,
-	       };
+	display_t display	  = {
+		.drv = &t_display_driver,
+	};
 
 	EXPECT_EQ(display_wait_events(&display), 1);
 

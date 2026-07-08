@@ -1486,6 +1486,10 @@ static int display_x11_poll_events(display_t *display)
 	}
 
 	display_x11_t *dx11 = display->data;
+	if (dx11 == NULL) {
+		return 1;
+	}
+
 	int flags;
 	if (sock_get_flags(display->ss, dx11->sock, &flags) || sock_set_flags(display->ss, dx11->sock, flags | X11_SOCKET_NONBLOCK)) {
 		return 1;
@@ -1508,6 +1512,11 @@ static int display_x11_poll_events(display_t *display)
 static int display_x11_wait_events(display_t *display)
 {
 	if (display == NULL) {
+		return 1;
+	}
+
+	display_x11_t *dx11 = display->data;
+	if (dx11 == NULL) {
 		return 1;
 	}
 

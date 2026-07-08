@@ -146,7 +146,7 @@ int main()
 	fs_init(&fs, 0, 0, ALLOC_STD);
 
 	proc_t proc = {0};
-	proc_init(&proc, 0, 0);
+	proc_init(&proc, 0, 0, ALLOC_STD);
 
 	sock_t ss = {0};
 	sock_init(&ss, 0, 0, ALLOC_STD);

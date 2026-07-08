@@ -39,9 +39,9 @@ typedef struct display_windows_wndproc_api_s {
 	#define DISPLAY_WINDOWS_SET_WINDOW_LONG_PTR "SetWindowLongA"
 #endif
 
-#define DISPLAY_WINDOWS_STYLE_NORMAL WS_OVERLAPPEDWINDOW
-#define DISPLAY_WINDOWS_STYLE_BORDERLESS WS_POPUP
-#define DISPLAY_WINDOWS_EX_STYLE_NORMAL 0
+#define DISPLAY_WINDOWS_STYLE_NORMAL	   WS_OVERLAPPEDWINDOW
+#define DISPLAY_WINDOWS_STYLE_BORDERLESS   WS_POPUP
+#define DISPLAY_WINDOWS_EX_STYLE_NORMAL	   0
 #define DISPLAY_WINDOWS_WM_INTERNAL_0X0060 0x0060
 
 typedef struct display_windows_s {
@@ -229,8 +229,8 @@ static window_t *display_windows_window_from_hwnd(display_windows_t *dwindows, H
 
 static display_key_t display_windows_key_from_message(const MSG *msg)
 {
-	UINT code = (UINT)msg->wParam;
-	UINT scan = (UINT)((msg->lParam >> 16) & 0xff);
+	UINT code    = (UINT)msg->wParam;
+	UINT scan    = (UINT)((msg->lParam >> 16) & 0xff);
 	int extended = (msg->lParam & (1l << 24)) != 0;
 
 	if (code >= 'A' && code <= 'Z') {
@@ -424,8 +424,8 @@ static int display_windows_translate_key_message(display_windows_t *dwindows, co
 	}
 
 	window_windows_t *wwindows = wnd->data;
-	int down		    = msg->message == WM_KEYDOWN || msg->message == WM_SYSKEYDOWN;
-	int repeat		    = (msg->lParam & (1l << 30)) != 0;
+	int down		   = msg->message == WM_KEYDOWN || msg->message == WM_SYSKEYDOWN;
+	int repeat		   = (msg->lParam & (1l << 30)) != 0;
 
 	event->type   = down ? DISPLAY_EVENT_KEY_DOWN : DISPLAY_EVENT_KEY_UP;
 	event->window = (u32)(uintptr_t)msg->hwnd;
@@ -576,9 +576,8 @@ static void display_windows_rebuild_mouse_modifiers(window_windows_t *wwindows, 
 {
 	display_modifier_t modifiers = wwindows->modifiers;
 
-	modifiers = (display_modifier_t)(modifiers &
-					 ~(DISPLAY_MOD_MOUSE_LEFT | DISPLAY_MOD_MOUSE_MIDDLE | DISPLAY_MOD_MOUSE_RIGHT |
-					   DISPLAY_MOD_MOUSE_WHEEL_UP | DISPLAY_MOD_MOUSE_WHEEL_DOWN));
+	modifiers = (display_modifier_t)(modifiers & ~(DISPLAY_MOD_MOUSE_LEFT | DISPLAY_MOD_MOUSE_MIDDLE | DISPLAY_MOD_MOUSE_RIGHT |
+						       DISPLAY_MOD_MOUSE_WHEEL_UP | DISPLAY_MOD_MOUSE_WHEEL_DOWN));
 
 	if (state & MK_LBUTTON) {
 		modifiers = (display_modifier_t)(modifiers | DISPLAY_MOD_MOUSE_LEFT);
@@ -601,8 +600,8 @@ static int display_windows_translate_mouse_message(display_windows_t *dwindows, 
 	}
 
 	window_windows_t *wwindows = wnd->data;
-	int wheel		    = msg->message == WM_MOUSEWHEEL || msg->message == WM_MOUSEHWHEEL;
-	int nonclient		    = display_windows_mouse_is_nonclient(msg->message);
+	int wheel		   = msg->message == WM_MOUSEWHEEL || msg->message == WM_MOUSEHWHEEL;
+	int nonclient		   = display_windows_mouse_is_nonclient(msg->message);
 
 	event->window = (u32)(uintptr_t)msg->hwnd;
 	if (display_windows_mouse_point(dwindows, msg, wheel || nonclient, &event->x, &event->y)) {
@@ -625,8 +624,8 @@ static int display_windows_translate_mouse_message(display_windows_t *dwindows, 
 
 	if (wheel) {
 		display_modifier_t modifier = display_windows_mouse_modifier(event->button);
-		event->type		   = DISPLAY_EVENT_MOUSE_DOWN;
-		event->modifiers	   = (display_modifier_t)(wwindows->modifiers | modifier);
+		event->type		    = DISPLAY_EVENT_MOUSE_DOWN;
+		event->modifiers	    = (display_modifier_t)(wwindows->modifiers | modifier);
 		return 0;
 	}
 
@@ -727,15 +726,14 @@ static int display_windows_dispatch_message(display_windows_t *dwindows, const M
 
 static void display_windows_log_unhandled_message(const MSG *msg)
 {
-	log_warn(
-	    "cdisplay",
-	    "display_windows",
-	    NULL,
-	    "unhandled Windows message: hwnd=%p message=%u wParam=%p lParam=%p",
-	    msg->hwnd,
-	    msg->message,
-	    (void *)(uintptr_t)msg->wParam,
-	    (void *)(uintptr_t)msg->lParam);
+	log_warn("cdisplay",
+		 "display_windows",
+		 NULL,
+		 "unhandled Windows message: hwnd=%p message=%u wParam=%p lParam=%p",
+		 msg->hwnd,
+		 msg->message,
+		 (void *)(uintptr_t)msg->wParam,
+		 (void *)(uintptr_t)msg->lParam);
 }
 
 static int display_windows_message_needs_dispatch(UINT message)
@@ -766,9 +764,9 @@ static int display_windows_set_style(display_windows_t *dwindows, window_windows
 
 static int display_windows_apply_frame(display_windows_t *dwindows, window_windows_t *wwindows, const RECT *rect, UINT flags)
 {
-	int x	  = 0;
-	int y	  = 0;
-	int width = 0;
+	int x	   = 0;
+	int y	   = 0;
+	int width  = 0;
 	int height = 0;
 
 	flags |= SWP_FRAMECHANGED;
@@ -869,7 +867,7 @@ static int display_windows_poll_events(display_t *display)
 	MSG msg;
 	while (dwindows->PeekMessageA(&msg, NULL, 0, 0, PM_REMOVE)) {
 		display_event_t event = {0};
-		size_t emitted		= dwindows->emitted;
+		size_t emitted	      = dwindows->emitted;
 		if (display_windows_translate_message(dwindows, &msg, &event) == 0) {
 			if (display_windows_message_needs_dispatch(msg.message)) {
 				display_windows_dispatch_message(dwindows, &msg);
@@ -906,7 +904,7 @@ static int display_windows_wait_events(display_t *display)
 	MSG msg;
 	while (dwindows->GetMessageA(&msg, NULL, 0, 0) > 0) {
 		display_event_t event = {0};
-		size_t emitted		= dwindows->emitted;
+		size_t emitted	      = dwindows->emitted;
 		if (display_windows_translate_message(dwindows, &msg, &event) == 0) {
 			if (display_windows_message_needs_dispatch(msg.message)) {
 				display_windows_dispatch_message(dwindows, &msg);
@@ -942,9 +940,9 @@ static int display_windows_window_init(window_t *wnd, u16 x, u16 y, u16 width, u
 	mem_set(wnd->data, 0, sizeof(window_windows_t));
 
 	display_windows_t *dwindows = wnd->display->data;
-	window_windows_t *wwindows = wnd->data;
+	window_windows_t *wwindows  = wnd->data;
 
-	wwindows->style    = DISPLAY_WINDOWS_STYLE_NORMAL;
+	wwindows->style	   = DISPLAY_WINDOWS_STYLE_NORMAL;
 	wwindows->ex_style = DISPLAY_WINDOWS_EX_STYLE_NORMAL;
 
 	RECT rect = {0, 0, width, height};
@@ -983,7 +981,7 @@ static int display_windows_window_free(window_t *wnd)
 	}
 
 	display_windows_t *dwindows = wnd->display->data;
-	window_windows_t *wwindows = wnd->data;
+	window_windows_t *wwindows  = wnd->data;
 
 	if (wwindows->handle != NULL && !dwindows->DestroyWindow(wwindows->handle)) {
 		return 1;
@@ -1007,12 +1005,13 @@ static u32 display_windows_window_id(window_t *wnd)
 
 static int display_windows_window_set_title(window_t *wnd, strv_t title)
 {
-	if (wnd == NULL || wnd->display == NULL || wnd->display->data == NULL || wnd->data == NULL || (title.data == NULL && title.len > 0)) {
+	if (wnd == NULL || wnd->display == NULL || wnd->display->data == NULL || wnd->data == NULL ||
+	    (title.data == NULL && title.len > 0)) {
 		return 1;
 	}
 
 	display_windows_t *dwindows = wnd->display->data;
-	window_windows_t *wwindows = wnd->data;
+	window_windows_t *wwindows  = wnd->data;
 
 	char *buf = mem_alloc((size_t)title.len + 1);
 	if (buf == NULL) {
@@ -1036,7 +1035,7 @@ static int display_windows_window_set_position(window_t *wnd, u16 x, u16 y)
 	}
 
 	display_windows_t *dwindows = wnd->display->data;
-	window_windows_t *wwindows = wnd->data;
+	window_windows_t *wwindows  = wnd->data;
 
 	return dwindows->SetWindowPos(wwindows->handle, NULL, x, y, 0, 0, SWP_NOZORDER | SWP_NOSIZE) ? 0 : 1;
 }
@@ -1048,7 +1047,7 @@ static int display_windows_window_set_size(window_t *wnd, u16 width, u16 height)
 	}
 
 	display_windows_t *dwindows = wnd->display->data;
-	window_windows_t *wwindows = wnd->data;
+	window_windows_t *wwindows  = wnd->data;
 
 	RECT rect = {0, 0, width, height};
 	if (!dwindows->AdjustWindowRectEx(&rect, wwindows->style, FALSE, wwindows->ex_style)) {
@@ -1068,7 +1067,7 @@ static int display_windows_window_set_borderless(window_t *wnd, int borderless)
 	}
 
 	display_windows_t *dwindows = wnd->display->data;
-	window_windows_t *wwindows = wnd->data;
+	window_windows_t *wwindows  = wnd->data;
 	int enabled		    = borderless != 0;
 
 	if (wwindows->borderless == enabled) {
@@ -1104,7 +1103,7 @@ static int display_windows_window_set_fullscreen(window_t *wnd, int fullscreen)
 	}
 
 	display_windows_t *dwindows = wnd->display->data;
-	window_windows_t *wwindows = wnd->data;
+	window_windows_t *wwindows  = wnd->data;
 	int enabled		    = fullscreen != 0;
 
 	if (wwindows->fullscreen == enabled) {
@@ -1158,7 +1157,7 @@ static int display_windows_window_show(window_t *wnd)
 	}
 
 	display_windows_t *dwindows = wnd->display->data;
-	window_windows_t *wwindows = wnd->data;
+	window_windows_t *wwindows  = wnd->data;
 
 	dwindows->ShowWindow(wwindows->handle, SW_SHOW);
 	dwindows->UpdateWindow(wwindows->handle);
@@ -1174,7 +1173,7 @@ static int display_windows_window_hide(window_t *wnd)
 	}
 
 	display_windows_t *dwindows = wnd->display->data;
-	window_windows_t *wwindows = wnd->data;
+	window_windows_t *wwindows  = wnd->data;
 
 	dwindows->ShowWindow(wwindows->handle, SW_HIDE);
 	wwindows->visible = 0;

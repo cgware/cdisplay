@@ -331,8 +331,8 @@ TEST(window_free_display_without_driver)
 
 	display_t display = {0};
 	window_t window	  = {
-		  .display = &display,
-	  };
+		.display = &display,
+	};
 
 	window_free(&window);
 
@@ -406,8 +406,8 @@ TEST(window_id_display_without_driver)
 
 	display_t display = {0};
 	window_t window	  = {
-		  .display = &display,
-	  };
+		.display = &display,
+	};
 
 	EXPECT_EQ(window_id(&window), 0);
 
@@ -470,8 +470,8 @@ TEST(window_set_title_returns_driver_result)
 	t_window_reset();
 	t_window_set_title_ret = 1;
 	display_t display      = {
-		     .drv = &t_window_driver,
-	     };
+		.drv = &t_window_driver,
+	};
 	window_t window = {
 		.display = &display,
 		.data	 = (void *)0x5678,
@@ -519,7 +519,7 @@ TEST(window_set_position_returns_driver_result)
 	t_window_reset();
 	t_window_set_position_ret = 1;
 	display_t display	  = {
-			.drv = &t_window_driver,
+		.drv = &t_window_driver,
 	};
 	window_t window = {
 		.display = &display,
@@ -568,8 +568,8 @@ TEST(window_set_size_returns_driver_result)
 	t_window_reset();
 	t_window_set_size_ret = 1;
 	display_t display     = {
-		    .drv = &t_window_driver,
-	    };
+		.drv = &t_window_driver,
+	};
 	window_t window = {
 		.display = &display,
 		.data	 = (void *)0x5678,
@@ -616,8 +616,8 @@ TEST(window_set_borderless_returns_driver_result)
 	t_window_reset();
 	t_window_set_borderless_ret = 1;
 	display_t display	    = {
-			  .drv = &t_window_driver,
-	  };
+		.drv = &t_window_driver,
+	};
 	window_t window = {
 		.display = &display,
 		.data	 = (void *)0x5678,
@@ -664,8 +664,8 @@ TEST(window_set_fullscreen_returns_driver_result)
 	t_window_reset();
 	t_window_set_fullscreen_ret = 1;
 	display_t display	    = {
-			  .drv = &t_window_driver,
-	  };
+		.drv = &t_window_driver,
+	};
 	window_t window = {
 		.display = &display,
 		.data	 = (void *)0x5678,
