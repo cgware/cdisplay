@@ -54,7 +54,7 @@ TEST(display_none_window_init_null_window)
 
 	display_driver_t *drv = t_none_driver();
 	EXPECT_NE(drv, NULL);
-	EXPECT_EQ(drv->window_init(NULL, 0, 0, 640, 480), 1);
+	EXPECT_EQ(drv->window_init(NULL, &(window_config_t){.width = 640, .height = 480}), 1);
 
 	END;
 }
@@ -329,7 +329,7 @@ STEST(display_none_window_init_success)
 	window_t window	      = {0};
 
 	display_init(&display, drv, &fs, &proc, &ss, ALLOC_STD);
-	EXPECT_EQ(drv->window_init(&window, 0, 0, 640, 480), 0);
+	EXPECT_EQ(drv->window_init(&window, &(window_config_t){.width = 640, .height = 480}), 0);
 
 	EXPECT_EQ(drv->window_free(&window), 0);
 	display_free(&display);

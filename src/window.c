@@ -2,15 +2,15 @@
 
 #include "display_driver.h"
 
-window_t *window_init(window_t *wnd, display_t *display, u16 x, u16 y, u16 width, u16 height)
+window_t *window_init(window_t *wnd, display_t *display, const window_config_t *config)
 {
-	if (wnd == NULL || display == NULL || display->drv == NULL) {
+	if (wnd == NULL || display == NULL || display->drv == NULL || config == NULL) {
 		return NULL;
 	}
 
 	wnd->display = display;
 
-	if (wnd->display->drv->window_init(wnd, x, y, width, height)) {
+	if (wnd->display->drv->window_init(wnd, config)) {
 		wnd->display = NULL;
 		wnd->data    = NULL;
 		return NULL;

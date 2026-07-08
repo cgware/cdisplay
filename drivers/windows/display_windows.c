@@ -927,9 +927,9 @@ static int display_windows_wait_events(display_t *display)
 	return 1;
 }
 
-static int display_windows_window_init(window_t *wnd, u16 x, u16 y, u16 width, u16 height)
+static int display_windows_window_init(window_t *wnd, const window_config_t *config)
 {
-	if (wnd == NULL || wnd->display == NULL || wnd->display->data == NULL) {
+	if (wnd == NULL || wnd->display == NULL || wnd->display->data == NULL || config == NULL) {
 		return 1;
 	}
 
@@ -945,7 +945,7 @@ static int display_windows_window_init(window_t *wnd, u16 x, u16 y, u16 width, u
 	wwindows->style	   = DISPLAY_WINDOWS_STYLE_NORMAL;
 	wwindows->ex_style = DISPLAY_WINDOWS_EX_STYLE_NORMAL;
 
-	RECT rect = {0, 0, width, height};
+	RECT rect = {0, 0, config->width, config->height};
 	if (!dwindows->AdjustWindowRectEx(&rect, wwindows->style, FALSE, wwindows->ex_style)) {
 		mem_free(wnd->data, sizeof(window_windows_t));
 		wnd->data = NULL;
@@ -956,8 +956,8 @@ static int display_windows_window_init(window_t *wnd, u16 x, u16 y, u16 width, u
 						     "cdisplay_window",
 						     "cdisplay",
 						     wwindows->style,
-						     x,
-						     y,
+						     config->x,
+						     config->y,
 						     rect.right - rect.left,
 						     rect.bottom - rect.top,
 						     NULL,

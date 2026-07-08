@@ -26,6 +26,8 @@ static u16 t_window_x;
 static u16 t_window_y;
 static u16 t_window_width;
 static u16 t_window_height;
+static u8 t_window_depth;
+static u32 t_window_visual;
 static int t_window_borderless;
 static int t_window_fullscreen;
 
@@ -53,13 +55,15 @@ static int t_window_wait_events(display_t *display)
 	return 1;
 }
 
-static int t_window_driver_init(window_t *window, u16 x, u16 y, u16 width, u16 height)
+static int t_window_driver_init(window_t *window, const window_config_t *config)
 {
 	t_window_init_calls++;
-	t_window_x	= x;
-	t_window_y	= y;
-	t_window_width	= width;
-	t_window_height = height;
+	t_window_x	= config->x;
+	t_window_y	= config->y;
+	t_window_width	= config->width;
+	t_window_height = config->height;
+	t_window_depth	= config->depth;
+	t_window_visual = config->visual;
 	window->data	= (void *)0x5678;
 	return t_window_init_ret;
 }
@@ -176,6 +180,8 @@ static void t_window_reset(void)
 	t_window_y		      = 0;
 	t_window_width		      = 0;
 	t_window_height		      = 0;
+	t_window_depth		      = 0;
+	t_window_visual		      = 0;
 	t_window_borderless	      = 0;
 	t_window_fullscreen	      = 0;
 }
@@ -188,7 +194,7 @@ TEST(window_init_null_window)
 		.drv = &t_window_driver,
 	};
 
-	EXPECT_EQ(window_init(NULL, &display, 0, 0, 640, 480), NULL);
+	EXPECT_EQ(window_init(NULL, &display, &(window_config_t){.width = 640, .height = 480}), NULL);
 
 	END;
 }
@@ -199,7 +205,7 @@ TEST(window_init_null_display)
 
 	window_t window = {0};
 
-	EXPECT_EQ(window_init(&window, NULL, 0, 0, 640, 480), NULL);
+	EXPECT_EQ(window_init(&window, NULL, &(window_config_t){.width = 640, .height = 480}), NULL);
 
 	END;
 }
@@ -211,7 +217,23 @@ TEST(window_init_display_without_driver)
 	display_t display = {0};
 	window_t window	  = {0};
 
-	EXPECT_EQ(window_init(&window, &display, 0, 0, 640, 480), NULL);
+	EXPECT_EQ(window_init(&window, &display, &(window_config_t){.width = 640, .height = 480}), NULL);
+
+	END;
+}
+
+TEST(window_init_null_config)
+{
+	START;
+
+	t_window_reset();
+	display_t display = {
+		.drv = &t_window_driver,
+	};
+	window_t window = {0};
+
+	EXPECT_EQ(window_init(&window, &display, NULL), NULL);
+	EXPECT_EQ(t_window_init_calls, 0);
 
 	END;
 }
@@ -226,13 +248,13 @@ TEST(window_init_calls_driver)
 	};
 	window_t window = {0};
 
-	EXPECT_EQ(window_init(&window, &display, 11, 22, 640, 480), &window);
+	EXPECT_EQ(window_init(&window, &display, &(window_config_t){.x = 11, .y = 22, .width = 640, .height = 480}), &window);
 	EXPECT_EQ(t_window_init_calls, 1);
 
 	END;
 }
 
-TEST(window_init_passes_geometry)
+TEST(window_init_passes_config)
 {
 	START;
 
@@ -242,12 +264,15 @@ TEST(window_init_passes_geometry)
 	};
 	window_t window = {0};
 
-	window_init(&window, &display, 11, 22, 333, 444);
+	window_init(&window, &display,
+		    &(window_config_t){.x = 11, .y = 22, .width = 333, .height = 444, .depth = 24, .visual = 0x12345678});
 
 	EXPECT_EQ(t_window_x, 11);
 	EXPECT_EQ(t_window_y, 22);
 	EXPECT_EQ(t_window_width, 333);
 	EXPECT_EQ(t_window_height, 444);
+	EXPECT_EQ(t_window_depth, 24);
+	EXPECT_EQ(t_window_visual, 0x12345678);
 
 	END;
 }
@@ -262,7 +287,7 @@ TEST(window_init_sets_fields)
 	};
 	window_t window = {0};
 
-	window_init(&window, &display, 0, 0, 640, 480);
+	window_init(&window, &display, &(window_config_t){.width = 640, .height = 480});
 
 	EXPECT_EQ(window.display, &display);
 	EXPECT_EQ(window.data, (void *)0x5678);
@@ -281,7 +306,7 @@ TEST(window_init_failure_returns_null)
 	};
 	window_t window = {0};
 
-	EXPECT_EQ(window_init(&window, &display, 0, 0, 640, 480), NULL);
+	EXPECT_EQ(window_init(&window, &display, &(window_config_t){.width = 640, .height = 480}), NULL);
 
 	END;
 }
@@ -297,7 +322,7 @@ TEST(window_init_failure_clears_fields)
 	};
 	window_t window = {0};
 
-	window_init(&window, &display, 0, 0, 640, 480);
+	window_init(&window, &display, &(window_config_t){.width = 640, .height = 480});
 
 	EXPECT_EQ(window.display, NULL);
 	EXPECT_EQ(window.data, NULL);
@@ -777,8 +802,9 @@ STEST(window)
 	RUN(window_init_null_window);
 	RUN(window_init_null_display);
 	RUN(window_init_display_without_driver);
+	RUN(window_init_null_config);
 	RUN(window_init_calls_driver);
-	RUN(window_init_passes_geometry);
+	RUN(window_init_passes_config);
 	RUN(window_init_sets_fields);
 	RUN(window_init_failure_returns_null);
 	RUN(window_init_failure_clears_fields);

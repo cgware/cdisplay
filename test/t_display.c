@@ -54,13 +54,10 @@ static int t_display_wait_events(display_t *display)
 	return t_display_wait_events_ret;
 }
 
-static int t_display_window_init(window_t *window, u16 x, u16 y, u16 width, u16 height)
+static int t_display_window_init(window_t *window, const window_config_t *config)
 {
 	(void)window;
-	(void)x;
-	(void)y;
-	(void)width;
-	(void)height;
+	(void)config;
 	return 0;
 }
 
@@ -398,7 +395,7 @@ TEST(display_poll_events_returns_driver_result)
 	t_display_reset();
 	t_display_poll_events_ret = 1;
 	display_t display	  = {
-		.drv = &t_display_driver,
+			.drv = &t_display_driver,
 	};
 
 	EXPECT_EQ(display_poll_events(&display), 1);
@@ -451,7 +448,7 @@ TEST(display_wait_events_returns_driver_result)
 	t_display_reset();
 	t_display_wait_events_ret = 1;
 	display_t display	  = {
-		.drv = &t_display_driver,
+			.drv = &t_display_driver,
 	};
 
 	EXPECT_EQ(display_wait_events(&display), 1);

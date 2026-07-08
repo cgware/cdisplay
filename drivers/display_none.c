@@ -32,12 +32,9 @@ static int display_none_wait_events(display_t *display)
 	return display_none_poll_events(display);
 }
 
-static int display_none_window_init(window_t *wnd, u16 x, u16 y, u16 width, u16 height)
+static int display_none_window_init(window_t *wnd, const window_config_t *config)
 {
-	(void)x;
-	(void)y;
-	(void)width;
-	(void)height;
+	(void)config;
 
 	if (wnd == NULL) {
 		return 1;

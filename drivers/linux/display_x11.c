@@ -29,6 +29,7 @@ typedef struct display_x11_s {
 
 typedef struct window_x11_s {
 	u32 id;
+	u32 colormap;
 	int mapped;
 } window_x11_t;
 
@@ -381,6 +382,8 @@ enum {
 	X_INTERN_ATOM	       = 16,
 	X_CHANGE_PROPERTY      = 18,
 	X_SEND_EVENT	       = 25,
+	X_CREATE_COLORMAP      = 78,
+	X_FREE_COLORMAP	       = 79,
 	X_GET_KEYBOARD_MAPPING = 101,
 };
 
@@ -403,6 +406,7 @@ enum {
 	X_CW_BACK_PIXEL	  = 1u << 1,
 	X_CW_BORDER_PIXEL = 1u << 3,
 	X_CW_EVENT_MASK	  = 1u << 11,
+	X_CW_COLORMAP	  = 1u << 13,
 };
 
 enum {
@@ -441,6 +445,14 @@ enum {
 	X_CREATE_WINDOW_REQUEST_WORDS	= X_CREATE_WINDOW_REQUEST_SIZE / X11_PAD_SIZE,
 	X_CREATE_WINDOW_MAX_VALUE_COUNT = 15,
 	X_DEFAULT_WINDOW_BORDER_WIDTH	= 1,
+};
+
+enum {
+	X_CREATE_COLORMAP_REQUEST_SIZE	= 16,
+	X_CREATE_COLORMAP_REQUEST_WORDS = X_CREATE_COLORMAP_REQUEST_SIZE / X11_PAD_SIZE,
+	X_FREE_COLORMAP_REQUEST_SIZE	= 8,
+	X_FREE_COLORMAP_REQUEST_WORDS	= X_FREE_COLORMAP_REQUEST_SIZE / X11_PAD_SIZE,
+	X_COLORMAP_ALLOC_NONE		= 0,
 };
 
 enum {
@@ -613,7 +625,77 @@ enum {
 	X_CLIENT_MESSAGE_DATA_OFFSET   = 12,
 };
 
-static int create_window(window_t *wnd, u16 x, u16 y, u16 width, u16 height)
+static int alloc_resource_id(display_x11_t *dx11, u32 *id)
+{
+	uint shift   = ctz32(dx11->resource_id_mask);
+	u32 capacity = dx11->resource_id_mask >> shift;
+
+	if (capacity < dx11->next_resource) {
+		log_error("cdisplay", "display_x11", NULL, "failed to allocate resource");
+		return 1;
+	}
+
+	u32 resource_bits = dx11->next_resource << shift;
+	*id		  = dx11->resource_id_base | resource_bits;
+	dx11->next_resource++;
+	return 0;
+}
+
+static int create_colormap(window_t *wnd, u32 visual)
+{
+	u8 request[X_CREATE_COLORMAP_REQUEST_SIZE] = {0};
+
+	display_x11_t *dx11 = wnd->display->data;
+	window_x11_t *wx11  = wnd->data;
+
+	if (alloc_resource_id(dx11, &wx11->colormap)) {
+		return 1;
+	}
+
+	size_t off = 0;
+	cbuf_write_u8le(request, &off, X_CREATE_COLORMAP);
+	cbuf_write_u8le(request, &off, X_COLORMAP_ALLOC_NONE);
+	cbuf_write_u16le(request, &off, X_CREATE_COLORMAP_REQUEST_WORDS);
+	cbuf_write_u32le(request, &off, wx11->colormap);
+	cbuf_write_u32le(request, &off, dx11->root);
+	cbuf_write_u32le(request, &off, visual);
+
+	if (sock_write_all(wnd->display->ss, dx11->sock, request, sizeof(request))) {
+		log_error("cdisplay", "display_x11", NULL, "failed to create colormap");
+		wx11->colormap = 0;
+		return 1;
+	}
+
+	return 0;
+}
+
+static int free_colormap(window_t *wnd)
+{
+	window_x11_t *wx11 = wnd->data;
+	if (wx11->colormap == 0) {
+		return 0;
+	}
+
+	u8 request[X_FREE_COLORMAP_REQUEST_SIZE] = {0};
+	size_t off				 = 0;
+	cbuf_write_u8le(request, &off, X_FREE_COLORMAP);
+	cbuf_write_u8le(request, &off, 0);
+	cbuf_write_u16le(request, &off, X_FREE_COLORMAP_REQUEST_WORDS);
+	cbuf_write_u32le(request, &off, wx11->colormap);
+
+	display_x11_t *dx11 = wnd->display->data;
+	int ret		    = sock_write_all(wnd->display->ss, dx11->sock, request, sizeof(request));
+	wx11->colormap	    = 0;
+
+	if (ret) {
+		log_error("cdisplay", "display_x11", NULL, "failed to free colormap");
+		return 1;
+	}
+
+	return 0;
+}
+
+static int create_window(window_t *wnd, const window_config_t *config)
 {
 	u8 request[X_CREATE_WINDOW_REQUEST_SIZE + X_CREATE_WINDOW_MAX_VALUE_COUNT * X11_PAD_SIZE] = {0};
 	u32 values[X_CREATE_WINDOW_MAX_VALUE_COUNT]						  = {0};
@@ -631,23 +713,19 @@ static int create_window(window_t *wnd, u16 x, u16 y, u16 width, u16 height)
 	values[value_count++] = border_pixel;
 	values[value_count++] = event_mask;
 
-	uint shift   = ctz32(dx11->resource_id_mask);
-	u32 capacity = dx11->resource_id_mask >> shift;
-
-	if (capacity < dx11->next_resource) {
-		log_error("cdisplay", "awindow_x11", NULL, "failed to allocate resource");
+	window_x11_t *wx11 = wnd->data;
+	if (alloc_resource_id(dx11, &wx11->id)) {
+		return 1;
+	}
+	if (config->visual != 0 && create_colormap(wnd, config->visual)) {
 		return 1;
 	}
 
-	u32 resource_bits = dx11->next_resource << shift;
+	if (wx11->colormap != 0) {
+		values[value_count++] = wx11->colormap;
+	}
 
-	window_x11_t *wx11 = wnd->data;
-
-	wx11->id = dx11->resource_id_base | resource_bits;
-
-	dx11->next_resource++;
-
-	u8 depth = X_COPY_FROM_PARENT;
+	u8 depth = config->depth == 0 ? X_COPY_FROM_PARENT : config->depth;
 
 	size_t off = 0;
 	cbuf_write_u8le(request, &off, X_CREATE_WINDOW);
@@ -660,11 +738,11 @@ static int create_window(window_t *wnd, u16 x, u16 y, u16 width, u16 height)
 	u32 parent = dx11->root;
 	cbuf_write_u32le(request, &off, parent);
 
-	cbuf_write_u16le(request, &off, x);
-	cbuf_write_u16le(request, &off, y);
+	cbuf_write_u16le(request, &off, config->x);
+	cbuf_write_u16le(request, &off, config->y);
 
-	cbuf_write_u16le(request, &off, width);
-	cbuf_write_u16le(request, &off, height);
+	cbuf_write_u16le(request, &off, config->width);
+	cbuf_write_u16le(request, &off, config->height);
 
 	u16 border_width = X_DEFAULT_WINDOW_BORDER_WIDTH;
 	cbuf_write_u16le(request, &off, border_width);
@@ -672,10 +750,13 @@ static int create_window(window_t *wnd, u16 x, u16 y, u16 width, u16 height)
 	u16 window_class = X_INPUT_OUTPUT;
 	cbuf_write_u16le(request, &off, window_class);
 
-	u32 visual = X_COPY_FROM_PARENT;
+	u32 visual = config->visual == 0 ? X_COPY_FROM_PARENT : config->visual;
 	cbuf_write_u32le(request, &off, visual);
 
 	u32 value_mask = X_CW_BACK_PIXEL | X_CW_BORDER_PIXEL | X_CW_EVENT_MASK;
+	if (wx11->colormap != 0) {
+		value_mask |= X_CW_COLORMAP;
+	}
 	cbuf_write_u32le(request, &off, value_mask);
 
 	for (size_t i = 0; i < value_count; i++) {
@@ -1580,9 +1661,9 @@ static int display_x11_free(display_t *display)
 	return 0;
 }
 
-static int display_x11_window_init(window_t *wnd, u16 x, u16 y, u16 width, u16 height)
+static int display_x11_window_init(window_t *wnd, const window_config_t *config)
 {
-	if (wnd == NULL) {
+	if (wnd == NULL || config == NULL) {
 		return 1;
 	}
 
@@ -1592,7 +1673,8 @@ static int display_x11_window_init(window_t *wnd, u16 x, u16 y, u16 width, u16 h
 	}
 	mem_set(wnd->data, 0, sizeof(window_x11_t));
 
-	if (create_window(wnd, x, y, width, height)) {
+	if (create_window(wnd, config)) {
+		free_colormap(wnd);
 		mem_free(wnd->data, sizeof(window_x11_t));
 		wnd->data = NULL;
 		return 1;
@@ -1600,6 +1682,7 @@ static int display_x11_window_init(window_t *wnd, u16 x, u16 y, u16 width, u16 h
 
 	if (set_wm_protocols(wnd)) {
 		destroy_window(wnd);
+		free_colormap(wnd);
 		mem_free(wnd->data, sizeof(window_x11_t));
 		wnd->data = NULL;
 		return 1;
@@ -1615,6 +1698,7 @@ static int display_x11_window_free(window_t *wnd)
 	}
 
 	destroy_window(wnd);
+	free_colormap(wnd);
 	mem_free(wnd->data, sizeof(window_x11_t));
 
 	return 0;

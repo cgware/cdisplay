@@ -357,7 +357,7 @@ static int t_windows_open(display_t *display, window_t *window, fs_t *fs, proc_t
 		return 1;
 	}
 	display_set_event_callback(display, t_windows_event_cb, NULL);
-	if (window != NULL && window_init(window, display, 10, 20, 640, 480) == NULL) {
+	if (window != NULL && window_init(window, display, &(window_config_t){.x = 10, .y = 20, .width = 640, .height = 480}) == NULL) {
 		display_free(display);
 		return 1;
 	}

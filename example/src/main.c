@@ -177,7 +177,13 @@ int main()
 	}
 
 	for (size_t i = 0; i < windows_cnt; i++) {
-		if (window_init(&windows[i].wnd, &display, 100 * (u16)i, 100 * (u16)i, 640, 480) == NULL) {
+		window_config_t config = {
+			.x	= 100 * (u16)i,
+			.y	= 100 * (u16)i,
+			.width	= 640,
+			.height = 480,
+		};
+		if (window_init(&windows[i].wnd, &display, &config) == NULL) {
 			c_printf("failed to create window\n");
 			cleanup(&display, windows, windows_cnt, &fs, &proc, &ss);
 			mem_print(DST_STD());

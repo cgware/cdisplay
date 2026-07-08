@@ -451,8 +451,8 @@ static void t_x11_script_setup(sock_t *ss, void *server)
 	t_x11_script_setup_data(ss, server, 1, setup, sizeof(setup));
 }
 
-static void t_x11_open_window(display_driver_t *drv, fs_t *fs, proc_t *proc, sock_t *ss, display_t *display, window_t *window,
-			      void **server, void **peer)
+static void t_x11_open_window_config(display_driver_t *drv, fs_t *fs, proc_t *proc, sock_t *ss, display_t *display, window_t *window,
+				     const window_config_t *config, void **server, void **peer)
 {
 	t_x11_env_init(fs, proc, ss);
 	t_x11_set_display(proc, STRV(":0"));
@@ -464,26 +464,30 @@ static void t_x11_open_window(display_driver_t *drv, fs_t *fs, proc_t *proc, soc
 	display_init(display, drv, fs, proc, ss, ALLOC_STD);
 	t_x11_event_reset();
 	display_set_event_callback(display, t_x11_event_cb, NULL);
-	window_init(window, display, 0, 0, 640, 480);
+	window_init(window, display, config);
 	log_set_quiet(0, 0);
 	sock_accept(ss, *server, peer);
 }
 
-static void t_x11_drain_open_window_requests(sock_t *ss, void *peer)
+static void t_x11_open_window(display_driver_t *drv, fs_t *fs, proc_t *proc, sock_t *ss, display_t *display, window_t *window,
+			      void **server, void **peer)
 {
-	u8 setup_request[48]	= {0};
-	u8 keymap_request[8]	= {0};
-	u8 modmap_request[4]	= {0};
-	u8 atom_request[20]	= {0};
-	u8 atom_request2[24]	= {0};
-	u8 atom_request3[16]	= {0};
-	u8 atom_request4[20]	= {0};
-	u8 atom_request5[20]	= {0};
-	u8 atom_request6[24]	= {0};
-	u8 atom_request7[24]	= {0};
-	u8 atom_request8[32]	= {0};
-	u8 create_request[44]	= {0};
-	u8 property_request[28] = {0};
+	t_x11_open_window_config(drv, fs, proc, ss, display, window, &(window_config_t){.width = 640, .height = 480}, server, peer);
+}
+
+static void t_x11_drain_display_init_requests(sock_t *ss, void *peer)
+{
+	u8 setup_request[48] = {0};
+	u8 keymap_request[8] = {0};
+	u8 modmap_request[4] = {0};
+	u8 atom_request[20]  = {0};
+	u8 atom_request2[24] = {0};
+	u8 atom_request3[16] = {0};
+	u8 atom_request4[20] = {0};
+	u8 atom_request5[20] = {0};
+	u8 atom_request6[24] = {0};
+	u8 atom_request7[24] = {0};
+	u8 atom_request8[32] = {0};
 
 	sock_read_all(ss, peer, setup_request, sizeof(setup_request));
 	sock_read_all(ss, peer, keymap_request, sizeof(keymap_request));
@@ -496,6 +500,14 @@ static void t_x11_drain_open_window_requests(sock_t *ss, void *peer)
 	sock_read_all(ss, peer, atom_request6, sizeof(atom_request6));
 	sock_read_all(ss, peer, atom_request7, sizeof(atom_request7));
 	sock_read_all(ss, peer, atom_request8, sizeof(atom_request8));
+}
+
+static void t_x11_drain_open_window_requests(sock_t *ss, void *peer)
+{
+	u8 create_request[44]	= {0};
+	u8 property_request[28] = {0};
+
+	t_x11_drain_display_init_requests(ss, peer);
 	sock_read_all(ss, peer, create_request, sizeof(create_request));
 	sock_read_all(ss, peer, property_request, sizeof(property_request));
 }
@@ -684,7 +696,7 @@ TEST(display_x11_window_init_null_window)
 
 	display_driver_t *drv = t_x11_driver();
 	EXPECT_NE(drv, NULL);
-	EXPECT_EQ(drv->window_init(NULL, 0, 0, 640, 480), 1);
+	EXPECT_EQ(drv->window_init(NULL, &(window_config_t){.width = 640, .height = 480}), 1);
 
 	END;
 }
@@ -698,7 +710,7 @@ TEST(display_x11_window_init_alloc_failure)
 
 	EXPECT_NE(drv, NULL);
 	mem_oom(1);
-	EXPECT_EQ(drv->window_init(&wnd, 0, 0, 640, 480), 1);
+	EXPECT_EQ(drv->window_init(&wnd, &(window_config_t){.width = 640, .height = 480}), 1);
 	mem_oom(0);
 
 	END;
@@ -800,7 +812,7 @@ TEST(display_x11_window_init_writes_requests)
 	t_x11_script_setup(&ss, server);
 	log_set_quiet(0, 1);
 	display_init(&display, drv, &fs, &proc, &ss, ALLOC_STD);
-	EXPECT_EQ(window_init(&window, &display, 11, 22, 333, 444), &window);
+	EXPECT_EQ(window_init(&window, &display, &(window_config_t){.x = 11, .y = 22, .width = 333, .height = 444}), &window);
 	log_set_quiet(0, 0);
 
 	sock_accept(&ss, server, &peer);
@@ -858,6 +870,115 @@ TEST(display_x11_window_init_writes_requests)
 	EXPECT_EQ(property_data, 0x000000f1);
 
 	window_free(&window);
+	display_free(&display);
+	sock_close(&ss, peer);
+	sock_close(&ss, server);
+	t_x11_env_free(&fs, &proc, &ss);
+
+	END;
+}
+
+TEST(display_x11_window_init_custom_visual_writes_requests)
+{
+	START;
+
+	display_driver_t *drv	= t_x11_driver();
+	fs_t fs			= {0};
+	proc_t proc		= {0};
+	sock_t ss		= {0};
+	display_t display	= {0};
+	window_t window		= {0};
+	void *server		= NULL;
+	void *peer		= NULL;
+	u8 colormap_request[16] = {0};
+	u8 create_request[48]	= {0};
+	u8 property_request[28] = {0};
+	u32 colormap		= 0;
+	u32 root		= 0;
+	u32 visual		= 0;
+	u32 create_visual	= 0;
+	u32 value_mask		= 0;
+	u32 create_colormap	= 0;
+
+	t_x11_open_window_config(drv,
+				 &fs,
+				 &proc,
+				 &ss,
+				 &display,
+				 &window,
+				 &(window_config_t){.width = 640, .height = 480, .depth = 24, .visual = 0x21},
+				 &server,
+				 &peer);
+	t_x11_drain_display_init_requests(&ss, peer);
+	sock_read_all(&ss, peer, colormap_request, sizeof(colormap_request));
+	sock_read_all(&ss, peer, create_request, sizeof(create_request));
+	sock_read_all(&ss, peer, property_request, sizeof(property_request));
+
+	cbuf_get_u32le(colormap_request, 4, &colormap);
+	cbuf_get_u32le(colormap_request, 8, &root);
+	cbuf_get_u32le(colormap_request, 12, &visual);
+	EXPECT_EQ(colormap_request[0], 78);
+	EXPECT_EQ(colormap_request[1], 0);
+	EXPECT_EQ(colormap, 0x00100002);
+	EXPECT_EQ(root, 0x00000040);
+	EXPECT_EQ(visual, 0x21);
+
+	cbuf_get_u32le(create_request, 24, &create_visual);
+	cbuf_get_u32le(create_request, 28, &value_mask);
+	cbuf_get_u32le(create_request, 44, &create_colormap);
+	EXPECT_EQ(create_request[0], 1);
+	EXPECT_EQ(create_request[1], 24);
+	EXPECT_EQ(create_visual, 0x21);
+	EXPECT_EQ(value_mask, (1u << 1) | (1u << 3) | (1u << 11) | (1u << 13));
+	EXPECT_EQ(create_colormap, colormap);
+
+	window_free(&window);
+	display_free(&display);
+	sock_close(&ss, peer);
+	sock_close(&ss, server);
+	t_x11_env_free(&fs, &proc, &ss);
+
+	END;
+}
+
+TEST(display_x11_window_free_custom_visual_writes_request)
+{
+	START;
+
+	display_driver_t *drv  = t_x11_driver();
+	fs_t fs		       = {0};
+	proc_t proc	       = {0};
+	sock_t ss	       = {0};
+	display_t display      = {0};
+	window_t window	       = {0};
+	void *server	       = NULL;
+	void *peer	       = NULL;
+	u8 destroy_request[8]  = {0};
+	u8 colormap_request[8] = {0};
+	u32 colormap	       = 0;
+
+	t_x11_open_window_config(drv,
+				 &fs,
+				 &proc,
+				 &ss,
+				 &display,
+				 &window,
+				 &(window_config_t){.width = 640, .height = 480, .depth = 24, .visual = 0x21},
+				 &server,
+				 &peer);
+	t_x11_drain_display_init_requests(&ss, peer);
+	sock_read_all(&ss, peer, (u8[16]){0}, 16);
+	sock_read_all(&ss, peer, (u8[48]){0}, 48);
+	sock_read_all(&ss, peer, (u8[28]){0}, 28);
+
+	window_free(&window);
+	sock_read_all(&ss, peer, destroy_request, sizeof(destroy_request));
+	sock_read_all(&ss, peer, colormap_request, sizeof(colormap_request));
+
+	cbuf_get_u32le(colormap_request, 4, &colormap);
+	EXPECT_EQ(colormap_request[0], 79);
+	EXPECT_EQ(colormap, 0x00100002);
+
 	display_free(&display);
 	sock_close(&ss, peer);
 	sock_close(&ss, server);
@@ -2248,7 +2369,7 @@ TEST(display_x11_wait_event_keypad_keys)
 	EXPECT_EQ(display_init(&display, drv, &fs, &proc, &ss, ALLOC_STD), &display);
 	t_x11_event_reset();
 	display_set_event_callback(&display, t_x11_event_cb, NULL);
-	EXPECT_EQ(window_init(&window, &display, 0, 0, 640, 480), &window);
+	EXPECT_EQ(window_init(&window, &display, &(window_config_t){.width = 640, .height = 480}), &window);
 	log_set_quiet(0, 0);
 	sock_accept(&ss, server, &peer);
 
@@ -3366,13 +3487,82 @@ TEST(display_x11_window_init_resource_exhausted)
 	t_x11_script_setup_data(&ss, server, 1, setup, sizeof(setup));
 	log_set_quiet(0, 1);
 	display_init(&display, drv, &fs, &proc, &ss, ALLOC_STD);
-	window_init(&first, &display, 0, 0, 640, 480);
-	window_init(&second, &display, 0, 0, 640, 480);
-	EXPECT_EQ(window_init(&third, &display, 0, 0, 640, 480), NULL);
+	window_init(&first, &display, &(window_config_t){.width = 640, .height = 480});
+	window_init(&second, &display, &(window_config_t){.width = 640, .height = 480});
+	EXPECT_EQ(window_init(&third, &display, &(window_config_t){.width = 640, .height = 480}), NULL);
 	log_set_quiet(0, 0);
 
 	window_free(&second);
 	window_free(&first);
+	display_free(&display);
+	sock_close(&ss, server);
+	t_x11_env_free(&fs, &proc, &ss);
+
+	END;
+}
+
+TEST(display_x11_window_init_colormap_resource_exhausted)
+{
+	START;
+
+	display_driver_t *drv = t_x11_driver();
+	fs_t fs		      = {0};
+	proc_t proc	      = {0};
+	sock_t ss	      = {0};
+	display_t display     = {0};
+	window_t first	      = {0};
+	window_t second	      = {0};
+	void *server	      = NULL;
+	u8 setup[72]	      = {0};
+
+	t_x11_env_init(&fs, &proc, &ss);
+	t_x11_set_display(&proc, STRV(":0"));
+	t_x11_set_xauthority(&proc);
+	t_x11_write_authority(&fs);
+	t_x11_listen(&ss, &server);
+	t_x11_setup_data(setup, sizeof(setup), 1, 0);
+	cbuf_set_u32le(setup, 8, 1);
+	t_x11_script_setup_data(&ss, server, 1, setup, sizeof(setup));
+	log_set_quiet(0, 1);
+	display_init(&display, drv, &fs, &proc, &ss, ALLOC_STD);
+	window_init(&first, &display, &(window_config_t){.width = 640, .height = 480});
+	EXPECT_EQ(window_init(&second, &display, &(window_config_t){.width = 640, .height = 480, .depth = 24, .visual = 0x21}), NULL);
+	log_set_quiet(0, 0);
+
+	window_free(&first);
+	display_free(&display);
+	sock_close(&ss, server);
+	t_x11_env_free(&fs, &proc, &ss);
+
+	END;
+}
+
+TEST(display_x11_window_init_colormap_write_failure)
+{
+	START;
+
+	display_driver_t *drv = t_x11_driver();
+	fs_t fs		      = {0};
+	proc_t proc	      = {0};
+	sock_t ss	      = {0};
+	display_t display     = {0};
+	window_t window	      = {0};
+	void *server	      = NULL;
+	void *peer	      = NULL;
+
+	t_x11_env_init(&fs, &proc, &ss);
+	t_x11_set_display(&proc, STRV(":0"));
+	t_x11_set_xauthority(&proc);
+	t_x11_write_authority(&fs);
+	t_x11_listen(&ss, &server);
+	t_x11_script_setup(&ss, server);
+	log_set_quiet(0, 1);
+	display_init(&display, drv, &fs, &proc, &ss, ALLOC_STD);
+	sock_accept(&ss, server, &peer);
+	sock_close(&ss, peer);
+	EXPECT_EQ(window_init(&window, &display, &(window_config_t){.width = 640, .height = 480, .depth = 24, .visual = 0x21}), NULL);
+	log_set_quiet(0, 0);
+
 	display_free(&display);
 	sock_close(&ss, server);
 	t_x11_env_free(&fs, &proc, &ss);
@@ -3403,7 +3593,7 @@ TEST(display_x11_window_init_create_write_failure)
 	display_init(&display, drv, &fs, &proc, &ss, ALLOC_STD);
 	sock_accept(&ss, server, &peer);
 	sock_close(&ss, peer);
-	EXPECT_EQ(window_init(&window, &display, 0, 0, 640, 480), NULL);
+	EXPECT_EQ(window_init(&window, &display, &(window_config_t){.width = 640, .height = 480}), NULL);
 	log_set_quiet(0, 0);
 
 	display_free(&display);
@@ -3488,7 +3678,7 @@ TEST(display_x11_window_init_wm_protocols_write_failure)
 	sock_read_all(&ss, peer, atom_request7, sizeof(atom_request7));
 	sock_read_all(&ss, peer, atom_request8, sizeof(atom_request8));
 	sock_setopt(&ss, peer, SOCK_OPT_RCVBUF, &rcvbuf, sizeof(rcvbuf));
-	EXPECT_EQ(window_init(&window, &display, 0, 0, 640, 480), NULL);
+	EXPECT_EQ(window_init(&window, &display, &(window_config_t){.width = 640, .height = 480}), NULL);
 	log_set_quiet(0, 0);
 
 	display_free(&display);
@@ -3520,9 +3710,51 @@ TEST(display_x11_window_free_destroy_write_failure)
 	t_x11_script_setup(&ss, server);
 	log_set_quiet(0, 1);
 	display_init(&display, drv, &fs, &proc, &ss, ALLOC_STD);
-	window_init(&window, &display, 0, 0, 640, 480);
+	window_init(&window, &display, &(window_config_t){.width = 640, .height = 480});
 	sock_accept(&ss, server, &peer);
 	sock_close(&ss, peer);
+	window_free(&window);
+	log_set_quiet(0, 0);
+
+	EXPECT_EQ(window.display, NULL);
+	EXPECT_EQ(window.data, NULL);
+
+	display_free(&display);
+	sock_close(&ss, server);
+	t_x11_env_free(&fs, &proc, &ss);
+
+	END;
+}
+
+TEST(display_x11_window_free_colormap_write_failure)
+{
+	START;
+
+	display_driver_t *drv = t_x11_driver();
+	fs_t fs		      = {0};
+	proc_t proc	      = {0};
+	sock_t ss	      = {0};
+	display_t display     = {0};
+	window_t window	      = {0};
+	void *server	      = NULL;
+	void *peer	      = NULL;
+
+	t_x11_open_window_config(drv,
+				 &fs,
+				 &proc,
+				 &ss,
+				 &display,
+				 &window,
+				 &(window_config_t){.width = 640, .height = 480, .depth = 24, .visual = 0x21},
+				 &server,
+				 &peer);
+	t_x11_drain_display_init_requests(&ss, peer);
+	sock_read_all(&ss, peer, (u8[16]){0}, 16);
+	sock_read_all(&ss, peer, (u8[48]){0}, 48);
+	sock_read_all(&ss, peer, (u8[28]){0}, 28);
+	sock_close(&ss, peer);
+
+	log_set_quiet(0, 1);
 	window_free(&window);
 	log_set_quiet(0, 0);
 
@@ -3595,6 +3827,8 @@ STEST(display_x11)
 	RUN(display_x11_window_id_null_data);
 	RUN(display_x11_init_success);
 	RUN(display_x11_window_init_writes_requests);
+	RUN(display_x11_window_init_custom_visual_writes_requests);
+	RUN(display_x11_window_free_custom_visual_writes_request);
 	RUN(display_x11_window_set_title_writes_requests);
 	RUN(display_x11_window_set_title_null_data);
 	RUN(display_x11_window_set_title_invalid_text);
@@ -3673,10 +3907,13 @@ STEST(display_x11)
 	RUN(display_x11_init_intern_atom_missing);
 	RUN(display_x11_init_socket_open_failure);
 	RUN(display_x11_window_init_resource_exhausted);
+	RUN(display_x11_window_init_colormap_resource_exhausted);
+	RUN(display_x11_window_init_colormap_write_failure);
 	RUN(display_x11_window_init_create_write_failure);
 	RUN(display_x11_window_init_wm_protocols_write_failure);
 	RUN(display_x11_window_show_write_failure);
 	RUN(display_x11_window_free_destroy_write_failure);
+	RUN(display_x11_window_free_colormap_write_failure);
 	RUN(display_x11_init_valid_authority_writes_cookie);
 
 	SEND;

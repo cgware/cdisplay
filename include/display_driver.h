@@ -12,7 +12,7 @@ typedef struct display_driver_s {
 	int (*free)(display_t *display);
 	int (*poll_events)(display_t *display);
 	int (*wait_events)(display_t *display);
-	int (*window_init)(window_t *window, u16 x, u16 y, u16 width, u16 height);
+	int (*window_init)(window_t *window, const window_config_t *config);
 	int (*window_free)(window_t *window);
 	u32 (*window_id)(window_t *window);
 	int (*window_set_title)(window_t *window, strv_t title);
