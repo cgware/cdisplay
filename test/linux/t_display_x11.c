@@ -451,6 +451,43 @@ static void t_x11_script_setup(sock_t *ss, void *server)
 	t_x11_script_setup_data(ss, server, 1, setup, sizeof(setup));
 }
 
+static void t_x11_script_setup_visual(sock_t *ss, void *server, u32 visual, u8 depth)
+{
+	u8 setup[104] = {0};
+
+	t_x11_setup_data(setup, sizeof(setup), 1, 0);
+	cbuf_set_u8le(setup, 71, 1);
+	cbuf_set_u8le(setup, 72, depth);
+	cbuf_set_u16le(setup, 74, 1);
+	cbuf_set_u32le(setup, 80, visual);
+	t_x11_script_setup_data(ss, server, 1, setup, sizeof(setup));
+}
+
+static void t_x11_drain_display_init_requests(sock_t *ss, void *peer);
+
+static void t_x11_open_display(display_driver_t *drv, fs_t *fs, proc_t *proc, sock_t *ss, display_t *display, void **server, void **peer)
+{
+	t_x11_env_init(fs, proc, ss);
+	t_x11_set_display(proc, STRV(":0"));
+	t_x11_set_xauthority(proc);
+	t_x11_write_authority(fs);
+	t_x11_listen(ss, server);
+	t_x11_script_setup(ss, *server);
+	log_set_quiet(0, 1);
+	display_init(display, drv, fs, proc, ss, ALLOC_STD);
+	log_set_quiet(0, 0);
+	sock_accept(ss, *server, peer);
+	t_x11_drain_display_init_requests(ss, *peer);
+}
+
+static void t_x11_close_display(fs_t *fs, proc_t *proc, sock_t *ss, display_t *display, void *server, void *peer)
+{
+	display_free(display);
+	sock_close(ss, peer);
+	sock_close(ss, server);
+	t_x11_env_free(fs, proc, ss);
+}
+
 static void t_x11_open_window_config(display_driver_t *drv, fs_t *fs, proc_t *proc, sock_t *ss, display_t *display, window_t *window,
 				     const window_config_t *config, void **server, void **peer)
 {
@@ -669,12 +706,11 @@ TEST(display_x11_init_alloc_failure)
 	START;
 
 	display_driver_t *drv = t_x11_driver();
-	display_t display     = {0};
+	t_alloc_t state	      = {.fail_alloc_after = 1};
+	display_t display     = {.alloc = t_alloc(&state)};
 
 	EXPECT_NE(drv, NULL);
-	mem_oom(1);
 	EXPECT_EQ(drv->init(&display), 1);
-	mem_oom(0);
 
 	END;
 }
@@ -706,12 +742,12 @@ TEST(display_x11_window_init_alloc_failure)
 	START;
 
 	display_driver_t *drv = t_x11_driver();
-	window_t wnd	      = {0};
+	t_alloc_t state	      = {.fail_alloc_after = 1};
+	display_t display     = {.alloc = t_alloc(&state)};
+	window_t wnd	      = {.display = &display};
 
 	EXPECT_NE(drv, NULL);
-	mem_oom(1);
 	EXPECT_EQ(drv->window_init(&wnd, &(window_config_t){.width = 640, .height = 480}), 1);
-	mem_oom(0);
 
 	END;
 }
@@ -3285,7 +3321,7 @@ TEST(display_x11_init_modifier_mapping_alloc_failure)
 	void *server	      = NULL;
 	u8 setup[72]	      = {0};
 	buf_t mapping	      = {0};
-	t_alloc_t state	      = {.fail_alloc_after = 4};
+	t_alloc_t state	      = {.fail_alloc_after = 5};
 
 	t_x11_env_init(&fs, &proc, &ss);
 	t_x11_set_display(&proc, STRV(":0"));
@@ -3813,6 +3849,681 @@ TEST(display_x11_init_valid_authority_writes_cookie)
 	END;
 }
 
+TEST(display_x11_visual_depth_returns_setup_depth)
+{
+	START;
+
+	display_driver_t *drv = t_x11_driver();
+	fs_t fs		      = {0};
+	proc_t proc	      = {0};
+	sock_t ss	      = {0};
+	display_t display     = {0};
+	void *server	      = NULL;
+	u8 depth	      = 0;
+
+	t_x11_env_init(&fs, &proc, &ss);
+	t_x11_set_display(&proc, STRV(":0"));
+	t_x11_set_xauthority(&proc);
+	t_x11_write_authority(&fs);
+	t_x11_listen(&ss, &server);
+	t_x11_script_setup_visual(&ss, server, 0x21, 32);
+	log_set_quiet(0, 1);
+	EXPECT_EQ(display_init(&display, drv, &fs, &proc, &ss, ALLOC_STD), &display);
+	log_set_quiet(0, 0);
+	EXPECT_EQ(display_visual_depth(&display, 0x21, &depth), 0);
+	EXPECT_EQ(depth, 32);
+
+	display_free(&display);
+	sock_close(&ss, server);
+	t_x11_env_free(&fs, &proc, &ss);
+
+	END;
+}
+
+TEST(display_x11_visual_depth_rejects_unknown_visual)
+{
+	START;
+
+	display_driver_t *drv = t_x11_driver();
+	fs_t fs		      = {0};
+	proc_t proc	      = {0};
+	sock_t ss	      = {0};
+	display_t display     = {0};
+	void *server	      = NULL;
+
+	t_x11_env_init(&fs, &proc, &ss);
+	t_x11_set_display(&proc, STRV(":0"));
+	t_x11_set_xauthority(&proc);
+	t_x11_write_authority(&fs);
+	t_x11_listen(&ss, &server);
+	t_x11_script_setup_visual(&ss, server, 0x21, 32);
+	log_set_quiet(0, 1);
+	EXPECT_EQ(display_init(&display, drv, &fs, &proc, &ss, ALLOC_STD), &display);
+	EXPECT_EQ(display_visual_depth(&display, 0x22, &(u8){0}), 1);
+	log_set_quiet(0, 0);
+
+	display_free(&display);
+	sock_close(&ss, server);
+	t_x11_env_free(&fs, &proc, &ss);
+
+	END;
+}
+
+TEST(display_x11_ext_init_writes_query)
+{
+	START;
+
+	display_driver_t *drv = t_x11_driver();
+	fs_t fs		      = {0};
+	proc_t proc	      = {0};
+	sock_t ss	      = {0};
+	display_t display     = {0};
+	display_ext_t ext     = {0};
+	void *server	      = NULL;
+	void *peer	      = NULL;
+	u8 reply[32]	      = {0};
+	u8 request[16]	      = {0};
+
+	t_x11_open_display(drv, &fs, &proc, &ss, &display, &server, &peer);
+	cbuf_set_u8le(reply, 0, 1);
+	cbuf_set_u8le(reply, 8, 1);
+	cbuf_set_u8le(reply, 9, 130);
+	cbuf_set_u8le(reply, 10, 80);
+	cbuf_set_u8le(reply, 11, 160);
+	sock_write_all(&ss, peer, reply, sizeof(reply));
+	EXPECT_EQ(display_ext_init(&ext, &display, STRV("RANDR")), &ext);
+	EXPECT_EQ(ext.opcode, 130);
+	EXPECT_EQ(ext.first_event, 80);
+	EXPECT_EQ(ext.first_error, 160);
+	sock_read_all(&ss, peer, request, sizeof(request));
+	EXPECT_EQ(request[0], 98);
+	EXPECT_EQ(request[2], 4);
+	EXPECT_EQ(request[4], 5);
+	EXPECT_EQ(mem_cmp(&request[8], "RANDR", 5), 0);
+
+	t_x11_close_display(&fs, &proc, &ss, &display, server, peer);
+
+	END;
+}
+
+TEST(display_x11_ext_send_writes_request)
+{
+	START;
+
+	display_driver_t *drv = t_x11_driver();
+	fs_t fs		      = {0};
+	proc_t proc	      = {0};
+	sock_t ss	      = {0};
+	display_t display     = {0};
+	display_ext_t ext     = {.opcode = 130};
+	void *server	      = NULL;
+	void *peer	      = NULL;
+	u8 data[]	      = {1, 2, 3, 4};
+	u8 request[8]	      = {0};
+
+	t_x11_open_display(drv, &fs, &proc, &ss, &display, &server, &peer);
+	ext.display = &display;
+	EXPECT_EQ(display_ext_send(&ext, 7, data, sizeof(data)), 0);
+	sock_read_all(&ss, peer, request, sizeof(request));
+	EXPECT_EQ(request[0], 130);
+	EXPECT_EQ(request[1], 7);
+	EXPECT_EQ(request[2], 2);
+	EXPECT_EQ(mem_cmp(&request[4], data, sizeof(data)), 0);
+
+	t_x11_close_display(&fs, &proc, &ss, &display, server, peer);
+
+	END;
+}
+
+TEST(display_x11_ext_call_reads_reply_data)
+{
+	START;
+
+	display_driver_t *drv = t_x11_driver();
+	fs_t fs		      = {0};
+	proc_t proc	      = {0};
+	sock_t ss	      = {0};
+	display_t display     = {0};
+	display_ext_t ext     = {.opcode = 130};
+	display_ext_reply_t reply;
+	void *server	= NULL;
+	void *peer	= NULL;
+	u8 response[36] = {0};
+
+	t_x11_open_display(drv, &fs, &proc, &ss, &display, &server, &peer);
+	ext.display = &display;
+	cbuf_set_u8le(response, 0, 1);
+	cbuf_set_u32le(response, 4, 1);
+	cbuf_set_u32le(response, 32, 0x12345678);
+	sock_write_all(&ss, peer, response, sizeof(response));
+	EXPECT_EQ(display_ext_call(&ext, 7, NULL, 0, &reply), 0);
+	EXPECT_EQ(reply.size, 4);
+	EXPECT_EQ(mem_cmp(reply.data, &response[32], 4), 0);
+	display_ext_reply_free(&reply);
+
+	t_x11_close_display(&fs, &proc, &ss, &display, server, peer);
+
+	END;
+}
+
+TEST(display_x11_ext_call_accepts_empty_reply)
+{
+	START;
+
+	display_driver_t *drv = t_x11_driver();
+	fs_t fs		      = {0};
+	proc_t proc	      = {0};
+	sock_t ss	      = {0};
+	display_t display     = {0};
+	display_ext_t ext     = {.opcode = 130};
+	display_ext_reply_t reply;
+	void *server	= NULL;
+	void *peer	= NULL;
+	u8 response[32] = {1};
+
+	t_x11_open_display(drv, &fs, &proc, &ss, &display, &server, &peer);
+	ext.display = &display;
+	sock_write_all(&ss, peer, response, sizeof(response));
+	EXPECT_EQ(display_ext_call(&ext, 7, NULL, 0, &reply), 0);
+	EXPECT_EQ(reply.size, 0);
+	EXPECT_EQ(reply.data, NULL);
+
+	t_x11_close_display(&fs, &proc, &ss, &display, server, peer);
+
+	END;
+}
+
+TEST(display_x11_ext_init_rejects_unavailable_extension)
+{
+	START;
+
+	display_driver_t *drv = t_x11_driver();
+	fs_t fs		      = {0};
+	proc_t proc	      = {0};
+	sock_t ss	      = {0};
+	display_t display     = {0};
+	display_ext_t ext     = {0};
+	void *server	      = NULL;
+	void *peer	      = NULL;
+	u8 response[32]	      = {1};
+
+	t_x11_open_display(drv, &fs, &proc, &ss, &display, &server, &peer);
+	sock_write_all(&ss, peer, response, sizeof(response));
+	log_set_quiet(0, 1);
+	EXPECT_EQ(display_ext_init(&ext, &display, STRV("missing")), NULL);
+	log_set_quiet(0, 0);
+
+	t_x11_close_display(&fs, &proc, &ss, &display, server, peer);
+
+	END;
+}
+
+TEST(display_x11_ext_call_rejects_error_reply)
+{
+	START;
+
+	display_driver_t *drv = t_x11_driver();
+	fs_t fs		      = {0};
+	proc_t proc	      = {0};
+	sock_t ss	      = {0};
+	display_t display     = {0};
+	display_ext_t ext     = {.opcode = 130};
+	display_ext_reply_t reply;
+	void *server	= NULL;
+	void *peer	= NULL;
+	u8 response[32] = {0};
+
+	t_x11_open_display(drv, &fs, &proc, &ss, &display, &server, &peer);
+	ext.display = &display;
+	cbuf_set_u8le(response, 1, 2);
+	cbuf_set_u16le(response, 2, 3);
+	cbuf_set_u32le(response, 4, 4);
+	cbuf_set_u16le(response, 8, 5);
+	cbuf_set_u8le(response, 10, 130);
+	sock_write_all(&ss, peer, response, sizeof(response));
+	log_set_quiet(0, 1);
+	EXPECT_EQ(display_ext_call(&ext, 7, NULL, 0, &reply), 1);
+	log_set_quiet(0, 0);
+
+	t_x11_close_display(&fs, &proc, &ss, &display, server, peer);
+
+	END;
+}
+
+TEST(display_x11_ext_call_rejects_unexpected_reply)
+{
+	START;
+
+	display_driver_t *drv = t_x11_driver();
+	fs_t fs		      = {0};
+	proc_t proc	      = {0};
+	sock_t ss	      = {0};
+	display_t display     = {0};
+	display_ext_t ext     = {.opcode = 130};
+	display_ext_reply_t reply;
+	void *server	= NULL;
+	void *peer	= NULL;
+	u8 response[32] = {2};
+
+	t_x11_open_display(drv, &fs, &proc, &ss, &display, &server, &peer);
+	ext.display = &display;
+	sock_write_all(&ss, peer, response, sizeof(response));
+	log_set_quiet(0, 1);
+	EXPECT_EQ(display_ext_call(&ext, 7, NULL, 0, &reply), 1);
+	log_set_quiet(0, 0);
+
+	t_x11_close_display(&fs, &proc, &ss, &display, server, peer);
+
+	END;
+}
+
+TEST(display_x11_ext_rejects_invalid_driver_arguments)
+{
+	START;
+
+	display_driver_t *drv = t_x11_driver();
+	display_t display     = {0};
+	display_ext_t ext     = {.display = &display};
+
+	EXPECT_EQ(drv->ext_init(NULL, STRV("test")), 1);
+	EXPECT_EQ(drv->ext_init(&(display_ext_t){0}, STRV("test")), 1);
+	EXPECT_EQ(drv->ext_init(&ext, STRVN("test", (size_t)UINT16_MAX + 1)), 1);
+	EXPECT_EQ(drv->ext_send(NULL, 0, NULL, 0), 1);
+	EXPECT_EQ(drv->ext_send(&(display_ext_t){0}, 0, NULL, 0), 1);
+	EXPECT_EQ(drv->ext_send(&ext, 0, NULL, 1), 1);
+	EXPECT_EQ(drv->ext_send(&ext, 0, NULL, (size_t)UINT16_MAX * 4), 1);
+	EXPECT_EQ(drv->alloc_id(NULL, &(u32){0}), 1);
+	EXPECT_EQ(drv->alloc_id(&display, &(u32){0}), 1);
+	EXPECT_EQ(drv->visual_depth(NULL, 1, &(u8){0}), 1);
+	EXPECT_EQ(drv->visual_depth(&display, 1, &(u8){0}), 1);
+
+	END;
+}
+
+TEST(display_x11_ext_init_rejects_invalid_name_data)
+{
+	START;
+
+	display_driver_t *drv = t_x11_driver();
+	fs_t fs		      = {0};
+	proc_t proc	      = {0};
+	sock_t ss	      = {0};
+	display_t display     = {0};
+	display_ext_t ext     = {.display = &display};
+	void *server	      = NULL;
+	void *peer	      = NULL;
+
+	t_x11_open_display(drv, &fs, &proc, &ss, &display, &server, &peer);
+	EXPECT_EQ(drv->ext_init(&ext, STRVN(NULL, 1)), 1);
+
+	t_x11_close_display(&fs, &proc, &ss, &display, server, peer);
+
+	END;
+}
+
+TEST(display_x11_ext_send_rejects_invalid_data)
+{
+	START;
+
+	display_driver_t *drv = t_x11_driver();
+	fs_t fs		      = {0};
+	proc_t proc	      = {0};
+	sock_t ss	      = {0};
+	display_t display     = {0};
+	display_ext_t ext     = {.opcode = 130, .display = &display};
+	void *server	      = NULL;
+	void *peer	      = NULL;
+
+	t_x11_open_display(drv, &fs, &proc, &ss, &display, &server, &peer);
+	EXPECT_EQ(drv->ext_send(&ext, 1, NULL, 4), 1);
+
+	t_x11_close_display(&fs, &proc, &ss, &display, server, peer);
+
+	END;
+}
+
+TEST(display_x11_init_rejects_truncated_depth)
+{
+	START;
+
+	display_driver_t *drv = t_x11_driver();
+	fs_t fs		      = {0};
+	proc_t proc	      = {0};
+	sock_t ss	      = {0};
+	display_t display     = {0};
+	void *server	      = NULL;
+	u8 setup[72]	      = {0};
+
+	t_x11_setup_data(setup, sizeof(setup), 1, 0);
+	cbuf_set_u8le(setup, 71, 1);
+	t_x11_env_init(&fs, &proc, &ss);
+	t_x11_set_display(&proc, STRV(":0"));
+	t_x11_set_xauthority(&proc);
+	t_x11_write_authority(&fs);
+	t_x11_listen(&ss, &server);
+	t_x11_script_setup_data(&ss, server, 1, setup, sizeof(setup));
+	log_set_quiet(0, 1);
+	EXPECT_EQ(display_init(&display, drv, &fs, &proc, &ss, ALLOC_STD), NULL);
+	log_set_quiet(0, 0);
+
+	sock_close(&ss, server);
+	t_x11_env_free(&fs, &proc, &ss);
+
+	END;
+}
+
+TEST(display_x11_init_rejects_truncated_visual)
+{
+	START;
+
+	display_driver_t *drv = t_x11_driver();
+	fs_t fs		      = {0};
+	proc_t proc	      = {0};
+	sock_t ss	      = {0};
+	display_t display     = {0};
+	void *server	      = NULL;
+	u8 setup[80]	      = {0};
+
+	t_x11_setup_data(setup, sizeof(setup), 1, 0);
+	cbuf_set_u8le(setup, 71, 1);
+	cbuf_set_u16le(setup, 74, 1);
+	t_x11_env_init(&fs, &proc, &ss);
+	t_x11_set_display(&proc, STRV(":0"));
+	t_x11_set_xauthority(&proc);
+	t_x11_write_authority(&fs);
+	t_x11_listen(&ss, &server);
+	t_x11_script_setup_data(&ss, server, 1, setup, sizeof(setup));
+	log_set_quiet(0, 1);
+	EXPECT_EQ(display_init(&display, drv, &fs, &proc, &ss, ALLOC_STD), NULL);
+	log_set_quiet(0, 0);
+
+	sock_close(&ss, server);
+	t_x11_env_free(&fs, &proc, &ss);
+
+	END;
+}
+
+TEST(display_x11_init_rejects_visual_alloc_failure)
+{
+	START;
+
+	display_driver_t *drv = t_x11_driver();
+	fs_t fs		      = {0};
+	proc_t proc	      = {0};
+	sock_t ss	      = {0};
+	display_t display     = {0};
+	t_alloc_t state	      = {.fail_alloc_after = 4};
+	void *server	      = NULL;
+	u8 setup[104]	      = {0};
+
+	t_x11_setup_data(setup, sizeof(setup), 1, 0);
+	cbuf_set_u8le(setup, 71, 1);
+	cbuf_set_u8le(setup, 72, 24);
+	cbuf_set_u16le(setup, 74, 1);
+	cbuf_set_u32le(setup, 80, 0x21);
+	t_x11_env_init(&fs, &proc, &ss);
+	t_x11_set_display(&proc, STRV(":0"));
+	t_x11_set_xauthority(&proc);
+	t_x11_write_authority(&fs);
+	t_x11_listen(&ss, &server);
+	t_x11_script_setup_data(&ss, server, 1, setup, sizeof(setup));
+	log_set_quiet(0, 1);
+	EXPECT_EQ(display_init(&display, drv, &fs, &proc, &ss, t_alloc(&state)), NULL);
+	log_set_quiet(0, 0);
+
+	sock_close(&ss, server);
+	t_x11_env_free(&fs, &proc, &ss);
+
+	END;
+}
+
+TEST(display_x11_ext_init_rejects_request_alloc_failure)
+{
+	START;
+
+	display_driver_t *drv = t_x11_driver();
+	fs_t fs		      = {0};
+	proc_t proc	      = {0};
+	sock_t ss	      = {0};
+	display_t display     = {0};
+	display_ext_t ext     = {0};
+	t_alloc_t state	      = {.fail_alloc_after = 1};
+	void *server	      = NULL;
+	void *peer	      = NULL;
+
+	t_x11_open_display(drv, &fs, &proc, &ss, &display, &server, &peer);
+	display.alloc = t_alloc(&state);
+	EXPECT_EQ(display_ext_init(&ext, &display, STRV("RANDR")), NULL);
+
+	t_x11_close_display(&fs, &proc, &ss, &display, server, peer);
+
+	END;
+}
+
+TEST(display_x11_ext_send_rejects_request_alloc_failure)
+{
+	START;
+
+	display_driver_t *drv = t_x11_driver();
+	fs_t fs		      = {0};
+	proc_t proc	      = {0};
+	sock_t ss	      = {0};
+	display_t display     = {0};
+	display_ext_t ext     = {.opcode = 130};
+	t_alloc_t state	      = {.fail_alloc_after = 1};
+	void *server	      = NULL;
+	void *peer	      = NULL;
+
+	t_x11_open_display(drv, &fs, &proc, &ss, &display, &server, &peer);
+	display.alloc = t_alloc(&state);
+	ext.display   = &display;
+	EXPECT_EQ(display_ext_send(&ext, 1, NULL, 0), 1);
+
+	t_x11_close_display(&fs, &proc, &ss, &display, server, peer);
+
+	END;
+}
+
+TEST(display_x11_ext_send_reuses_request_buffer)
+{
+	START;
+
+	display_driver_t *drv = t_x11_driver();
+	fs_t fs		      = {0};
+	proc_t proc	      = {0};
+	sock_t ss	      = {0};
+	display_t display     = {0};
+	display_ext_t ext     = {.opcode = 130};
+	t_alloc_t state	      = {0};
+	void *server	      = NULL;
+	void *peer	      = NULL;
+	u8 request[8]	      = {0};
+
+	t_x11_open_display(drv, &fs, &proc, &ss, &display, &server, &peer);
+	display.alloc = t_alloc(&state);
+	ext.display   = &display;
+	EXPECT_EQ(display_ext_send(&ext, 1, NULL, 0), 0);
+	EXPECT_EQ(display_ext_send(&ext, 2, NULL, 0), 0);
+	EXPECT_EQ(state.alloc_calls, 1);
+	sock_read_all(&ss, peer, request, sizeof(request));
+
+	t_x11_close_display(&fs, &proc, &ss, &display, server, peer);
+
+	END;
+}
+
+TEST(display_x11_ext_send_rejects_buffer_growth_failure)
+{
+	START;
+
+	display_driver_t *drv = t_x11_driver();
+	fs_t fs		      = {0};
+	proc_t proc	      = {0};
+	sock_t ss	      = {0};
+	display_t display     = {0};
+	display_ext_t ext     = {.opcode = 130};
+	t_alloc_t state	      = {0};
+	void *server	      = NULL;
+	void *peer	      = NULL;
+	u8 data[8]	      = {0};
+
+	t_x11_open_display(drv, &fs, &proc, &ss, &display, &server, &peer);
+	display.alloc = t_alloc(&state);
+	ext.display   = &display;
+	EXPECT_EQ(display_ext_send(&ext, 1, NULL, 0), 0);
+	state.fail_realloc = 1;
+	EXPECT_EQ(display_ext_send(&ext, 2, data, sizeof(data)), 1);
+
+	t_x11_close_display(&fs, &proc, &ss, &display, server, peer);
+
+	END;
+}
+
+TEST(display_x11_ext_call_rejects_reply_alloc_failure)
+{
+	START;
+
+	display_driver_t *drv = t_x11_driver();
+	fs_t fs		      = {0};
+	proc_t proc	      = {0};
+	sock_t ss	      = {0};
+	display_t display     = {0};
+	display_ext_t ext     = {.opcode = 130};
+	display_ext_reply_t reply;
+	t_alloc_t state = {0};
+	void *server	= NULL;
+	void *peer	= NULL;
+	u8 response[36] = {0};
+
+	t_x11_open_display(drv, &fs, &proc, &ss, &display, &server, &peer);
+	display.alloc = t_alloc(&state);
+	ext.display   = &display;
+	EXPECT_EQ(display_ext_send(&ext, 1, NULL, 0), 0);
+	state.fail_alloc_after = state.alloc_calls + 1;
+	cbuf_set_u8le(response, 0, 1);
+	cbuf_set_u32le(response, 4, 1);
+	sock_write_all(&ss, peer, response, sizeof(response));
+	log_set_quiet(0, 1);
+	EXPECT_EQ(display_ext_call(&ext, 2, NULL, 0, &reply), 1);
+	log_set_quiet(0, 0);
+
+	t_x11_close_display(&fs, &proc, &ss, &display, server, peer);
+
+	END;
+}
+
+TEST(display_x11_ext_call_handles_reply_discard_failure)
+{
+	START;
+
+	display_driver_t *drv = t_x11_driver();
+	fs_t fs		      = {0};
+	proc_t proc	      = {0};
+	sock_t ss	      = {0};
+	display_t display     = {0};
+	display_ext_t ext     = {.opcode = 130};
+	display_ext_reply_t reply;
+	t_alloc_t state = {0};
+	void *server	= NULL;
+	void *peer	= NULL;
+	u8 response[32] = {1};
+
+	t_x11_open_display(drv, &fs, &proc, &ss, &display, &server, &peer);
+	display.alloc = t_alloc(&state);
+	ext.display   = &display;
+	EXPECT_EQ(display_ext_send(&ext, 1, NULL, 0), 0);
+	state.fail_alloc_after = state.alloc_calls + 1;
+	cbuf_set_u32le(response, 4, 1);
+	sock_write_all(&ss, peer, response, sizeof(response));
+	log_set_quiet(0, 1);
+	EXPECT_EQ(display_ext_call(&ext, 2, NULL, 0, &reply), 1);
+	log_set_quiet(0, 0);
+
+	t_x11_close_display(&fs, &proc, &ss, &display, server, peer);
+
+	END;
+}
+
+TEST(display_x11_ext_send_returns_socket_failure)
+{
+	START;
+
+	display_driver_t *drv = t_x11_driver();
+	fs_t fs		      = {0};
+	proc_t proc	      = {0};
+	sock_t ss	      = {0};
+	display_t display     = {0};
+	display_ext_t ext     = {.opcode = 130};
+	void *server	      = NULL;
+	void *peer	      = NULL;
+
+	t_x11_open_display(drv, &fs, &proc, &ss, &display, &server, &peer);
+	ext.display = &display;
+	sock_close(&ss, peer);
+	log_set_quiet(0, 1);
+	EXPECT_NE(display_ext_send(&ext, 1, NULL, 0), 0);
+	log_set_quiet(0, 0);
+
+	display_free(&display);
+	sock_close(&ss, server);
+	t_x11_env_free(&fs, &proc, &ss);
+
+	END;
+}
+
+TEST(display_x11_ext_call_rejects_reply_read_failure)
+{
+	START;
+
+	display_driver_t *drv = t_x11_driver();
+	fs_t fs		      = {0};
+	proc_t proc	      = {0};
+	sock_t ss	      = {0};
+	display_t display     = {0};
+	display_ext_t ext     = {.opcode = 130};
+	display_ext_reply_t reply;
+	void *server = NULL;
+	void *peer   = NULL;
+
+	t_x11_open_display(drv, &fs, &proc, &ss, &display, &server, &peer);
+	ext.display = &display;
+	log_set_quiet(0, 1);
+	EXPECT_EQ(display_ext_call(&ext, 1, NULL, 0, &reply), 1);
+	log_set_quiet(0, 0);
+
+	t_x11_close_display(&fs, &proc, &ss, &display, server, peer);
+
+	END;
+}
+
+TEST(display_x11_ext_call_rejects_reply_data_read_failure)
+{
+	START;
+
+	display_driver_t *drv = t_x11_driver();
+	fs_t fs		      = {0};
+	proc_t proc	      = {0};
+	sock_t ss	      = {0};
+	display_t display     = {0};
+	display_ext_t ext     = {.opcode = 130};
+	display_ext_reply_t reply;
+	void *server	= NULL;
+	void *peer	= NULL;
+	u8 response[32] = {1};
+
+	t_x11_open_display(drv, &fs, &proc, &ss, &display, &server, &peer);
+	ext.display = &display;
+	cbuf_set_u32le(response, 4, 1);
+	sock_write_all(&ss, peer, response, sizeof(response));
+	log_set_quiet(0, 1);
+	EXPECT_EQ(display_ext_call(&ext, 1, NULL, 0, &reply), 1);
+	log_set_quiet(0, 0);
+
+	t_x11_close_display(&fs, &proc, &ss, &display, server, peer);
+
+	END;
+}
+
 STEST(display_x11)
 {
 	SSTART;
@@ -3915,6 +4626,30 @@ STEST(display_x11)
 	RUN(display_x11_window_free_destroy_write_failure);
 	RUN(display_x11_window_free_colormap_write_failure);
 	RUN(display_x11_init_valid_authority_writes_cookie);
+	RUN(display_x11_visual_depth_returns_setup_depth);
+	RUN(display_x11_visual_depth_rejects_unknown_visual);
+	RUN(display_x11_ext_init_writes_query);
+	RUN(display_x11_ext_send_writes_request);
+	RUN(display_x11_ext_call_reads_reply_data);
+	RUN(display_x11_ext_call_accepts_empty_reply);
+	RUN(display_x11_ext_init_rejects_unavailable_extension);
+	RUN(display_x11_ext_call_rejects_error_reply);
+	RUN(display_x11_ext_call_rejects_unexpected_reply);
+	RUN(display_x11_ext_rejects_invalid_driver_arguments);
+	RUN(display_x11_ext_init_rejects_invalid_name_data);
+	RUN(display_x11_ext_send_rejects_invalid_data);
+	RUN(display_x11_init_rejects_truncated_depth);
+	RUN(display_x11_init_rejects_truncated_visual);
+	RUN(display_x11_init_rejects_visual_alloc_failure);
+	RUN(display_x11_ext_init_rejects_request_alloc_failure);
+	RUN(display_x11_ext_send_rejects_request_alloc_failure);
+	RUN(display_x11_ext_send_reuses_request_buffer);
+	RUN(display_x11_ext_send_rejects_buffer_growth_failure);
+	RUN(display_x11_ext_call_rejects_reply_alloc_failure);
+	RUN(display_x11_ext_call_handles_reply_discard_failure);
+	RUN(display_x11_ext_send_returns_socket_failure);
+	RUN(display_x11_ext_call_rejects_reply_read_failure);
+	RUN(display_x11_ext_call_rejects_reply_data_read_failure);
 
 	SEND;
 }

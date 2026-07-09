@@ -1,9 +1,15 @@
 #include "display_driver.h"
 
+#include "buf.h"
 #include "cbuf.h"
 #include "cerr.h"
 #include "log.h"
 #include "mem.h"
+
+typedef struct visual_x11_s {
+	u32 id;
+	u8 depth;
+} visual_x11_t;
 
 typedef struct display_x11_s {
 	void *sock;
@@ -13,6 +19,9 @@ typedef struct display_x11_s {
 	u32 root;
 	u32 white_pixel;
 	u32 black_pixel;
+	visual_x11_t *visuals;
+	size_t visual_count;
+	buf_t request;
 	u32 wm_protocols;
 	u32 wm_delete_window;
 	u32 wm_name;
@@ -48,6 +57,10 @@ enum {
 };
 
 enum {
+	X11_QUERY_EXTENSION = 98,
+};
+
+enum {
 	X11_PROTOCOL_MAJOR = 11,
 	X11_PROTOCOL_MINOR = 0,
 	X11_REPLY_SUCCESS  = 1,
@@ -63,6 +76,10 @@ enum {
 	X11_SETUP_MAX_KEYCODE_OFFSET	  = 27,
 	X11_SETUP_SCREEN_LIST_OFFSET	  = 32,
 	X11_SCREEN_DEFAULT_COLORMAP_SIZE  = 4,
+	X11_SCREEN_DEPTH_COUNT_OFFSET	  = 39,
+	X11_SCREEN_DEPTHS_OFFSET	  = 40,
+	X11_DEPTH_SIZE			  = 8,
+	X11_VISUAL_SIZE			  = 24,
 };
 
 enum {
@@ -110,6 +127,73 @@ static int bytes_eq(const void *l, size_t l_size, const void *r, size_t r_size)
 static size_t pad4(size_t length)
 {
 	return (X11_PAD_SIZE - (length & (X11_PAD_SIZE - 1))) & (X11_PAD_SIZE - 1);
+}
+
+static int read_visuals(display_t *display, const buf_t *setup, size_t screen_offset)
+{
+	display_x11_t *dx11 = display->data;
+	size_t off	    = screen_offset + X11_SCREEN_DEPTH_COUNT_OFFSET;
+	u8 depth_count;
+	if (buf_read_u8le(setup, &off, &depth_count)) {
+		return 1; // LCOV_EXCL_LINE
+	}
+
+	off		    = screen_offset + X11_SCREEN_DEPTHS_OFFSET;
+	size_t visual_count = 0;
+	for (u8 i = 0; i < depth_count; ++i) {
+		if (off + X11_DEPTH_SIZE > setup->used) {
+			return 1;
+		}
+		size_t count_off = off + 2;
+		u16 count;
+		buf_read_u16le(setup, &count_off, &count);
+		off += X11_DEPTH_SIZE + (size_t)count * X11_VISUAL_SIZE;
+		if (off > setup->used) {
+			return 1;
+		}
+		visual_count += count;
+	}
+
+	if (visual_count == 0) {
+		return 0;
+	}
+
+	dx11->visuals = alloc_alloc(&display->alloc, visual_count * sizeof(*dx11->visuals));
+	if (dx11->visuals == NULL) {
+		return 1;
+	}
+	dx11->visual_count = visual_count;
+
+	off	     = screen_offset + X11_SCREEN_DEPTHS_OFFSET;
+	size_t index = 0;
+	for (u8 i = 0; i < depth_count; ++i) {
+		u8 depth;
+		buf_read_u8le(setup, &off, &depth);
+		off++;
+		u16 count;
+		buf_read_u16le(setup, &off, &count);
+		off += 4;
+		for (u16 j = 0; j < count; ++j) {
+			buf_read_u32le(setup, &off, &dx11->visuals[index].id);
+			dx11->visuals[index].depth = depth;
+			index++;
+			off += X11_VISUAL_SIZE - sizeof(u32);
+		}
+	}
+
+	return 0;
+}
+
+static int visual_depth(const display_x11_t *dx11, u32 visual, u8 *depth)
+{
+	for (size_t i = 0; i < dx11->visual_count; ++i) {
+		if (dx11->visuals[i].id == visual) {
+			*depth = dx11->visuals[i].depth;
+			return 0;
+		}
+	}
+
+	return 1;
 }
 
 static int open_display(display_t *d)
@@ -353,6 +437,12 @@ static int open_display(display_t *d)
 	off += X11_SCREEN_DEFAULT_COLORMAP_SIZE;
 	buf_read_u32le(&b, &off, &dx11->white_pixel);
 	buf_read_u32le(&b, &off, &dx11->black_pixel);
+	if (read_visuals(d, &b, screen_offset)) {
+		log_error("cdisplay", "display_x11", NULL, "invalid X11 visual list");
+		buf_free(&b);
+		sock_close(d->ss, dx11->sock);
+		return 1;
+	}
 
 	buf_free(&b);
 
@@ -641,6 +731,218 @@ static int alloc_resource_id(display_x11_t *dx11, u32 *id)
 	return 0;
 }
 
+static int read_reply(display_t *display, u8 reply[static X11_REPLY_SIZE])
+{
+	display_x11_t *dx11 = display->data;
+	if (sock_read_all(display->ss, dx11->sock, reply, X11_REPLY_SIZE)) {
+		log_error("cdisplay", "display_x11", NULL, "failed to read X11 reply");
+		return 1;
+	}
+	if (reply[0] == 0) {
+		size_t off = 2;
+		u16 sequence;
+		u32 value;
+		u16 minor_opcode;
+		cbuf_read_u16le(reply, &off, &sequence);
+		cbuf_read_u32le(reply, &off, &value);
+		cbuf_read_u16le(reply, &off, &minor_opcode);
+		log_error("cdisplay",
+			  "display_x11",
+			  NULL,
+			  "X11 request failed: error=%u sequence=%u value=%u major_opcode=%u minor_opcode=%u",
+			  reply[1],
+			  sequence,
+			  value,
+			  reply[10],
+			  minor_opcode);
+		return 1;
+	}
+	if (reply[0] != X11_REPLY_SUCCESS) {
+		log_error("cdisplay", "display_x11", NULL, "unexpected X11 reply type: %u", reply[0]);
+		return 1;
+	}
+
+	return 0;
+}
+
+static buf_t *request_buffer(display_t *display, size_t size)
+{
+	display_x11_t *dx11 = display->data;
+	if (dx11->request.data == NULL) {
+		if (buf_init(&dx11->request, size, display->alloc) == NULL) {
+			return NULL;
+		}
+	} else if (dx11->request.size < size) {
+		if (buf_resize(&dx11->request, size)) {
+			return NULL;
+		}
+	}
+
+	buf_reset(&dx11->request, 0);
+	return &dx11->request;
+}
+
+static int request_pad4(buf_t *request, size_t length)
+{
+	static const u8 padding[X11_PAD_SIZE] = {0};
+	return buf_add(request, pad4(length), padding, NULL);
+}
+
+static int write_request_header(buf_t *request, u8 opcode, u8 detail, size_t size)
+{
+	// clang-format off
+	return
+	buf_write_u8le(request, opcode) ||
+	buf_write_u8le(request, detail) ||
+	buf_write_u16le(request, (u16)(size / X11_PAD_SIZE));
+	// clang-format on
+}
+
+static int write_query_extension_request(buf_t *request, strv_t name, size_t size)
+{
+	// clang-format off
+	return
+	write_request_header(request, X11_QUERY_EXTENSION, 0, size) ||
+	buf_write_u16le(request, (u16)name.len) ||
+	buf_write_u16le(request, 0) ||
+	buf_add(request, name.len, name.data, NULL) ||
+	request_pad4(request, name.len);
+	// clang-format on
+}
+
+static int write_ext_request(buf_t *request, u8 ext_opcode, u8 opcode, const void *data, size_t size)
+{
+	// clang-format off
+	return
+	write_request_header(request, ext_opcode, opcode, X11_PAD_SIZE + size) ||
+	buf_add(request, size, data, NULL);
+	// clang-format on
+}
+
+static int write_change_property_text_request(buf_t *request, window_x11_t *wx11, u32 property, u32 type, strv_t text, size_t size)
+{
+	// clang-format off
+	return
+	write_request_header(request, X_CHANGE_PROPERTY, X_CHANGE_PROPERTY_MODE_REPLACE, size) ||
+	buf_write_u32le(request, wx11->id) ||
+	buf_write_u32le(request, property) ||
+	buf_write_u32le(request, type) ||
+	buf_write_u8le(request, 8) ||
+	buf_write_u8le(request, 0) ||
+	buf_write_u8le(request, 0) ||
+	buf_write_u8le(request, 0) ||
+	buf_write_u32le(request, (u32)text.len) ||
+	buf_add(request, text.len, text.data, NULL) ||
+	request_pad4(request, text.len);
+	// clang-format on
+}
+
+static int display_x11_ext_init(display_ext_t *ext, strv_t name)
+{
+	if (ext == NULL || ext->display == NULL || name.len > UINT16_MAX) {
+		return 1;
+	}
+
+	size_t request_size = 8 + name.len + pad4(name.len);
+	buf_t *request	    = request_buffer(ext->display, request_size);
+	if (request == NULL) {
+		return 1;
+	}
+
+	if (write_query_extension_request(request, name, request_size)) {
+		return 1;
+	}
+
+	u8 reply[X11_REPLY_SIZE];
+	display_x11_t *dx11 = ext->display->data;
+	int ret		    = sock_write_all(ext->display->ss, dx11->sock, request->data, request->used) || read_reply(ext->display, reply);
+	if (ret || reply[8] == 0) {
+		log_error("cdisplay", "display_x11", NULL, "display ext is unavailable: %.*s", name.len, name.data);
+		return 1;
+	}
+
+	ext->opcode	 = reply[9];
+	ext->first_event = reply[10];
+	ext->first_error = reply[11];
+	return 0;
+}
+
+static int display_x11_ext_send(display_ext_t *ext, u8 opcode, const void *data, size_t size)
+{
+	if (ext == NULL || ext->display == NULL || size % X11_PAD_SIZE != 0 || size > (size_t)UINT16_MAX * X11_PAD_SIZE - X11_PAD_SIZE) {
+		return 1;
+	}
+
+	size_t request_size = X11_PAD_SIZE + size;
+	buf_t *request	    = request_buffer(ext->display, request_size);
+	if (request == NULL) {
+		return 1;
+	}
+
+	if (write_ext_request(request, ext->opcode, opcode, data, size)) {
+		return 1;
+	}
+
+	display_x11_t *dx11 = ext->display->data;
+	int ret		    = sock_write_all(ext->display->ss, dx11->sock, request->data, request->used);
+	if (ret) {
+		log_error("cdisplay", "display_x11", NULL, "failed to send display ext request: opcode=%u", opcode);
+	}
+	return ret;
+}
+
+static int display_x11_ext_call(display_ext_t *ext, u8 opcode, const void *data, size_t size, display_ext_reply_t *reply)
+{
+	if (display_x11_ext_send(ext, opcode, data, size) || read_reply(ext->display, reply->header)) {
+		return 1;
+	}
+
+	size_t off = 4;
+	u32 words;
+	cbuf_read_u32le(reply->header, &off, &words);
+	reply->size = (size_t)words * X11_PAD_SIZE;
+	if (reply->size == 0) {
+		return 0;
+	}
+
+	reply->data = alloc_alloc(&ext->display->alloc, reply->size);
+	if (reply->data == NULL) {
+		u8 discard[1024];
+		size_t remaining    = reply->size;
+		display_x11_t *dx11 = ext->display->data;
+		while (remaining != 0) {
+			size_t chunk = remaining < sizeof(discard) ? remaining : sizeof(discard);
+			if (sock_read_all(ext->display->ss, dx11->sock, discard, chunk)) {
+				break;
+			}
+			remaining -= chunk;
+		}
+		log_error("cdisplay", "display_x11", NULL, "failed to allocate display ext reply data");
+		return 1;
+	}
+
+	display_x11_t *dx11 = ext->display->data;
+	if (sock_read_all(ext->display->ss, dx11->sock, reply->data, reply->size)) {
+		log_error("cdisplay", "display_x11", NULL, "failed to read display ext reply data");
+		return 1;
+	}
+	return 0;
+}
+
+static int display_x11_alloc_id(display_t *display, u32 *id)
+{
+	return display == NULL || display->data == NULL ? 1 : alloc_resource_id(display->data, id);
+}
+
+static int display_x11_visual_depth(display_t *display, u32 visual, u8 *depth)
+{
+	if (display == NULL || display->data == NULL || visual_depth(display->data, visual, depth)) {
+		log_error("cdisplay", "display_x11", NULL, "unknown X11 visual: %u", visual);
+		return 1;
+	}
+	return 0;
+}
+
 static int create_colormap(window_t *wnd, u32 visual)
 {
 	u8 request[X_CREATE_COLORMAP_REQUEST_SIZE] = {0};
@@ -835,38 +1137,22 @@ static int set_property_text(window_t *wnd, u32 property, u32 type, strv_t text)
 		return 1;
 	}
 
-	size_t data_size     = text.len;
-	size_t request_size  = X_CHANGE_PROPERTY_HEADER_SIZE + data_size + pad4(data_size);
-	size_t request_words = request_size / X11_PAD_SIZE;
+	size_t data_size    = text.len;
+	size_t request_size = X_CHANGE_PROPERTY_HEADER_SIZE + data_size + pad4(data_size);
 
-	u8 *request = mem_alloc(request_size);
+	buf_t *request = request_buffer(wnd->display, request_size);
 	if (request == NULL) {
 		return 1;
 	}
 
-	mem_set(request, 0, request_size);
-
 	window_x11_t *wx11 = wnd->data;
 
-	size_t off = 0;
-	cbuf_write_u8le(request, &off, X_CHANGE_PROPERTY);
-	cbuf_write_u8le(request, &off, X_CHANGE_PROPERTY_MODE_REPLACE);
-	cbuf_write_u16le(request, &off, (u16)request_words);
-	cbuf_write_u32le(request, &off, wx11->id);
-	cbuf_write_u32le(request, &off, property);
-	cbuf_write_u32le(request, &off, type);
-	cbuf_write_u8le(request, &off, 8);
-	cbuf_write_u8le(request, &off, 0);
-	cbuf_write_u8le(request, &off, 0);
-	cbuf_write_u8le(request, &off, 0);
-	cbuf_write_u32le(request, &off, (u32)text.len);
-	if (text.len > 0) {
-		mem_copy(&request[off], request_size - off, text.data, text.len);
+	if (write_change_property_text_request(request, wx11, property, type, text, request_size)) {
+		return 1; // LCOV_EXCL_LINE
 	}
 
 	display_x11_t *dx11 = wnd->display->data;
-	int ret		    = sock_write_all(wnd->display->ss, dx11->sock, request, request_size);
-	mem_free(request, request_size);
+	int ret		    = sock_write_all(wnd->display->ss, dx11->sock, request->data, request->used);
 
 	if (ret) {
 		log_error("cdisplay", "display_x11", NULL, "failed to set window text property");
@@ -1259,7 +1545,7 @@ static int init_keys(display_t *display)
 
 	u8 *data = alloc_alloc(&display->alloc, keysyms_size);
 	if (data == NULL) {
-		return 1;
+		return 1; // LCOV_EXCL_LINE
 	}
 
 	if (sock_read_all(display->ss, dx11->sock, data, keysyms_size)) {
@@ -1616,20 +1902,23 @@ static int display_x11_wait_events(display_t *display)
 
 static int display_x11_init(display_t *display)
 {
-	if (display == NULL) {
+	if (display == NULL || display->alloc.alloc == NULL) {
 		return 1;
 	}
 
 	log_info("cdisplay", "awindow_x11", NULL, "Initializing X11...\n");
 
-	display->data = mem_alloc(sizeof(display_x11_t));
+	display->data = alloc_alloc(&display->alloc, sizeof(display_x11_t));
 	if (display->data == NULL) {
 		return 1;
 	}
 	mem_set(display->data, 0, sizeof(display_x11_t));
 
 	if (open_display(display)) {
-		mem_free(display->data, sizeof(display_x11_t));
+		display_x11_t *dx11 = display->data;
+		alloc_free(&display->alloc, dx11->visuals, dx11->visual_count * sizeof(*dx11->visuals));
+		buf_free(&dx11->request);
+		alloc_free(&display->alloc, display->data, sizeof(display_x11_t));
 		display->data = NULL;
 		return 1;
 	}
@@ -1637,7 +1926,9 @@ static int display_x11_init(display_t *display)
 	if (init_keys(display) || init_modifiers(display) || init_atoms(display)) {
 		display_x11_t *dx11 = display->data;
 		sock_close(display->ss, dx11->sock);
-		mem_free(display->data, sizeof(display_x11_t));
+		alloc_free(&display->alloc, dx11->visuals, dx11->visual_count * sizeof(*dx11->visuals));
+		buf_free(&dx11->request);
+		alloc_free(&display->alloc, display->data, sizeof(display_x11_t));
 		display->data = NULL;
 		return 1;
 	}
@@ -1655,19 +1946,21 @@ static int display_x11_free(display_t *display)
 
 	log_info("cdisplay", "display_x11", NULL, "Freeing X11...\n");
 	sock_close(display->ss, dx11->sock);
+	alloc_free(&display->alloc, dx11->visuals, dx11->visual_count * sizeof(*dx11->visuals));
+	buf_free(&dx11->request);
 
-	mem_free(display->data, sizeof(display_x11_t));
+	alloc_free(&display->alloc, display->data, sizeof(display_x11_t));
 
 	return 0;
 }
 
 static int display_x11_window_init(window_t *wnd, const window_config_t *config)
 {
-	if (wnd == NULL || config == NULL) {
+	if (wnd == NULL || wnd->display == NULL || wnd->display->alloc.alloc == NULL || config == NULL) {
 		return 1;
 	}
 
-	wnd->data = mem_alloc(sizeof(window_x11_t));
+	wnd->data = alloc_alloc(&wnd->display->alloc, sizeof(window_x11_t));
 	if (wnd->data == NULL) {
 		return 1;
 	}
@@ -1675,7 +1968,7 @@ static int display_x11_window_init(window_t *wnd, const window_config_t *config)
 
 	if (create_window(wnd, config)) {
 		free_colormap(wnd);
-		mem_free(wnd->data, sizeof(window_x11_t));
+		alloc_free(&wnd->display->alloc, wnd->data, sizeof(window_x11_t));
 		wnd->data = NULL;
 		return 1;
 	}
@@ -1683,7 +1976,7 @@ static int display_x11_window_init(window_t *wnd, const window_config_t *config)
 	if (set_wm_protocols(wnd)) {
 		destroy_window(wnd);
 		free_colormap(wnd);
-		mem_free(wnd->data, sizeof(window_x11_t));
+		alloc_free(&wnd->display->alloc, wnd->data, sizeof(window_x11_t));
 		wnd->data = NULL;
 		return 1;
 	}
@@ -1699,7 +1992,7 @@ static int display_x11_window_free(window_t *wnd)
 
 	destroy_window(wnd);
 	free_colormap(wnd);
-	mem_free(wnd->data, sizeof(window_x11_t));
+	alloc_free(&wnd->display->alloc, wnd->data, sizeof(window_x11_t));
 
 	return 0;
 }
@@ -1815,6 +2108,11 @@ static display_driver_t display_x11 = {
 	.window_set_fullscreen = display_x11_window_set_fullscreen,
 	.window_show	       = display_x11_window_show,
 	.window_hide	       = display_x11_window_hide,
+	.ext_init	       = display_x11_ext_init,
+	.ext_send	       = display_x11_ext_send,
+	.ext_call	       = display_x11_ext_call,
+	.alloc_id	       = display_x11_alloc_id,
+	.visual_depth	       = display_x11_visual_depth,
 };
 
 DISPLAY_DRIVER(display_x11, &display_x11);

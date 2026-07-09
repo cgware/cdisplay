@@ -1,6 +1,7 @@
 #ifndef DISPLAY_DRIVER_H
 #define DISPLAY_DRIVER_H
 
+#include "display_ext.h"
 #include "driver.h"
 #include "fs.h"
 #include "sock.h"
@@ -22,6 +23,11 @@ typedef struct display_driver_s {
 	int (*window_set_fullscreen)(window_t *window, int fullscreen);
 	int (*window_show)(window_t *window);
 	int (*window_hide)(window_t *window);
+	int (*ext_init)(display_ext_t *ext, strv_t name);
+	int (*ext_send)(display_ext_t *ext, u8 opcode, const void *data, size_t size);
+	int (*ext_call)(display_ext_t *ext, u8 opcode, const void *data, size_t size, display_ext_reply_t *reply);
+	int (*alloc_id)(display_t *display, u32 *id);
+	int (*visual_depth)(display_t *display, u32 visual, u8 *depth);
 	fs_t *fs;
 	sock_t *ss;
 	alloc_t alloc;
