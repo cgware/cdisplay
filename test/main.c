@@ -6,7 +6,8 @@ STEST(display);
 STEST(display_ext);
 STEST(display_none);
 STEST(display_windows);
-STEST(display_x11);
+STEST(display_x11_direct);
+STEST(display_x11_dynamic);
 STEST(window);
 
 TEST(cdisplay)
@@ -16,12 +17,13 @@ TEST(cdisplay)
 	RUN(display_ext);
 	RUN(display_none);
 	RUN(display_windows);
-	RUN(display_x11);
+	RUN(display_x11_direct);
+	RUN(display_x11_dynamic);
 	RUN(window);
 	SEND;
 }
 
-int main()
+int main(void)
 {
 	c_print_init();
 

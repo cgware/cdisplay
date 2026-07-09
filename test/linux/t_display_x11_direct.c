@@ -86,7 +86,7 @@ static display_driver_t *t_x11_driver(void)
 		}
 
 		display_driver_t *drv = i->data;
-		if (strv_eq(strv_cstr(drv->name), STRV("X11"))) {
+		if (strv_eq(strv_cstr(drv->name), STRV("X11-direct"))) {
 			return drv;
 		}
 	}
@@ -681,7 +681,7 @@ static void t_x11_write_unknown_event(sock_t *ss, void *peer)
 	sock_write_all(ss, peer, event, sizeof(event));
 }
 
-TEST(display_x11_driver_is_registered)
+TEST(display_x11_direct_driver_is_registered)
 {
 	START;
 
@@ -690,7 +690,7 @@ TEST(display_x11_driver_is_registered)
 	END;
 }
 
-TEST(display_x11_init_null_display)
+TEST(display_x11_direct_init_null_display)
 {
 	START;
 
@@ -701,7 +701,7 @@ TEST(display_x11_init_null_display)
 	END;
 }
 
-TEST(display_x11_init_alloc_failure)
+TEST(display_x11_direct_init_alloc_failure)
 {
 	START;
 
@@ -715,7 +715,7 @@ TEST(display_x11_init_alloc_failure)
 	END;
 }
 
-TEST(display_x11_free_null_display)
+TEST(display_x11_direct_free_null_display)
 {
 	START;
 
@@ -726,7 +726,7 @@ TEST(display_x11_free_null_display)
 	END;
 }
 
-TEST(display_x11_window_init_null_window)
+TEST(display_x11_direct_window_init_null_window)
 {
 	START;
 
@@ -737,7 +737,7 @@ TEST(display_x11_window_init_null_window)
 	END;
 }
 
-TEST(display_x11_window_init_alloc_failure)
+TEST(display_x11_direct_window_init_alloc_failure)
 {
 	START;
 
@@ -752,7 +752,7 @@ TEST(display_x11_window_init_alloc_failure)
 	END;
 }
 
-TEST(display_x11_window_free_null_window)
+TEST(display_x11_direct_window_free_null_window)
 {
 	START;
 
@@ -763,7 +763,7 @@ TEST(display_x11_window_free_null_window)
 	END;
 }
 
-TEST(display_x11_window_id_null_data)
+TEST(display_x11_direct_window_id_null_data)
 {
 	START;
 
@@ -776,7 +776,7 @@ TEST(display_x11_window_id_null_data)
 	END;
 }
 
-TEST(display_x11_init_success)
+TEST(display_x11_direct_init_success)
 {
 	START;
 
@@ -804,7 +804,7 @@ TEST(display_x11_init_success)
 	END;
 }
 
-TEST(display_x11_window_init_writes_requests)
+TEST(display_x11_direct_window_init_writes_requests)
 {
 	START;
 
@@ -914,7 +914,7 @@ TEST(display_x11_window_init_writes_requests)
 	END;
 }
 
-TEST(display_x11_window_init_custom_visual_writes_requests)
+TEST(display_x11_direct_window_init_custom_visual_writes_requests)
 {
 	START;
 
@@ -977,7 +977,7 @@ TEST(display_x11_window_init_custom_visual_writes_requests)
 	END;
 }
 
-TEST(display_x11_window_free_custom_visual_writes_request)
+TEST(display_x11_direct_window_free_custom_visual_writes_request)
 {
 	START;
 
@@ -1023,7 +1023,7 @@ TEST(display_x11_window_free_custom_visual_writes_request)
 	END;
 }
 
-TEST(display_x11_window_set_title_writes_requests)
+TEST(display_x11_direct_window_set_title_writes_requests)
 {
 	START;
 
@@ -1083,7 +1083,7 @@ TEST(display_x11_window_set_title_writes_requests)
 	END;
 }
 
-TEST(display_x11_window_set_title_null_data)
+TEST(display_x11_direct_window_set_title_null_data)
 {
 	START;
 
@@ -1096,7 +1096,7 @@ TEST(display_x11_window_set_title_null_data)
 	END;
 }
 
-TEST(display_x11_window_set_title_invalid_text)
+TEST(display_x11_direct_window_set_title_invalid_text)
 {
 	START;
 
@@ -1123,7 +1123,7 @@ TEST(display_x11_window_set_title_invalid_text)
 	END;
 }
 
-TEST(display_x11_window_set_title_too_long)
+TEST(display_x11_direct_window_set_title_too_long)
 {
 	START;
 
@@ -1152,7 +1152,7 @@ TEST(display_x11_window_set_title_too_long)
 	END;
 }
 
-TEST(display_x11_window_set_title_alloc_failure)
+TEST(display_x11_direct_window_set_title_alloc_failure)
 {
 	START;
 
@@ -1181,7 +1181,7 @@ TEST(display_x11_window_set_title_alloc_failure)
 	END;
 }
 
-TEST(display_x11_window_set_title_write_failure)
+TEST(display_x11_direct_window_set_title_write_failure)
 {
 	START;
 
@@ -1210,7 +1210,7 @@ TEST(display_x11_window_set_title_write_failure)
 	END;
 }
 
-TEST(display_x11_window_geometry_writes_requests)
+TEST(display_x11_direct_window_geometry_writes_requests)
 {
 	START;
 
@@ -1261,7 +1261,7 @@ TEST(display_x11_window_geometry_writes_requests)
 	END;
 }
 
-TEST(display_x11_window_set_position_null_data)
+TEST(display_x11_direct_window_set_position_null_data)
 {
 	START;
 
@@ -1274,7 +1274,7 @@ TEST(display_x11_window_set_position_null_data)
 	END;
 }
 
-TEST(display_x11_window_set_size_null_data)
+TEST(display_x11_direct_window_set_size_null_data)
 {
 	START;
 
@@ -1287,7 +1287,7 @@ TEST(display_x11_window_set_size_null_data)
 	END;
 }
 
-TEST(display_x11_window_set_borderless_null_data)
+TEST(display_x11_direct_window_set_borderless_null_data)
 {
 	START;
 
@@ -1300,7 +1300,7 @@ TEST(display_x11_window_set_borderless_null_data)
 	END;
 }
 
-TEST(display_x11_window_set_borderless_writes_request)
+TEST(display_x11_direct_window_set_borderless_writes_request)
 {
 	START;
 
@@ -1356,7 +1356,7 @@ TEST(display_x11_window_set_borderless_writes_request)
 	END;
 }
 
-TEST(display_x11_window_set_bordered_writes_request)
+TEST(display_x11_direct_window_set_bordered_writes_request)
 {
 	START;
 
@@ -1389,7 +1389,7 @@ TEST(display_x11_window_set_bordered_writes_request)
 	END;
 }
 
-TEST(display_x11_window_set_fullscreen_null_data)
+TEST(display_x11_direct_window_set_fullscreen_null_data)
 {
 	START;
 
@@ -1402,7 +1402,7 @@ TEST(display_x11_window_set_fullscreen_null_data)
 	END;
 }
 
-TEST(display_x11_window_set_fullscreen_unmapped_writes_property)
+TEST(display_x11_direct_window_set_fullscreen_unmapped_writes_property)
 {
 	START;
 
@@ -1446,7 +1446,7 @@ TEST(display_x11_window_set_fullscreen_unmapped_writes_property)
 	END;
 }
 
-TEST(display_x11_window_set_windowed_unmapped_writes_empty_property)
+TEST(display_x11_direct_window_set_windowed_unmapped_writes_empty_property)
 {
 	START;
 
@@ -1480,7 +1480,7 @@ TEST(display_x11_window_set_windowed_unmapped_writes_empty_property)
 	END;
 }
 
-TEST(display_x11_window_set_fullscreen_mapped_writes_client_message)
+TEST(display_x11_direct_window_set_fullscreen_mapped_writes_client_message)
 {
 	START;
 
@@ -1538,7 +1538,7 @@ TEST(display_x11_window_set_fullscreen_mapped_writes_client_message)
 	END;
 }
 
-TEST(display_x11_window_set_windowed_mapped_writes_client_message)
+TEST(display_x11_direct_window_set_windowed_mapped_writes_client_message)
 {
 	START;
 
@@ -1576,7 +1576,7 @@ TEST(display_x11_window_set_windowed_mapped_writes_client_message)
 	END;
 }
 
-TEST(display_x11_window_set_fullscreen_mapped_write_failure)
+TEST(display_x11_direct_window_set_fullscreen_mapped_write_failure)
 {
 	START;
 
@@ -1609,7 +1609,7 @@ TEST(display_x11_window_set_fullscreen_mapped_write_failure)
 	END;
 }
 
-TEST(display_x11_window_set_position_write_failure)
+TEST(display_x11_direct_window_set_position_write_failure)
 {
 	START;
 
@@ -1638,7 +1638,7 @@ TEST(display_x11_window_set_position_write_failure)
 	END;
 }
 
-TEST(display_x11_window_visibility_writes_requests)
+TEST(display_x11_direct_window_visibility_writes_requests)
 {
 	START;
 
@@ -1673,7 +1673,7 @@ TEST(display_x11_window_visibility_writes_requests)
 	END;
 }
 
-TEST(display_x11_window_show_null_data)
+TEST(display_x11_direct_window_show_null_data)
 {
 	START;
 
@@ -1686,7 +1686,7 @@ TEST(display_x11_window_show_null_data)
 	END;
 }
 
-TEST(display_x11_window_hide_null_data)
+TEST(display_x11_direct_window_hide_null_data)
 {
 	START;
 
@@ -1699,7 +1699,7 @@ TEST(display_x11_window_hide_null_data)
 	END;
 }
 
-TEST(display_x11_window_hide_write_failure)
+TEST(display_x11_direct_window_hide_write_failure)
 {
 	START;
 
@@ -1728,7 +1728,7 @@ TEST(display_x11_window_hide_write_failure)
 	END;
 }
 
-TEST(display_x11_poll_event_no_event)
+TEST(display_x11_direct_poll_event_no_event)
 {
 	START;
 
@@ -1756,7 +1756,7 @@ TEST(display_x11_poll_event_no_event)
 	END;
 }
 
-TEST(display_x11_poll_event_configure_notify)
+TEST(display_x11_direct_poll_event_configure_notify)
 {
 	START;
 
@@ -1790,7 +1790,7 @@ TEST(display_x11_poll_event_configure_notify)
 	END;
 }
 
-TEST(display_x11_poll_event_null_display)
+TEST(display_x11_direct_poll_event_null_display)
 {
 	START;
 
@@ -1802,7 +1802,7 @@ TEST(display_x11_poll_event_null_display)
 	END;
 }
 
-TEST(display_x11_poll_event_null_event)
+TEST(display_x11_direct_poll_event_null_event)
 {
 	START;
 
@@ -1815,7 +1815,7 @@ TEST(display_x11_poll_event_null_event)
 	END;
 }
 
-TEST(display_x11_poll_event_get_flags_failure)
+TEST(display_x11_direct_poll_event_get_flags_failure)
 {
 	START;
 
@@ -1845,7 +1845,7 @@ TEST(display_x11_poll_event_get_flags_failure)
 	END;
 }
 
-TEST(display_x11_wait_event_null_display)
+TEST(display_x11_direct_wait_event_null_display)
 {
 	START;
 
@@ -1857,7 +1857,7 @@ TEST(display_x11_wait_event_null_display)
 	END;
 }
 
-TEST(display_x11_wait_event_null_event)
+TEST(display_x11_direct_wait_event_null_event)
 {
 	START;
 
@@ -1870,7 +1870,7 @@ TEST(display_x11_wait_event_null_event)
 	END;
 }
 
-TEST(display_x11_wait_event_unknown_event)
+TEST(display_x11_direct_wait_event_unknown_event)
 {
 	START;
 
@@ -1899,7 +1899,7 @@ TEST(display_x11_wait_event_unknown_event)
 	END;
 }
 
-TEST(display_x11_wait_event_configure_notify)
+TEST(display_x11_direct_wait_event_configure_notify)
 {
 	START;
 
@@ -1932,7 +1932,7 @@ TEST(display_x11_wait_event_configure_notify)
 	END;
 }
 
-TEST(display_x11_wait_event_skips_expose)
+TEST(display_x11_direct_wait_event_skips_expose)
 {
 	START;
 
@@ -1966,7 +1966,7 @@ TEST(display_x11_wait_event_skips_expose)
 	END;
 }
 
-TEST(display_x11_wait_event_skips_map_notify)
+TEST(display_x11_direct_wait_event_skips_map_notify)
 {
 	START;
 
@@ -2000,7 +2000,7 @@ TEST(display_x11_wait_event_skips_map_notify)
 	END;
 }
 
-TEST(display_x11_wait_event_skips_unmap_notify)
+TEST(display_x11_direct_wait_event_skips_unmap_notify)
 {
 	START;
 
@@ -2034,7 +2034,7 @@ TEST(display_x11_wait_event_skips_unmap_notify)
 	END;
 }
 
-TEST(display_x11_wait_event_skips_reparent_notify)
+TEST(display_x11_direct_wait_event_skips_reparent_notify)
 {
 	START;
 
@@ -2068,7 +2068,7 @@ TEST(display_x11_wait_event_skips_reparent_notify)
 	END;
 }
 
-TEST(display_x11_wait_event_skips_mapping_notify)
+TEST(display_x11_direct_wait_event_skips_mapping_notify)
 {
 	START;
 
@@ -2102,7 +2102,7 @@ TEST(display_x11_wait_event_skips_mapping_notify)
 	END;
 }
 
-TEST(display_x11_wait_event_client_message_close)
+TEST(display_x11_direct_wait_event_client_message_close)
 {
 	START;
 
@@ -2131,7 +2131,7 @@ TEST(display_x11_wait_event_client_message_close)
 	END;
 }
 
-TEST(display_x11_wait_event_skips_unknown_client_message)
+TEST(display_x11_direct_wait_event_skips_unknown_client_message)
 {
 	START;
 
@@ -2161,7 +2161,7 @@ TEST(display_x11_wait_event_skips_unknown_client_message)
 	END;
 }
 
-TEST(display_x11_wait_event_inputs)
+TEST(display_x11_direct_wait_event_inputs)
 {
 	START;
 
@@ -2234,7 +2234,7 @@ TEST(display_x11_wait_event_inputs)
 	END;
 }
 
-TEST(display_x11_wait_event_mouse_buttons)
+TEST(display_x11_direct_wait_event_mouse_buttons)
 {
 	START;
 
@@ -2303,7 +2303,7 @@ TEST(display_x11_wait_event_mouse_buttons)
 	END;
 }
 
-TEST(display_x11_wait_event_extended_keys)
+TEST(display_x11_direct_wait_event_extended_keys)
 {
 	START;
 
@@ -2372,7 +2372,7 @@ TEST(display_x11_wait_event_extended_keys)
 	END;
 }
 
-TEST(display_x11_wait_event_keypad_keys)
+TEST(display_x11_direct_wait_event_keypad_keys)
 {
 	START;
 
@@ -2513,7 +2513,7 @@ TEST(display_x11_wait_event_keypad_keys)
 	END;
 }
 
-TEST(display_x11_wait_event_modifiers)
+TEST(display_x11_direct_wait_event_modifiers)
 {
 	START;
 
@@ -2545,7 +2545,7 @@ TEST(display_x11_wait_event_modifiers)
 	END;
 }
 
-TEST(display_x11_wait_event_focus_and_close)
+TEST(display_x11_direct_wait_event_focus_and_close)
 {
 	START;
 
@@ -2584,7 +2584,7 @@ TEST(display_x11_wait_event_focus_and_close)
 	END;
 }
 
-TEST(display_x11_init_wild_authority)
+TEST(display_x11_direct_init_wild_authority)
 {
 	START;
 
@@ -2612,7 +2612,7 @@ TEST(display_x11_init_wild_authority)
 	END;
 }
 
-TEST(display_x11_init_unknown_authority_family)
+TEST(display_x11_direct_init_unknown_authority_family)
 {
 	START;
 
@@ -2648,7 +2648,7 @@ TEST(display_x11_init_unknown_authority_family)
 	END;
 }
 
-TEST(display_x11_init_missing_display_env)
+TEST(display_x11_direct_init_missing_display_env)
 {
 	START;
 
@@ -2667,7 +2667,7 @@ TEST(display_x11_init_missing_display_env)
 	END;
 }
 
-TEST(display_x11_init_invalid_display_name)
+TEST(display_x11_direct_init_invalid_display_name)
 {
 	START;
 
@@ -2687,7 +2687,7 @@ TEST(display_x11_init_invalid_display_name)
 	END;
 }
 
-TEST(display_x11_init_invalid_display_number)
+TEST(display_x11_direct_init_invalid_display_number)
 {
 	START;
 
@@ -2707,7 +2707,7 @@ TEST(display_x11_init_invalid_display_number)
 	END;
 }
 
-TEST(display_x11_init_connect_not_found)
+TEST(display_x11_direct_init_connect_not_found)
 {
 	START;
 
@@ -2727,7 +2727,7 @@ TEST(display_x11_init_connect_not_found)
 	END;
 }
 
-TEST(display_x11_init_missing_xauthority_env)
+TEST(display_x11_direct_init_missing_xauthority_env)
 {
 	START;
 
@@ -2750,7 +2750,7 @@ TEST(display_x11_init_missing_xauthority_env)
 	END;
 }
 
-TEST(display_x11_init_missing_xauthority_file)
+TEST(display_x11_direct_init_missing_xauthority_file)
 {
 	START;
 
@@ -2774,7 +2774,7 @@ TEST(display_x11_init_missing_xauthority_file)
 	END;
 }
 
-TEST(display_x11_init_missing_hostname)
+TEST(display_x11_direct_init_missing_hostname)
 {
 	START;
 
@@ -2800,7 +2800,7 @@ TEST(display_x11_init_missing_hostname)
 	END;
 }
 
-TEST(display_x11_init_malformed_authority)
+TEST(display_x11_direct_init_malformed_authority)
 {
 	START;
 
@@ -2826,7 +2826,7 @@ TEST(display_x11_init_malformed_authority)
 	END;
 }
 
-TEST(display_x11_init_rejected_setup)
+TEST(display_x11_direct_init_rejected_setup)
 {
 	START;
 
@@ -2852,7 +2852,7 @@ TEST(display_x11_init_rejected_setup)
 	END;
 }
 
-TEST(display_x11_init_short_setup)
+TEST(display_x11_direct_init_short_setup)
 {
 	START;
 
@@ -2878,7 +2878,7 @@ TEST(display_x11_init_short_setup)
 	END;
 }
 
-TEST(display_x11_init_truncated_setup)
+TEST(display_x11_direct_init_truncated_setup)
 {
 	START;
 
@@ -2904,7 +2904,7 @@ TEST(display_x11_init_truncated_setup)
 	END;
 }
 
-TEST(display_x11_init_setup_without_screens)
+TEST(display_x11_direct_init_setup_without_screens)
 {
 	START;
 
@@ -2932,7 +2932,7 @@ TEST(display_x11_init_setup_without_screens)
 	END;
 }
 
-TEST(display_x11_init_invalid_screen_offset)
+TEST(display_x11_direct_init_invalid_screen_offset)
 {
 	START;
 
@@ -2960,7 +2960,7 @@ TEST(display_x11_init_invalid_screen_offset)
 	END;
 }
 
-TEST(display_x11_init_setup_alloc_failure)
+TEST(display_x11_direct_init_setup_alloc_failure)
 {
 	START;
 
@@ -2989,7 +2989,7 @@ TEST(display_x11_init_setup_alloc_failure)
 	END;
 }
 
-TEST(display_x11_init_invalid_keycode_range)
+TEST(display_x11_direct_init_invalid_keycode_range)
 {
 	START;
 
@@ -3019,7 +3019,7 @@ TEST(display_x11_init_invalid_keycode_range)
 	END;
 }
 
-TEST(display_x11_init_keyboard_mapping_read_failure)
+TEST(display_x11_direct_init_keyboard_mapping_read_failure)
 {
 	START;
 
@@ -3047,7 +3047,7 @@ TEST(display_x11_init_keyboard_mapping_read_failure)
 	END;
 }
 
-TEST(display_x11_init_keyboard_mapping_rejected)
+TEST(display_x11_direct_init_keyboard_mapping_rejected)
 {
 	START;
 
@@ -3080,7 +3080,7 @@ TEST(display_x11_init_keyboard_mapping_rejected)
 	END;
 }
 
-TEST(display_x11_init_keyboard_mapping_invalid)
+TEST(display_x11_direct_init_keyboard_mapping_invalid)
 {
 	START;
 
@@ -3113,7 +3113,7 @@ TEST(display_x11_init_keyboard_mapping_invalid)
 	END;
 }
 
-TEST(display_x11_init_keyboard_mapping_data_read_failure)
+TEST(display_x11_direct_init_keyboard_mapping_data_read_failure)
 {
 	START;
 
@@ -3143,7 +3143,7 @@ TEST(display_x11_init_keyboard_mapping_data_read_failure)
 	END;
 }
 
-TEST(display_x11_init_keyboard_mapping_alloc_failure)
+TEST(display_x11_direct_init_keyboard_mapping_alloc_failure)
 {
 	START;
 
@@ -3172,7 +3172,7 @@ TEST(display_x11_init_keyboard_mapping_alloc_failure)
 	END;
 }
 
-TEST(display_x11_init_modifier_mapping_read_failure)
+TEST(display_x11_direct_init_modifier_mapping_read_failure)
 {
 	START;
 
@@ -3204,7 +3204,7 @@ TEST(display_x11_init_modifier_mapping_read_failure)
 	END;
 }
 
-TEST(display_x11_init_modifier_mapping_rejected)
+TEST(display_x11_direct_init_modifier_mapping_rejected)
 {
 	START;
 
@@ -3239,7 +3239,7 @@ TEST(display_x11_init_modifier_mapping_rejected)
 	END;
 }
 
-TEST(display_x11_init_modifier_mapping_invalid)
+TEST(display_x11_direct_init_modifier_mapping_invalid)
 {
 	START;
 
@@ -3274,7 +3274,7 @@ TEST(display_x11_init_modifier_mapping_invalid)
 	END;
 }
 
-TEST(display_x11_init_modifier_mapping_data_read_failure)
+TEST(display_x11_direct_init_modifier_mapping_data_read_failure)
 {
 	START;
 
@@ -3309,7 +3309,7 @@ TEST(display_x11_init_modifier_mapping_data_read_failure)
 	END;
 }
 
-TEST(display_x11_init_modifier_mapping_alloc_failure)
+TEST(display_x11_direct_init_modifier_mapping_alloc_failure)
 {
 	START;
 
@@ -3343,7 +3343,7 @@ TEST(display_x11_init_modifier_mapping_alloc_failure)
 	END;
 }
 
-TEST(display_x11_init_empty_modifier_mapping)
+TEST(display_x11_direct_init_empty_modifier_mapping)
 {
 	START;
 
@@ -3383,7 +3383,7 @@ TEST(display_x11_init_empty_modifier_mapping)
 	END;
 }
 
-TEST(display_x11_init_intern_atom_read_failure)
+TEST(display_x11_direct_init_intern_atom_read_failure)
 {
 	START;
 
@@ -3412,7 +3412,7 @@ TEST(display_x11_init_intern_atom_read_failure)
 	END;
 }
 
-TEST(display_x11_init_intern_atom_rejected_reply)
+TEST(display_x11_direct_init_intern_atom_rejected_reply)
 {
 	START;
 
@@ -3443,7 +3443,7 @@ TEST(display_x11_init_intern_atom_rejected_reply)
 	END;
 }
 
-TEST(display_x11_init_intern_atom_missing)
+TEST(display_x11_direct_init_intern_atom_missing)
 {
 	START;
 
@@ -3474,7 +3474,7 @@ TEST(display_x11_init_intern_atom_missing)
 	END;
 }
 
-TEST(display_x11_init_socket_open_failure)
+TEST(display_x11_direct_init_socket_open_failure)
 {
 	START;
 
@@ -3498,7 +3498,7 @@ TEST(display_x11_init_socket_open_failure)
 	END;
 }
 
-TEST(display_x11_window_init_resource_exhausted)
+TEST(display_x11_direct_window_init_resource_exhausted)
 {
 	START;
 
@@ -3537,7 +3537,7 @@ TEST(display_x11_window_init_resource_exhausted)
 	END;
 }
 
-TEST(display_x11_window_init_colormap_resource_exhausted)
+TEST(display_x11_direct_window_init_colormap_resource_exhausted)
 {
 	START;
 
@@ -3573,7 +3573,7 @@ TEST(display_x11_window_init_colormap_resource_exhausted)
 	END;
 }
 
-TEST(display_x11_window_init_colormap_write_failure)
+TEST(display_x11_direct_window_init_colormap_write_failure)
 {
 	START;
 
@@ -3606,7 +3606,7 @@ TEST(display_x11_window_init_colormap_write_failure)
 	END;
 }
 
-TEST(display_x11_window_init_create_write_failure)
+TEST(display_x11_direct_window_init_create_write_failure)
 {
 	START;
 
@@ -3639,7 +3639,7 @@ TEST(display_x11_window_init_create_write_failure)
 	END;
 }
 
-TEST(display_x11_window_show_write_failure)
+TEST(display_x11_direct_window_show_write_failure)
 {
 	START;
 
@@ -3668,7 +3668,7 @@ TEST(display_x11_window_show_write_failure)
 	END;
 }
 
-TEST(display_x11_window_init_wm_protocols_write_failure)
+TEST(display_x11_direct_window_init_wm_protocols_write_failure)
 {
 	START;
 
@@ -3725,7 +3725,7 @@ TEST(display_x11_window_init_wm_protocols_write_failure)
 	END;
 }
 
-TEST(display_x11_window_free_destroy_write_failure)
+TEST(display_x11_direct_window_free_destroy_write_failure)
 {
 	START;
 
@@ -3762,7 +3762,7 @@ TEST(display_x11_window_free_destroy_write_failure)
 	END;
 }
 
-TEST(display_x11_window_free_colormap_write_failure)
+TEST(display_x11_direct_window_free_colormap_write_failure)
 {
 	START;
 
@@ -3804,7 +3804,7 @@ TEST(display_x11_window_free_colormap_write_failure)
 	END;
 }
 
-TEST(display_x11_init_valid_authority_writes_cookie)
+TEST(display_x11_direct_init_valid_authority_writes_cookie)
 {
 	START;
 
@@ -3849,7 +3849,7 @@ TEST(display_x11_init_valid_authority_writes_cookie)
 	END;
 }
 
-TEST(display_x11_visual_depth_returns_setup_depth)
+TEST(display_x11_direct_visual_depth_returns_setup_depth)
 {
 	START;
 
@@ -3880,7 +3880,7 @@ TEST(display_x11_visual_depth_returns_setup_depth)
 	END;
 }
 
-TEST(display_x11_visual_depth_rejects_unknown_visual)
+TEST(display_x11_direct_visual_depth_rejects_unknown_visual)
 {
 	START;
 
@@ -3909,7 +3909,7 @@ TEST(display_x11_visual_depth_rejects_unknown_visual)
 	END;
 }
 
-TEST(display_x11_ext_init_writes_query)
+TEST(display_x11_direct_ext_init_writes_query)
 {
 	START;
 
@@ -3946,7 +3946,7 @@ TEST(display_x11_ext_init_writes_query)
 	END;
 }
 
-TEST(display_x11_ext_send_writes_request)
+TEST(display_x11_direct_ext_send_writes_request)
 {
 	START;
 
@@ -3975,7 +3975,7 @@ TEST(display_x11_ext_send_writes_request)
 	END;
 }
 
-TEST(display_x11_ext_call_reads_reply_data)
+TEST(display_x11_direct_ext_call_reads_reply_data)
 {
 	START;
 
@@ -4006,7 +4006,7 @@ TEST(display_x11_ext_call_reads_reply_data)
 	END;
 }
 
-TEST(display_x11_ext_call_accepts_empty_reply)
+TEST(display_x11_direct_ext_call_accepts_empty_reply)
 {
 	START;
 
@@ -4033,7 +4033,7 @@ TEST(display_x11_ext_call_accepts_empty_reply)
 	END;
 }
 
-TEST(display_x11_ext_init_rejects_unavailable_extension)
+TEST(display_x11_direct_ext_init_rejects_unavailable_extension)
 {
 	START;
 
@@ -4058,7 +4058,7 @@ TEST(display_x11_ext_init_rejects_unavailable_extension)
 	END;
 }
 
-TEST(display_x11_ext_call_rejects_error_reply)
+TEST(display_x11_direct_ext_call_rejects_error_reply)
 {
 	START;
 
@@ -4090,7 +4090,7 @@ TEST(display_x11_ext_call_rejects_error_reply)
 	END;
 }
 
-TEST(display_x11_ext_call_rejects_unexpected_reply)
+TEST(display_x11_direct_ext_call_rejects_unexpected_reply)
 {
 	START;
 
@@ -4117,7 +4117,7 @@ TEST(display_x11_ext_call_rejects_unexpected_reply)
 	END;
 }
 
-TEST(display_x11_ext_rejects_invalid_driver_arguments)
+TEST(display_x11_direct_ext_rejects_invalid_driver_arguments)
 {
 	START;
 
@@ -4140,7 +4140,7 @@ TEST(display_x11_ext_rejects_invalid_driver_arguments)
 	END;
 }
 
-TEST(display_x11_ext_init_rejects_invalid_name_data)
+TEST(display_x11_direct_ext_init_rejects_invalid_name_data)
 {
 	START;
 
@@ -4161,7 +4161,7 @@ TEST(display_x11_ext_init_rejects_invalid_name_data)
 	END;
 }
 
-TEST(display_x11_ext_send_rejects_invalid_data)
+TEST(display_x11_direct_ext_send_rejects_invalid_data)
 {
 	START;
 
@@ -4182,7 +4182,7 @@ TEST(display_x11_ext_send_rejects_invalid_data)
 	END;
 }
 
-TEST(display_x11_init_rejects_truncated_depth)
+TEST(display_x11_direct_init_rejects_truncated_depth)
 {
 	START;
 
@@ -4212,7 +4212,7 @@ TEST(display_x11_init_rejects_truncated_depth)
 	END;
 }
 
-TEST(display_x11_init_rejects_truncated_visual)
+TEST(display_x11_direct_init_rejects_truncated_visual)
 {
 	START;
 
@@ -4243,7 +4243,7 @@ TEST(display_x11_init_rejects_truncated_visual)
 	END;
 }
 
-TEST(display_x11_init_rejects_visual_alloc_failure)
+TEST(display_x11_direct_init_rejects_visual_alloc_failure)
 {
 	START;
 
@@ -4277,7 +4277,7 @@ TEST(display_x11_init_rejects_visual_alloc_failure)
 	END;
 }
 
-TEST(display_x11_ext_init_rejects_request_alloc_failure)
+TEST(display_x11_direct_ext_init_rejects_request_alloc_failure)
 {
 	START;
 
@@ -4300,7 +4300,7 @@ TEST(display_x11_ext_init_rejects_request_alloc_failure)
 	END;
 }
 
-TEST(display_x11_ext_send_rejects_request_alloc_failure)
+TEST(display_x11_direct_ext_send_rejects_request_alloc_failure)
 {
 	START;
 
@@ -4324,7 +4324,7 @@ TEST(display_x11_ext_send_rejects_request_alloc_failure)
 	END;
 }
 
-TEST(display_x11_ext_send_reuses_request_buffer)
+TEST(display_x11_direct_ext_send_reuses_request_buffer)
 {
 	START;
 
@@ -4352,7 +4352,7 @@ TEST(display_x11_ext_send_reuses_request_buffer)
 	END;
 }
 
-TEST(display_x11_ext_send_rejects_buffer_growth_failure)
+TEST(display_x11_direct_ext_send_rejects_buffer_growth_failure)
 {
 	START;
 
@@ -4379,7 +4379,7 @@ TEST(display_x11_ext_send_rejects_buffer_growth_failure)
 	END;
 }
 
-TEST(display_x11_ext_call_rejects_reply_alloc_failure)
+TEST(display_x11_direct_ext_call_rejects_reply_alloc_failure)
 {
 	START;
 
@@ -4412,7 +4412,7 @@ TEST(display_x11_ext_call_rejects_reply_alloc_failure)
 	END;
 }
 
-TEST(display_x11_ext_call_handles_reply_discard_failure)
+TEST(display_x11_direct_ext_call_handles_reply_discard_failure)
 {
 	START;
 
@@ -4444,7 +4444,7 @@ TEST(display_x11_ext_call_handles_reply_discard_failure)
 	END;
 }
 
-TEST(display_x11_ext_send_returns_socket_failure)
+TEST(display_x11_direct_ext_send_returns_socket_failure)
 {
 	START;
 
@@ -4471,7 +4471,7 @@ TEST(display_x11_ext_send_returns_socket_failure)
 	END;
 }
 
-TEST(display_x11_ext_call_rejects_reply_read_failure)
+TEST(display_x11_direct_ext_call_rejects_reply_read_failure)
 {
 	START;
 
@@ -4496,7 +4496,7 @@ TEST(display_x11_ext_call_rejects_reply_read_failure)
 	END;
 }
 
-TEST(display_x11_ext_call_rejects_reply_data_read_failure)
+TEST(display_x11_direct_ext_call_rejects_reply_data_read_failure)
 {
 	START;
 
@@ -4524,132 +4524,132 @@ TEST(display_x11_ext_call_rejects_reply_data_read_failure)
 	END;
 }
 
-STEST(display_x11)
+STEST(display_x11_direct)
 {
 	SSTART;
 
-	RUN(display_x11_driver_is_registered);
-	RUN(display_x11_init_null_display);
-	RUN(display_x11_init_alloc_failure);
-	RUN(display_x11_free_null_display);
-	RUN(display_x11_window_init_null_window);
-	RUN(display_x11_window_init_alloc_failure);
-	RUN(display_x11_window_free_null_window);
-	RUN(display_x11_window_id_null_data);
-	RUN(display_x11_init_success);
-	RUN(display_x11_window_init_writes_requests);
-	RUN(display_x11_window_init_custom_visual_writes_requests);
-	RUN(display_x11_window_free_custom_visual_writes_request);
-	RUN(display_x11_window_set_title_writes_requests);
-	RUN(display_x11_window_set_title_null_data);
-	RUN(display_x11_window_set_title_invalid_text);
-	RUN(display_x11_window_set_title_too_long);
-	RUN(display_x11_window_set_title_alloc_failure);
-	RUN(display_x11_window_set_title_write_failure);
-	RUN(display_x11_window_geometry_writes_requests);
-	RUN(display_x11_window_set_position_null_data);
-	RUN(display_x11_window_set_size_null_data);
-	RUN(display_x11_window_set_borderless_null_data);
-	RUN(display_x11_window_set_borderless_writes_request);
-	RUN(display_x11_window_set_bordered_writes_request);
-	RUN(display_x11_window_set_fullscreen_null_data);
-	RUN(display_x11_window_set_fullscreen_unmapped_writes_property);
-	RUN(display_x11_window_set_windowed_unmapped_writes_empty_property);
-	RUN(display_x11_window_set_fullscreen_mapped_writes_client_message);
-	RUN(display_x11_window_set_windowed_mapped_writes_client_message);
-	RUN(display_x11_window_set_fullscreen_mapped_write_failure);
-	RUN(display_x11_window_set_position_write_failure);
-	RUN(display_x11_window_visibility_writes_requests);
-	RUN(display_x11_window_show_null_data);
-	RUN(display_x11_window_hide_null_data);
-	RUN(display_x11_window_hide_write_failure);
-	RUN(display_x11_poll_event_no_event);
-	RUN(display_x11_poll_event_configure_notify);
-	RUN(display_x11_poll_event_null_display);
-	RUN(display_x11_poll_event_null_event);
-	RUN(display_x11_poll_event_get_flags_failure);
-	RUN(display_x11_wait_event_null_display);
-	RUN(display_x11_wait_event_null_event);
-	RUN(display_x11_wait_event_unknown_event);
-	RUN(display_x11_wait_event_configure_notify);
-	RUN(display_x11_wait_event_skips_expose);
-	RUN(display_x11_wait_event_skips_map_notify);
-	RUN(display_x11_wait_event_skips_unmap_notify);
-	RUN(display_x11_wait_event_skips_reparent_notify);
-	RUN(display_x11_wait_event_skips_mapping_notify);
-	RUN(display_x11_wait_event_client_message_close);
-	RUN(display_x11_wait_event_skips_unknown_client_message);
-	RUN(display_x11_wait_event_inputs);
-	RUN(display_x11_wait_event_mouse_buttons);
-	RUN(display_x11_wait_event_extended_keys);
-	RUN(display_x11_wait_event_keypad_keys);
-	RUN(display_x11_wait_event_modifiers);
-	RUN(display_x11_wait_event_focus_and_close);
-	RUN(display_x11_init_wild_authority);
-	RUN(display_x11_init_unknown_authority_family);
-	RUN(display_x11_init_missing_display_env);
-	RUN(display_x11_init_invalid_display_name);
-	RUN(display_x11_init_invalid_display_number);
-	RUN(display_x11_init_connect_not_found);
-	RUN(display_x11_init_missing_xauthority_env);
-	RUN(display_x11_init_missing_xauthority_file);
-	RUN(display_x11_init_missing_hostname);
-	RUN(display_x11_init_malformed_authority);
-	RUN(display_x11_init_rejected_setup);
-	RUN(display_x11_init_short_setup);
-	RUN(display_x11_init_truncated_setup);
-	RUN(display_x11_init_setup_without_screens);
-	RUN(display_x11_init_invalid_screen_offset);
-	RUN(display_x11_init_setup_alloc_failure);
-	RUN(display_x11_init_invalid_keycode_range);
-	RUN(display_x11_init_keyboard_mapping_read_failure);
-	RUN(display_x11_init_keyboard_mapping_rejected);
-	RUN(display_x11_init_keyboard_mapping_invalid);
-	RUN(display_x11_init_keyboard_mapping_data_read_failure);
-	RUN(display_x11_init_keyboard_mapping_alloc_failure);
-	RUN(display_x11_init_modifier_mapping_read_failure);
-	RUN(display_x11_init_modifier_mapping_rejected);
-	RUN(display_x11_init_modifier_mapping_invalid);
-	RUN(display_x11_init_modifier_mapping_data_read_failure);
-	RUN(display_x11_init_modifier_mapping_alloc_failure);
-	RUN(display_x11_init_empty_modifier_mapping);
-	RUN(display_x11_init_intern_atom_read_failure);
-	RUN(display_x11_init_intern_atom_rejected_reply);
-	RUN(display_x11_init_intern_atom_missing);
-	RUN(display_x11_init_socket_open_failure);
-	RUN(display_x11_window_init_resource_exhausted);
-	RUN(display_x11_window_init_colormap_resource_exhausted);
-	RUN(display_x11_window_init_colormap_write_failure);
-	RUN(display_x11_window_init_create_write_failure);
-	RUN(display_x11_window_init_wm_protocols_write_failure);
-	RUN(display_x11_window_show_write_failure);
-	RUN(display_x11_window_free_destroy_write_failure);
-	RUN(display_x11_window_free_colormap_write_failure);
-	RUN(display_x11_init_valid_authority_writes_cookie);
-	RUN(display_x11_visual_depth_returns_setup_depth);
-	RUN(display_x11_visual_depth_rejects_unknown_visual);
-	RUN(display_x11_ext_init_writes_query);
-	RUN(display_x11_ext_send_writes_request);
-	RUN(display_x11_ext_call_reads_reply_data);
-	RUN(display_x11_ext_call_accepts_empty_reply);
-	RUN(display_x11_ext_init_rejects_unavailable_extension);
-	RUN(display_x11_ext_call_rejects_error_reply);
-	RUN(display_x11_ext_call_rejects_unexpected_reply);
-	RUN(display_x11_ext_rejects_invalid_driver_arguments);
-	RUN(display_x11_ext_init_rejects_invalid_name_data);
-	RUN(display_x11_ext_send_rejects_invalid_data);
-	RUN(display_x11_init_rejects_truncated_depth);
-	RUN(display_x11_init_rejects_truncated_visual);
-	RUN(display_x11_init_rejects_visual_alloc_failure);
-	RUN(display_x11_ext_init_rejects_request_alloc_failure);
-	RUN(display_x11_ext_send_rejects_request_alloc_failure);
-	RUN(display_x11_ext_send_reuses_request_buffer);
-	RUN(display_x11_ext_send_rejects_buffer_growth_failure);
-	RUN(display_x11_ext_call_rejects_reply_alloc_failure);
-	RUN(display_x11_ext_call_handles_reply_discard_failure);
-	RUN(display_x11_ext_send_returns_socket_failure);
-	RUN(display_x11_ext_call_rejects_reply_read_failure);
-	RUN(display_x11_ext_call_rejects_reply_data_read_failure);
+	RUN(display_x11_direct_driver_is_registered);
+	RUN(display_x11_direct_init_null_display);
+	RUN(display_x11_direct_init_alloc_failure);
+	RUN(display_x11_direct_free_null_display);
+	RUN(display_x11_direct_window_init_null_window);
+	RUN(display_x11_direct_window_init_alloc_failure);
+	RUN(display_x11_direct_window_free_null_window);
+	RUN(display_x11_direct_window_id_null_data);
+	RUN(display_x11_direct_init_success);
+	RUN(display_x11_direct_window_init_writes_requests);
+	RUN(display_x11_direct_window_init_custom_visual_writes_requests);
+	RUN(display_x11_direct_window_free_custom_visual_writes_request);
+	RUN(display_x11_direct_window_set_title_writes_requests);
+	RUN(display_x11_direct_window_set_title_null_data);
+	RUN(display_x11_direct_window_set_title_invalid_text);
+	RUN(display_x11_direct_window_set_title_too_long);
+	RUN(display_x11_direct_window_set_title_alloc_failure);
+	RUN(display_x11_direct_window_set_title_write_failure);
+	RUN(display_x11_direct_window_geometry_writes_requests);
+	RUN(display_x11_direct_window_set_position_null_data);
+	RUN(display_x11_direct_window_set_size_null_data);
+	RUN(display_x11_direct_window_set_borderless_null_data);
+	RUN(display_x11_direct_window_set_borderless_writes_request);
+	RUN(display_x11_direct_window_set_bordered_writes_request);
+	RUN(display_x11_direct_window_set_fullscreen_null_data);
+	RUN(display_x11_direct_window_set_fullscreen_unmapped_writes_property);
+	RUN(display_x11_direct_window_set_windowed_unmapped_writes_empty_property);
+	RUN(display_x11_direct_window_set_fullscreen_mapped_writes_client_message);
+	RUN(display_x11_direct_window_set_windowed_mapped_writes_client_message);
+	RUN(display_x11_direct_window_set_fullscreen_mapped_write_failure);
+	RUN(display_x11_direct_window_set_position_write_failure);
+	RUN(display_x11_direct_window_visibility_writes_requests);
+	RUN(display_x11_direct_window_show_null_data);
+	RUN(display_x11_direct_window_hide_null_data);
+	RUN(display_x11_direct_window_hide_write_failure);
+	RUN(display_x11_direct_poll_event_no_event);
+	RUN(display_x11_direct_poll_event_configure_notify);
+	RUN(display_x11_direct_poll_event_null_display);
+	RUN(display_x11_direct_poll_event_null_event);
+	RUN(display_x11_direct_poll_event_get_flags_failure);
+	RUN(display_x11_direct_wait_event_null_display);
+	RUN(display_x11_direct_wait_event_null_event);
+	RUN(display_x11_direct_wait_event_unknown_event);
+	RUN(display_x11_direct_wait_event_configure_notify);
+	RUN(display_x11_direct_wait_event_skips_expose);
+	RUN(display_x11_direct_wait_event_skips_map_notify);
+	RUN(display_x11_direct_wait_event_skips_unmap_notify);
+	RUN(display_x11_direct_wait_event_skips_reparent_notify);
+	RUN(display_x11_direct_wait_event_skips_mapping_notify);
+	RUN(display_x11_direct_wait_event_client_message_close);
+	RUN(display_x11_direct_wait_event_skips_unknown_client_message);
+	RUN(display_x11_direct_wait_event_inputs);
+	RUN(display_x11_direct_wait_event_mouse_buttons);
+	RUN(display_x11_direct_wait_event_extended_keys);
+	RUN(display_x11_direct_wait_event_keypad_keys);
+	RUN(display_x11_direct_wait_event_modifiers);
+	RUN(display_x11_direct_wait_event_focus_and_close);
+	RUN(display_x11_direct_init_wild_authority);
+	RUN(display_x11_direct_init_unknown_authority_family);
+	RUN(display_x11_direct_init_missing_display_env);
+	RUN(display_x11_direct_init_invalid_display_name);
+	RUN(display_x11_direct_init_invalid_display_number);
+	RUN(display_x11_direct_init_connect_not_found);
+	RUN(display_x11_direct_init_missing_xauthority_env);
+	RUN(display_x11_direct_init_missing_xauthority_file);
+	RUN(display_x11_direct_init_missing_hostname);
+	RUN(display_x11_direct_init_malformed_authority);
+	RUN(display_x11_direct_init_rejected_setup);
+	RUN(display_x11_direct_init_short_setup);
+	RUN(display_x11_direct_init_truncated_setup);
+	RUN(display_x11_direct_init_setup_without_screens);
+	RUN(display_x11_direct_init_invalid_screen_offset);
+	RUN(display_x11_direct_init_setup_alloc_failure);
+	RUN(display_x11_direct_init_invalid_keycode_range);
+	RUN(display_x11_direct_init_keyboard_mapping_read_failure);
+	RUN(display_x11_direct_init_keyboard_mapping_rejected);
+	RUN(display_x11_direct_init_keyboard_mapping_invalid);
+	RUN(display_x11_direct_init_keyboard_mapping_data_read_failure);
+	RUN(display_x11_direct_init_keyboard_mapping_alloc_failure);
+	RUN(display_x11_direct_init_modifier_mapping_read_failure);
+	RUN(display_x11_direct_init_modifier_mapping_rejected);
+	RUN(display_x11_direct_init_modifier_mapping_invalid);
+	RUN(display_x11_direct_init_modifier_mapping_data_read_failure);
+	RUN(display_x11_direct_init_modifier_mapping_alloc_failure);
+	RUN(display_x11_direct_init_empty_modifier_mapping);
+	RUN(display_x11_direct_init_intern_atom_read_failure);
+	RUN(display_x11_direct_init_intern_atom_rejected_reply);
+	RUN(display_x11_direct_init_intern_atom_missing);
+	RUN(display_x11_direct_init_socket_open_failure);
+	RUN(display_x11_direct_window_init_resource_exhausted);
+	RUN(display_x11_direct_window_init_colormap_resource_exhausted);
+	RUN(display_x11_direct_window_init_colormap_write_failure);
+	RUN(display_x11_direct_window_init_create_write_failure);
+	RUN(display_x11_direct_window_init_wm_protocols_write_failure);
+	RUN(display_x11_direct_window_show_write_failure);
+	RUN(display_x11_direct_window_free_destroy_write_failure);
+	RUN(display_x11_direct_window_free_colormap_write_failure);
+	RUN(display_x11_direct_init_valid_authority_writes_cookie);
+	RUN(display_x11_direct_visual_depth_returns_setup_depth);
+	RUN(display_x11_direct_visual_depth_rejects_unknown_visual);
+	RUN(display_x11_direct_ext_init_writes_query);
+	RUN(display_x11_direct_ext_send_writes_request);
+	RUN(display_x11_direct_ext_call_reads_reply_data);
+	RUN(display_x11_direct_ext_call_accepts_empty_reply);
+	RUN(display_x11_direct_ext_init_rejects_unavailable_extension);
+	RUN(display_x11_direct_ext_call_rejects_error_reply);
+	RUN(display_x11_direct_ext_call_rejects_unexpected_reply);
+	RUN(display_x11_direct_ext_rejects_invalid_driver_arguments);
+	RUN(display_x11_direct_ext_init_rejects_invalid_name_data);
+	RUN(display_x11_direct_ext_send_rejects_invalid_data);
+	RUN(display_x11_direct_init_rejects_truncated_depth);
+	RUN(display_x11_direct_init_rejects_truncated_visual);
+	RUN(display_x11_direct_init_rejects_visual_alloc_failure);
+	RUN(display_x11_direct_ext_init_rejects_request_alloc_failure);
+	RUN(display_x11_direct_ext_send_rejects_request_alloc_failure);
+	RUN(display_x11_direct_ext_send_reuses_request_buffer);
+	RUN(display_x11_direct_ext_send_rejects_buffer_growth_failure);
+	RUN(display_x11_direct_ext_call_rejects_reply_alloc_failure);
+	RUN(display_x11_direct_ext_call_handles_reply_discard_failure);
+	RUN(display_x11_direct_ext_send_returns_socket_failure);
+	RUN(display_x11_direct_ext_call_rejects_reply_read_failure);
+	RUN(display_x11_direct_ext_call_rejects_reply_data_read_failure);
 
 	SEND;
 }

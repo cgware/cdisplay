@@ -35,7 +35,7 @@ typedef struct display_driver_s {
 
 void display_emit_event(display_t *display, const display_event_t *event);
 
-#define DISPLAY_DRIVER_TYPE 1
+#define DISPLAY_DRIVER_TYPE 0x445350
 
 #define DISPLAY_DRIVER(_name, _data) DRIVER(_name, DISPLAY_DRIVER_TYPE, _data)
 
