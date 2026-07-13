@@ -2007,6 +2007,18 @@ static u32 display_x11_direct_window_id(window_t *wnd)
 	return wx11->id;
 }
 
+static int display_x11_direct_window_native(window_t *wnd, window_native_t *native)
+{
+	if (wnd == NULL || wnd->data == NULL || native == NULL) {
+		return 1;
+	}
+
+	window_x11_t *wx11 = wnd->data;
+	native->type	   = DISPLAY_NATIVE_X11;
+	native->window	   = (void *)(uintptr_t)wx11->id;
+	return wx11->id == 0;
+}
+
 static int display_x11_direct_window_set_title(window_t *wnd, strv_t title)
 {
 	if (wnd == NULL || wnd->data == NULL) {
@@ -2101,6 +2113,7 @@ static display_driver_t display_x11_direct = {
 	.window_init	       = display_x11_direct_window_init,
 	.window_free	       = display_x11_direct_window_free,
 	.window_id	       = display_x11_direct_window_id,
+	.window_native	       = display_x11_direct_window_native,
 	.window_set_title      = display_x11_direct_window_set_title,
 	.window_set_position   = display_x11_direct_window_set_position,
 	.window_set_size       = display_x11_direct_window_set_size,

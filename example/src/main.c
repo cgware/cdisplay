@@ -158,7 +158,7 @@ int main()
 #if defined(C_WIN)
 	strv_t driver_name = STRV("windows");
 #else
-	strv_t driver_name = STRV("X11");
+	strv_t driver_name = STRV("X11-direct");
 #endif
 
 	display_driver_t *drv = find_display_driver(driver_name);

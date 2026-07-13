@@ -8,11 +8,17 @@ static int t_display_init_calls;
 static int t_display_free_calls;
 static int t_display_poll_events_calls;
 static int t_display_wait_events_calls;
+static int t_display_native_calls;
+static int t_display_native_free_calls;
 static int t_display_init_ret;
 static int t_display_poll_events_ret;
 static int t_display_wait_events_ret;
+static int t_display_native_ret;
+static int t_display_native_free_ret;
 static int t_display_event_calls;
 static display_event_t t_display_event;
+static display_native_t t_display_native;
+static void *t_display_native_free_data;
 static int t_display_log_calls;
 static int t_display_log_level;
 static const char *t_display_log_pkg;
@@ -54,6 +60,22 @@ static int t_display_wait_events(display_t *display)
 	return t_display_wait_events_ret;
 }
 
+static int t_display_native_fn(display_t *display, display_native_t *native)
+{
+	(void)display;
+	t_display_native_calls++;
+	*native = t_display_native;
+	return t_display_native_ret;
+}
+
+static int t_display_native_free_fn(display_t *display, void *data)
+{
+	(void)display;
+	t_display_native_free_calls++;
+	t_display_native_free_data = data;
+	return t_display_native_free_ret;
+}
+
 static int t_display_window_init(window_t *window, const window_config_t *config)
 {
 	(void)window;
@@ -73,6 +95,8 @@ static display_driver_t t_display_driver = {
 	.free	     = t_display_driver_free,
 	.poll_events = t_display_poll_events,
 	.wait_events = t_display_wait_events,
+	.native	     = t_display_native_fn,
+	.native_free = t_display_native_free_fn,
 	.window_init = t_display_window_init,
 	.window_free = t_display_window_free,
 };
@@ -83,11 +107,17 @@ static void t_display_reset(void)
 	t_display_free_calls	    = 0;
 	t_display_poll_events_calls = 0;
 	t_display_wait_events_calls = 0;
+	t_display_native_calls	    = 0;
+	t_display_native_free_calls = 0;
 	t_display_init_ret	    = 0;
 	t_display_poll_events_ret   = 0;
 	t_display_wait_events_ret   = 0;
+	t_display_native_ret	    = 0;
+	t_display_native_free_ret   = 0;
 	t_display_event_calls	    = 0;
 	t_display_event		    = (display_event_t){0};
+	t_display_native	    = (display_native_t){0};
+	t_display_native_free_data  = NULL;
 	t_display_log_calls	    = 0;
 	t_display_log_level	    = 0;
 	t_display_log_pkg	    = NULL;
@@ -452,6 +482,146 @@ TEST(display_wait_events_returns_driver_result)
 	};
 
 	EXPECT_EQ(display_wait_events(&display), 1);
+
+	END;
+}
+
+TEST(display_native_null_display)
+{
+	START;
+
+	display_native_t native = {0};
+
+	EXPECT_EQ(display_native(NULL, &native), 1);
+
+	END;
+}
+
+TEST(display_native_without_driver)
+{
+	START;
+
+	display_t display	= {0};
+	display_native_t native = {0};
+
+	EXPECT_EQ(display_native(&display, &native), 1);
+
+	END;
+}
+
+TEST(display_native_null_native)
+{
+	START;
+
+	display_t display = {
+		.drv = &t_display_driver,
+	};
+
+	EXPECT_EQ(display_native(&display, NULL), 1);
+
+	END;
+}
+
+TEST(display_native_calls_driver)
+{
+	START;
+
+	t_display_reset();
+	display_t display = {
+		.drv = &t_display_driver,
+	};
+	t_display_native = (display_native_t){
+		.type	 = DISPLAY_NATIVE_X11,
+		.display = (void *)0x1234,
+		.screen	 = 7,
+	};
+	display_native_t native = {0};
+
+	EXPECT_EQ(display_native(&display, &native), 0);
+	EXPECT_EQ(t_display_native_calls, 1);
+	EXPECT_EQ(native.type, DISPLAY_NATIVE_X11);
+	EXPECT_EQ(native.display, (void *)0x1234);
+	EXPECT_EQ(native.screen, 7);
+
+	END;
+}
+
+TEST(display_native_returns_driver_result)
+{
+	START;
+
+	t_display_reset();
+	display_t display = {
+		.drv = &t_display_driver,
+	};
+	display_native_t native = {0};
+	t_display_native_ret	  = 1;
+
+	EXPECT_EQ(display_native(&display, &native), 1);
+
+	END;
+}
+
+TEST(display_native_free_null_display)
+{
+	START;
+
+	EXPECT_EQ(display_native_free(NULL, (void *)0x1234), 1);
+
+	END;
+}
+
+TEST(display_native_free_without_driver)
+{
+	START;
+
+	display_t display = {0};
+
+	EXPECT_EQ(display_native_free(&display, (void *)0x1234), 1);
+
+	END;
+}
+
+TEST(display_native_free_null_data)
+{
+	START;
+
+	display_t display = {
+		.drv = &t_display_driver,
+	};
+
+	EXPECT_EQ(display_native_free(&display, NULL), 1);
+
+	END;
+}
+
+TEST(display_native_free_calls_driver)
+{
+	START;
+
+	t_display_reset();
+	display_t display = {
+		.drv = &t_display_driver,
+	};
+
+	EXPECT_EQ(display_native_free(&display, (void *)0x1234), 0);
+	EXPECT_EQ(t_display_native_free_calls, 1);
+	EXPECT_EQ(t_display_native_free_data, (void *)0x1234);
+
+	END;
+}
+
+TEST(display_native_free_returns_driver_result)
+{
+	START;
+
+	t_display_reset();
+	display_t display = {
+		.drv = &t_display_driver,
+	};
+	t_display_native_free_ret = 1;
+
+	EXPECT_EQ(display_native_free(&display, (void *)0x1234), 1);
 
 	END;
 }
@@ -851,6 +1021,16 @@ STEST(display)
 	RUN(display_wait_events_without_driver);
 	RUN(display_wait_events_calls_driver);
 	RUN(display_wait_events_returns_driver_result);
+	RUN(display_native_null_display);
+	RUN(display_native_without_driver);
+	RUN(display_native_null_native);
+	RUN(display_native_calls_driver);
+	RUN(display_native_returns_driver_result);
+	RUN(display_native_free_null_display);
+	RUN(display_native_free_without_driver);
+	RUN(display_native_free_null_data);
+	RUN(display_native_free_calls_driver);
+	RUN(display_native_free_returns_driver_result);
 	RUN(display_event_type_name_values);
 	RUN(display_key_name_values);
 	RUN(display_mouse_name_values);

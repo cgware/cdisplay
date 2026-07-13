@@ -17,10 +17,16 @@ typedef struct window_config_s {
 	u32 visual;
 } window_config_t;
 
+typedef struct window_native_s {
+	display_native_type_t type;
+	void *window;
+} window_native_t;
+
 window_t *window_init(window_t *wnd, display_t *display, const window_config_t *config);
 void window_free(window_t *wnd);
 
 u32 window_id(window_t *wnd);
+int window_native(window_t *wnd, window_native_t *native);
 int window_set_title(window_t *wnd, strv_t title);
 int window_set_position(window_t *wnd, u16 x, u16 y);
 int window_set_size(window_t *wnd, u16 width, u16 height);

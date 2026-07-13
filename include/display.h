@@ -173,6 +173,18 @@ typedef struct display_event_s {
 typedef struct display_s display_t;
 typedef void (*display_event_cb_t)(display_t *display, const display_event_t *event, void *user);
 
+typedef enum display_native_type_e {
+	DISPLAY_NATIVE_NONE,
+	DISPLAY_NATIVE_X11,
+	DISPLAY_NATIVE_WINDOWS,
+} display_native_type_t;
+
+typedef struct display_native_s {
+	display_native_type_t type;
+	void *display;
+	int screen;
+} display_native_t;
+
 struct display_s {
 	const struct display_driver_s *drv;
 	fs_t *fs;
@@ -189,6 +201,8 @@ void display_free(display_t *display);
 int display_set_event_callback(display_t *display, display_event_cb_t cb, void *user);
 int display_poll_events(display_t *display);
 int display_wait_events(display_t *display);
+int display_native(display_t *display, display_native_t *native);
+int display_native_free(display_t *display, void *data);
 const char *display_event_type_name(display_event_type_t type);
 const char *display_key_name(display_key_t key);
 const char *display_mouse_name(display_mouse_t button);

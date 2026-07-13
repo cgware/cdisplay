@@ -776,6 +776,58 @@ TEST(display_x11_direct_window_id_null_data)
 	END;
 }
 
+TEST(display_x11_direct_window_native_null_window)
+{
+	START;
+
+	display_driver_t *drv	  = t_x11_driver();
+	window_native_t native = {0};
+
+	EXPECT_NE(drv, NULL);
+	EXPECT_EQ(drv->window_native(NULL, &native), 1);
+
+	END;
+}
+
+TEST(display_x11_direct_window_native_null_native)
+{
+	START;
+
+	display_driver_t *drv = t_x11_driver();
+	window_t window	     = {.data = (void *)0x1234};
+
+	EXPECT_NE(drv, NULL);
+	EXPECT_EQ(drv->window_native(&window, NULL), 1);
+
+	END;
+}
+
+TEST(display_x11_direct_window_native_returns_window)
+{
+	START;
+
+	display_driver_t *drv = t_x11_driver();
+	fs_t fs		      = {0};
+	proc_t proc	      = {0};
+	sock_t ss	      = {0};
+	display_t display     = {0};
+	window_t window	      = {0};
+	void *server	      = NULL;
+	void *peer	      = NULL;
+	window_native_t native = {0};
+
+	t_x11_open_window(drv, &fs, &proc, &ss, &display, &window, &server, &peer);
+
+	EXPECT_EQ(drv->window_native(&window, &native), 0);
+	EXPECT_EQ(native.type, DISPLAY_NATIVE_X11);
+	EXPECT_EQ(native.window, (void *)(uintptr_t)0x00100000);
+
+	window_free(&window);
+	t_x11_close_display(&fs, &proc, &ss, &display, server, peer);
+
+	END;
+}
+
 TEST(display_x11_direct_init_success)
 {
 	START;
@@ -4536,6 +4588,9 @@ STEST(display_x11_direct)
 	RUN(display_x11_direct_window_init_alloc_failure);
 	RUN(display_x11_direct_window_free_null_window);
 	RUN(display_x11_direct_window_id_null_data);
+	RUN(display_x11_direct_window_native_null_window);
+	RUN(display_x11_direct_window_native_null_native);
+	RUN(display_x11_direct_window_native_returns_window);
 	RUN(display_x11_direct_init_success);
 	RUN(display_x11_direct_window_init_writes_requests);
 	RUN(display_x11_direct_window_init_custom_visual_writes_requests);

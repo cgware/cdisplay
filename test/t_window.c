@@ -12,6 +12,7 @@ static int t_window_set_borderless_calls;
 static int t_window_set_fullscreen_calls;
 static int t_window_show_calls;
 static int t_window_hide_calls;
+static int t_window_native_calls;
 static int t_window_init_ret;
 static int t_window_set_title_ret;
 static int t_window_set_position_ret;
@@ -20,7 +21,9 @@ static int t_window_set_borderless_ret;
 static int t_window_set_fullscreen_ret;
 static int t_window_show_ret;
 static int t_window_hide_ret;
+static int t_window_native_ret;
 static u32 t_window_id_ret;
+static window_native_t t_window_native;
 static strv_t t_window_title;
 static u16 t_window_x;
 static u16 t_window_y;
@@ -79,6 +82,14 @@ static u32 t_window_driver_id(window_t *window)
 {
 	(void)window;
 	return t_window_id_ret;
+}
+
+static int t_window_driver_native(window_t *window, window_native_t *native)
+{
+	(void)window;
+	t_window_native_calls++;
+	*native = t_window_native;
+	return t_window_native_ret;
 }
 
 static int t_window_driver_set_title(window_t *window, strv_t title)
@@ -146,6 +157,7 @@ static display_driver_t t_window_driver = {
 	.window_init	       = t_window_driver_init,
 	.window_free	       = t_window_driver_free,
 	.window_id	       = t_window_driver_id,
+	.window_native	       = t_window_driver_native,
 	.window_set_title      = t_window_driver_set_title,
 	.window_set_position   = t_window_driver_set_position,
 	.window_set_size       = t_window_driver_set_size,
@@ -166,6 +178,7 @@ static void t_window_reset(void)
 	t_window_set_fullscreen_calls = 0;
 	t_window_show_calls	      = 0;
 	t_window_hide_calls	      = 0;
+	t_window_native_calls	      = 0;
 	t_window_init_ret	      = 0;
 	t_window_set_title_ret	      = 0;
 	t_window_set_position_ret     = 0;
@@ -174,7 +187,9 @@ static void t_window_reset(void)
 	t_window_set_fullscreen_ret   = 0;
 	t_window_show_ret	      = 0;
 	t_window_hide_ret	      = 0;
+	t_window_native_ret	      = 0;
 	t_window_id_ret		      = 0;
+	t_window_native		      = (window_native_t){0};
 	t_window_title		      = (strv_t){0};
 	t_window_x		      = 0;
 	t_window_y		      = 0;
@@ -454,6 +469,106 @@ TEST(window_id_calls_driver)
 	};
 
 	EXPECT_EQ(window_id(&window), 0x12345678);
+
+	END;
+}
+
+TEST(window_native_null_window)
+{
+	START;
+
+	window_native_t native = {0};
+
+	EXPECT_EQ(window_native(NULL, &native), 1);
+
+	END;
+}
+
+TEST(window_native_without_display)
+{
+	START;
+
+	window_t window	       = {0};
+	window_native_t native = {0};
+
+	EXPECT_EQ(window_native(&window, &native), 1);
+
+	END;
+}
+
+TEST(window_native_display_without_driver)
+{
+	START;
+
+	display_t display = {0};
+	window_t window	  = {
+		  .display = &display,
+	};
+	window_native_t native = {0};
+
+	EXPECT_EQ(window_native(&window, &native), 1);
+
+	END;
+}
+
+TEST(window_native_null_native)
+{
+	START;
+
+	display_t display = {
+		.drv = &t_window_driver,
+	};
+	window_t window = {
+		.display = &display,
+	};
+
+	EXPECT_EQ(window_native(&window, NULL), 1);
+
+	END;
+}
+
+TEST(window_native_calls_driver)
+{
+	START;
+
+	t_window_reset();
+	t_window_native = (window_native_t){
+		.type	= DISPLAY_NATIVE_WINDOWS,
+		.window = (void *)0x1234,
+	};
+	display_t display = {
+		.drv = &t_window_driver,
+	};
+	window_t window = {
+		.display = &display,
+		.data	 = (void *)0x5678,
+	};
+	window_native_t native = {0};
+
+	EXPECT_EQ(window_native(&window, &native), 0);
+	EXPECT_EQ(t_window_native_calls, 1);
+	EXPECT_EQ(native.type, DISPLAY_NATIVE_WINDOWS);
+	EXPECT_EQ(native.window, (void *)0x1234);
+
+	END;
+}
+
+TEST(window_native_returns_driver_result)
+{
+	START;
+
+	t_window_reset();
+	t_window_native_ret = 1;
+	display_t display  = {
+		 .drv = &t_window_driver,
+	};
+	window_t window = {
+		.display = &display,
+		.data	 = (void *)0x5678,
+	};
+	window_native_t native = {0};
+
+	EXPECT_EQ(window_native(&window, &native), 1);
 
 	END;
 }
@@ -817,6 +932,12 @@ STEST(window)
 	RUN(window_id_without_display);
 	RUN(window_id_display_without_driver);
 	RUN(window_id_calls_driver);
+	RUN(window_native_null_window);
+	RUN(window_native_without_display);
+	RUN(window_native_display_without_driver);
+	RUN(window_native_null_native);
+	RUN(window_native_calls_driver);
+	RUN(window_native_returns_driver_result);
 	RUN(window_set_title_null_window);
 	RUN(window_set_title_calls_driver);
 	RUN(window_set_title_returns_driver_result);

@@ -39,6 +39,16 @@ u32 window_id(window_t *wnd)
 	return wnd->display->drv->window_id(wnd);
 }
 
+int window_native(window_t *wnd, window_native_t *native)
+{
+	if (wnd == NULL || wnd->display == NULL || wnd->display->drv == NULL || wnd->display->drv->window_native == NULL ||
+	    native == NULL) {
+		return 1;
+	}
+
+	return wnd->display->drv->window_native(wnd, native);
+}
+
 int window_set_title(window_t *wnd, strv_t title)
 {
 	if (wnd == NULL || wnd->display == NULL || wnd->display->drv == NULL || wnd->display->drv->window_set_title == NULL) {

@@ -1003,6 +1003,18 @@ static u32 display_windows_window_id(window_t *wnd)
 	return (u32)(uintptr_t)wwindows->handle;
 }
 
+static int display_windows_window_native(window_t *wnd, window_native_t *native)
+{
+	if (wnd == NULL || wnd->data == NULL || native == NULL) {
+		return 1;
+	}
+
+	window_windows_t *wwindows = wnd->data;
+	native->type		    = DISPLAY_NATIVE_WINDOWS;
+	native->window		    = wwindows->handle;
+	return native->window == NULL;
+}
+
 static int display_windows_window_set_title(window_t *wnd, strv_t title)
 {
 	if (wnd == NULL || wnd->display == NULL || wnd->display->data == NULL || wnd->data == NULL ||
@@ -1190,6 +1202,7 @@ static display_driver_t display_windows = {
 	.window_init	       = display_windows_window_init,
 	.window_free	       = display_windows_window_free,
 	.window_id	       = display_windows_window_id,
+	.window_native	       = display_windows_window_native,
 	.window_set_title      = display_windows_window_set_title,
 	.window_set_position   = display_windows_window_set_position,
 	.window_set_size       = display_windows_window_set_size,

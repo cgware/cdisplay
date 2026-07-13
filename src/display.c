@@ -76,6 +76,24 @@ int display_wait_events(display_t *display)
 	return display->drv->wait_events(display);
 }
 
+int display_native(display_t *display, display_native_t *native)
+{
+	if (display == NULL || display->drv == NULL || display->drv->native == NULL || native == NULL) {
+		return 1;
+	}
+
+	return display->drv->native(display, native);
+}
+
+int display_native_free(display_t *display, void *data)
+{
+	if (display == NULL || display->drv == NULL || display->drv->native_free == NULL || data == NULL) {
+		return 1;
+	}
+
+	return display->drv->native_free(display, data);
+}
+
 void display_emit_event(display_t *display, const display_event_t *event)
 {
 	if (display == NULL || event == NULL || display->event_cb == NULL) {

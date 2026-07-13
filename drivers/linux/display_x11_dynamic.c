@@ -471,7 +471,9 @@ static int load_x11(display_x11_dynamic_t *dx11)
 	LOAD_X11(dx11, FreeModifiermap);
 	LOAD_X11(dx11, GetWindowAttributes);
 	LOAD_X11(dx11, GetVisualInfo);
-	LOAD_X11(dx11, AllocID);
+	if (load_symbol(dx11, (void **)&dx11->x11.AllocID, STRV("_XAllocID"))) {
+		return 1;
+	}
 	LOAD_X11(dx11, QueryExtension);
 	LOAD_X11(dx11, Free);
 
@@ -1208,6 +1210,29 @@ static int display_x11_dynamic_wait_events(display_t *display)
 	return ret;
 }
 
+static int display_x11_dynamic_native(display_t *display, display_native_t *native)
+{
+	if (display == NULL || display->data == NULL || native == NULL) {
+		return 1;
+	}
+
+	display_x11_dynamic_t *dx11 = display->data;
+	native->type		    = DISPLAY_NATIVE_X11;
+	native->display		    = dx11->display;
+	native->screen		    = dx11->screen;
+	return native->display == NULL;
+}
+
+static int display_x11_dynamic_native_free(display_t *display, void *data)
+{
+	if (display == NULL || display->data == NULL || data == NULL) {
+		return 1;
+	}
+
+	display_x11_dynamic_t *dx11 = display->data;
+	return dx11->x11.Free(data);
+}
+
 static int display_x11_dynamic_window_init(window_t *wnd, const window_config_t *config)
 {
 	if (wnd == NULL || wnd->display == NULL || wnd->display->data == NULL || wnd->display->alloc.alloc == NULL || config == NULL) {
@@ -1262,6 +1287,18 @@ static u32 display_x11_dynamic_window_id(window_t *wnd)
 
 	window_x11_dynamic_t *wx11 = wnd->data;
 	return (u32)wx11->id;
+}
+
+static int display_x11_dynamic_window_native(window_t *wnd, window_native_t *native)
+{
+	if (wnd == NULL || wnd->data == NULL || native == NULL) {
+		return 1;
+	}
+
+	window_x11_dynamic_t *wx11 = wnd->data;
+	native->type		   = DISPLAY_NATIVE_X11;
+	native->window		   = (void *)(uintptr_t)wx11->id;
+	return wx11->id == X_NONE;
 }
 
 static int display_x11_dynamic_window_set_title(window_t *wnd, strv_t title)
@@ -1408,9 +1445,12 @@ static display_driver_t display_x11_dynamic = {
 	.free		       = display_x11_dynamic_free,
 	.poll_events	       = display_x11_dynamic_poll_events,
 	.wait_events	       = display_x11_dynamic_wait_events,
+	.native	       = display_x11_dynamic_native,
+	.native_free	       = display_x11_dynamic_native_free,
 	.window_init	       = display_x11_dynamic_window_init,
 	.window_free	       = display_x11_dynamic_window_free,
 	.window_id	       = display_x11_dynamic_window_id,
+	.window_native	       = display_x11_dynamic_window_native,
 	.window_set_title      = display_x11_dynamic_window_set_title,
 	.window_set_position   = display_x11_dynamic_window_set_position,
 	.window_set_size       = display_x11_dynamic_window_set_size,

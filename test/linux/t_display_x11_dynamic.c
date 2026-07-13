@@ -546,7 +546,7 @@ static int t_XFree(void *data)
 	return 1;
 }
 
-static void t_x11_dynamic_set_symbols(proc_t *proc, int include_free)
+static void t_x11_dynamic_set_symbols(proc_t *proc, int include_alloc_id, int include_free)
 {
 #define T_X11_SET(_name) proc_setdlsym(proc, STRV("libX11.so.6"), STRV("X" #_name), t_x11_symbol((t_x11_symbol_t)t_X##_name))
 
@@ -580,7 +580,9 @@ static void t_x11_dynamic_set_symbols(proc_t *proc, int include_free)
 	T_X11_SET(FreeModifiermap);
 	T_X11_SET(GetWindowAttributes);
 	T_X11_SET(GetVisualInfo);
-	T_X11_SET(AllocID);
+	if (include_alloc_id) {
+		proc_setdlsym(proc, STRV("libX11.so.6"), STRV("_XAllocID"), t_x11_symbol((t_x11_symbol_t)t_XAllocID));
+	}
 	T_X11_SET(QueryExtension);
 	if (include_free) {
 		T_X11_SET(Free);
@@ -595,7 +597,7 @@ static void t_x11_dynamic_env_init(fs_t *fs, proc_t *proc, sock_t *ss)
 	proc_init(proc, 256, 1, ALLOC_STD);
 	sock_init(ss, 0, 1, ALLOC_STD);
 	proc_setenv(proc, STRV("DISPLAY"), STRV(":0"), 1);
-	t_x11_dynamic_set_symbols(proc, 1);
+	t_x11_dynamic_set_symbols(proc, 1, 1);
 }
 
 static void t_x11_dynamic_env_free(fs_t *fs, proc_t *proc, sock_t *ss)
@@ -706,6 +708,8 @@ TEST(display_x11_dynamic_driver_has_display_hooks)
 	EXPECT_NE(drv->free, NULL);
 	EXPECT_NE(drv->poll_events, NULL);
 	EXPECT_NE(drv->wait_events, NULL);
+	EXPECT_NE(drv->native, NULL);
+	EXPECT_NE(drv->native_free, NULL);
 
 	END;
 }
@@ -718,6 +722,7 @@ TEST(display_x11_dynamic_driver_has_window_hooks)
 	EXPECT_NE(drv->window_init, NULL);
 	EXPECT_NE(drv->window_free, NULL);
 	EXPECT_NE(drv->window_id, NULL);
+	EXPECT_NE(drv->window_native, NULL);
 	EXPECT_NE(drv->window_set_title, NULL);
 	EXPECT_NE(drv->window_set_position, NULL);
 	EXPECT_NE(drv->window_set_size, NULL);
@@ -837,7 +842,30 @@ TEST(display_x11_dynamic_init_rejects_missing_virtual_symbol)
 	proc_init(&proc, 256, 1, ALLOC_STD);
 	sock_init(&ss, 0, 1, ALLOC_STD);
 	proc_setenv(&proc, STRV("DISPLAY"), STRV(":0"), 1);
-	t_x11_dynamic_set_symbols(&proc, 0);
+	t_x11_dynamic_set_symbols(&proc, 1, 0);
+	T_X11_DYNAMIC_DRV();
+
+	EXPECT_EQ(display_init(&display, drv, &fs, &proc, &ss, ALLOC_STD), NULL);
+
+	t_x11_dynamic_env_free(&fs, &proc, &ss);
+
+	END;
+}
+
+TEST(display_x11_dynamic_init_rejects_missing_alloc_id_symbol)
+{
+	START;
+
+	t_x11_reset();
+	fs_t fs	      = {0};
+	proc_t proc   = {0};
+	sock_t ss     = {0};
+	display_t display = {0};
+	fs_init(&fs, 0, 1, ALLOC_STD);
+	proc_init(&proc, 256, 1, ALLOC_STD);
+	sock_init(&ss, 0, 1, ALLOC_STD);
+	proc_setenv(&proc, STRV("DISPLAY"), STRV(":0"), 1);
+	t_x11_dynamic_set_symbols(&proc, 0, 1);
 	T_X11_DYNAMIC_DRV();
 
 	EXPECT_EQ(display_init(&display, drv, &fs, &proc, &ss, ALLOC_STD), NULL);
@@ -877,6 +905,101 @@ TEST(display_x11_dynamic_wait_events_null_display)
 	END;
 }
 
+TEST(display_x11_dynamic_native_null_display)
+{
+	START;
+
+	T_X11_DYNAMIC_DRV();
+	display_native_t native = {0};
+
+	EXPECT_EQ(drv->native(NULL, &native), 1);
+
+	END;
+}
+
+TEST(display_x11_dynamic_native_null_native)
+{
+	START;
+
+	T_X11_DYNAMIC_DRV();
+	display_t display = {.data = (void *)0x1234};
+
+	EXPECT_EQ(drv->native(&display, NULL), 1);
+
+	END;
+}
+
+TEST(display_x11_dynamic_native_returns_display)
+{
+	START;
+
+	t_x11_reset();
+	fs_t fs	      = {0};
+	proc_t proc   = {0};
+	sock_t ss     = {0};
+	display_t display = {0};
+	display_native_t native = {0};
+	t_x11_dynamic_env_init(&fs, &proc, &ss);
+	T_X11_DYNAMIC_DRV();
+	display_init(&display, drv, &fs, &proc, &ss, ALLOC_STD);
+
+	EXPECT_EQ(drv->native(&display, &native), 0);
+	EXPECT_EQ(native.type, DISPLAY_NATIVE_X11);
+	EXPECT_EQ(native.display, (void *)0x11);
+	EXPECT_EQ(native.screen, 0);
+
+	display_free(&display);
+	t_x11_dynamic_env_free(&fs, &proc, &ss);
+
+	END;
+}
+
+TEST(display_x11_dynamic_native_free_null_display)
+{
+	START;
+
+	T_X11_DYNAMIC_DRV();
+
+	EXPECT_EQ(drv->native_free(NULL, (void *)0x1234), 1);
+
+	END;
+}
+
+TEST(display_x11_dynamic_native_free_null_data)
+{
+	START;
+
+	T_X11_DYNAMIC_DRV();
+	display_t display = {.data = (void *)0x1234};
+
+	EXPECT_EQ(drv->native_free(&display, NULL), 1);
+
+	END;
+}
+
+TEST(display_x11_dynamic_native_free_calls_x11)
+{
+	START;
+
+	t_x11_reset();
+	fs_t fs	      = {0};
+	proc_t proc   = {0};
+	sock_t ss     = {0};
+	display_t display = {0};
+	t_x11_dynamic_env_init(&fs, &proc, &ss);
+	T_X11_DYNAMIC_DRV();
+	display_init(&display, drv, &fs, &proc, &ss, ALLOC_STD);
+	t_x11.free_calls = 0;
+
+	EXPECT_EQ(drv->native_free(&display, (void *)0x1234), 1);
+	EXPECT_EQ(t_x11.free_calls, 1);
+
+	display_free(&display);
+	t_x11_dynamic_env_free(&fs, &proc, &ss);
+
+	END;
+}
+
 TEST(display_x11_dynamic_window_init_null_window)
 {
 	START;
@@ -903,6 +1026,30 @@ TEST(display_x11_dynamic_window_id_null_window)
 
 	T_X11_DYNAMIC_DRV();
 	EXPECT_EQ(drv->window_id(NULL), 0);
+
+	END;
+}
+
+TEST(display_x11_dynamic_window_native_null_window)
+{
+	START;
+
+	T_X11_DYNAMIC_DRV();
+	window_native_t native = {0};
+
+	EXPECT_EQ(drv->window_native(NULL, &native), 1);
+
+	END;
+}
+
+TEST(display_x11_dynamic_window_native_null_native)
+{
+	START;
+
+	T_X11_DYNAMIC_DRV();
+	window_t window = {.data = (void *)0x1234};
+
+	EXPECT_EQ(drv->window_native(&window, NULL), 1);
 
 	END;
 }
@@ -1268,6 +1415,31 @@ TEST(display_x11_dynamic_window_init_success)
 
 	EXPECT_EQ(t_x11_open(&display, &window, &fs, &proc, &ss), 0);
 	EXPECT_EQ(window_id(&window), 0x44);
+
+	window_free(&window);
+	display_free(&display);
+	t_x11_dynamic_env_free(&fs, &proc, &ss);
+
+	END;
+}
+
+TEST(display_x11_dynamic_window_native_returns_window)
+{
+	START;
+
+	t_x11_reset();
+	fs_t fs	      = {0};
+	proc_t proc   = {0};
+	sock_t ss     = {0};
+	display_t display = {0};
+	window_t window   = {0};
+	window_native_t native = {0};
+	t_x11_dynamic_env_init(&fs, &proc, &ss);
+
+	EXPECT_EQ(t_x11_open(&display, &window, &fs, &proc, &ss), 0);
+	EXPECT_EQ(window_native(&window, &native), 0);
+	EXPECT_EQ(native.type, DISPLAY_NATIVE_X11);
+	EXPECT_EQ(native.window, (void *)(uintptr_t)0x44);
 
 	window_free(&window);
 	display_free(&display);
@@ -2084,6 +2256,7 @@ STEST(display_x11_dynamic)
 	RUN(display_x11_dynamic_init_uses_virtual_proc);
 	RUN(display_x11_dynamic_free_closes_virtual_display);
 	RUN(display_x11_dynamic_init_rejects_missing_virtual_symbol);
+	RUN(display_x11_dynamic_init_rejects_missing_alloc_id_symbol);
 	RUN(display_x11_dynamic_init_rejects_missing_library);
 	RUN(display_x11_dynamic_init_alloc_failure);
 	RUN(display_x11_dynamic_init_missing_display);
@@ -2098,9 +2271,17 @@ STEST(display_x11_dynamic)
 	RUN(display_x11_dynamic_free_null_display);
 	RUN(display_x11_dynamic_poll_events_null_display);
 	RUN(display_x11_dynamic_wait_events_null_display);
+	RUN(display_x11_dynamic_native_null_display);
+	RUN(display_x11_dynamic_native_null_native);
+	RUN(display_x11_dynamic_native_returns_display);
+	RUN(display_x11_dynamic_native_free_null_display);
+	RUN(display_x11_dynamic_native_free_null_data);
+	RUN(display_x11_dynamic_native_free_calls_x11);
 	RUN(display_x11_dynamic_window_init_null_window);
 	RUN(display_x11_dynamic_window_free_null_window);
 	RUN(display_x11_dynamic_window_id_null_window);
+	RUN(display_x11_dynamic_window_native_null_window);
+	RUN(display_x11_dynamic_window_native_null_native);
 	RUN(display_x11_dynamic_window_set_title_null_window);
 	RUN(display_x11_dynamic_window_set_position_null_window);
 	RUN(display_x11_dynamic_window_set_size_null_window);
@@ -2112,6 +2293,7 @@ STEST(display_x11_dynamic)
 	RUN(display_x11_dynamic_alloc_id_null_display);
 	RUN(display_x11_dynamic_visual_depth_null_display);
 	RUN(display_x11_dynamic_window_init_success);
+	RUN(display_x11_dynamic_window_native_returns_window);
 	RUN(display_x11_dynamic_window_init_alloc_failure);
 	RUN(display_x11_dynamic_window_init_custom_visual);
 	RUN(display_x11_dynamic_window_init_unknown_visual);
