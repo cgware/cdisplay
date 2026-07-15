@@ -143,11 +143,11 @@ static void t_x11_listen(sock_t *ss, void **server)
 	sock_listen(ss, *server, 1);
 }
 
-static void t_x11_write_file(fs_t *fs, strv_t path, const void *data, size_t size)
+static void t_x11_write_file(fs_t *fs, strv_t path, buf_t data)
 {
 	void *file;
-	fs_open(fs, path, "w", &file);
-	fs_write(fs, file, STRVN(data, size));
+	fs_open(fs, path, "wb", &file);
+	fs_writeb(fs, file, data);
 	fs_close(fs, file);
 }
 
@@ -179,7 +179,7 @@ static void t_x11_write_authority_data(fs_t *fs, const void *data, size_t size)
 
 	t_x11_add_authority(&auth, 256, STRV("host"), STRV(""), STRV("MIT-MAGIC-COOKIE-1"), STRVN(data, size));
 
-	t_x11_write_file(fs, STRV(T_XAUTHORITY), auth.data, auth.used);
+	t_x11_write_file(fs, STRV(T_XAUTHORITY), auth);
 	buf_free(&auth);
 }
 
@@ -196,7 +196,7 @@ static void t_x11_write_authority_family(fs_t *fs, u16 family)
 	t_x11_add_authority(
 		&auth, family, STRV("host"), STRV(""), STRV("MIT-MAGIC-COOKIE-1"), STRVN((const char *)t_x11_cookie, sizeof(t_x11_cookie)));
 
-	t_x11_write_file(fs, STRV(T_XAUTHORITY), auth.data, auth.used);
+	t_x11_write_file(fs, STRV(T_XAUTHORITY), auth);
 	buf_free(&auth);
 }
 
@@ -2863,11 +2863,12 @@ TEST(display_x11_direct_init_malformed_authority)
 	display_t display     = {0};
 	void *server	      = NULL;
 	u8 malformed[]	      = {0x01, 0x00, 0x00};
+	buf_t malformed_buf   = {.data = malformed, .used = sizeof(malformed)};
 
 	t_x11_env_init(&fs, &proc, &ss);
 	t_x11_set_display(&proc, STRV(":0"));
 	t_x11_set_xauthority(&proc);
-	t_x11_write_file(&fs, STRV(T_XAUTHORITY), malformed, sizeof(malformed));
+	t_x11_write_file(&fs, STRV(T_XAUTHORITY), malformed_buf);
 	t_x11_listen(&ss, &server);
 	log_set_quiet(0, 1);
 	EXPECT_EQ(display_init(&display, drv, &fs, &proc, &ss, ALLOC_STD), NULL);
