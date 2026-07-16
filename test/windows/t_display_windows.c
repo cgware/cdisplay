@@ -78,18 +78,7 @@ static void t_windows_event_cb(display_t *display, const display_event_t *event,
 
 static display_driver_t *t_windows_driver(void)
 {
-	for (driver_t *i = DRIVER_START; i < DRIVER_END; i++) {
-		if (i->type != DISPLAY_DRIVER_TYPE) {
-			continue;
-		}
-
-		display_driver_t *drv = i->data;
-		if (strv_eq(strv_cstr(drv->name), STRV("windows"))) {
-			return drv;
-		}
-	}
-
-	return NULL;
+	return display_driver_find(STRV("windows"));
 }
 
 static ATOM WINAPI t_RegisterClassExA(const WNDCLASSEXA *cls)

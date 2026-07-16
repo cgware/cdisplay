@@ -193,7 +193,8 @@ typedef struct x11_s {
 	unsigned long (*BlackPixel)(Display *, int);
 	Visual *(*DefaultVisual)(Display *, int);
 	Atom (*InternAtom)(Display *, const char *, Bool);
-	Window (*CreateWindow)(Display *, Window, int, int, unsigned int, unsigned int, unsigned int, int, unsigned int, Visual *, unsigned long, XSetWindowAttributes *);
+	Window (*CreateWindow)(Display *, Window, int, int, unsigned int, unsigned int, unsigned int, int, unsigned int, Visual *,
+			       unsigned long, XSetWindowAttributes *);
 	int (*DestroyWindow)(Display *, Window);
 	Colormap (*CreateColormap)(Display *, Window, Visual *, int);
 	int (*FreeColormap)(Display *, Colormap);
@@ -271,35 +272,35 @@ enum {
 };
 
 enum {
-	X_EVENT_MASK_KEY_PRESS		= 1L << 0,
-	X_EVENT_MASK_KEY_RELEASE		= 1L << 1,
-	X_EVENT_MASK_BUTTON_PRESS	= 1L << 2,
-	X_EVENT_MASK_BUTTON_RELEASE	= 1L << 3,
-	X_EVENT_MASK_POINTER_MOTION	= 1L << 6,
-	X_EVENT_MASK_EXPOSURE		= 1L << 15,
-	X_EVENT_MASK_STRUCTURE		= 1L << 17,
-	X_EVENT_MASK_SUBSTRUCTURE_NOTIFY = 1L << 19,
+	X_EVENT_MASK_KEY_PRESS		   = 1L << 0,
+	X_EVENT_MASK_KEY_RELEASE	   = 1L << 1,
+	X_EVENT_MASK_BUTTON_PRESS	   = 1L << 2,
+	X_EVENT_MASK_BUTTON_RELEASE	   = 1L << 3,
+	X_EVENT_MASK_POINTER_MOTION	   = 1L << 6,
+	X_EVENT_MASK_EXPOSURE		   = 1L << 15,
+	X_EVENT_MASK_STRUCTURE		   = 1L << 17,
+	X_EVENT_MASK_SUBSTRUCTURE_NOTIFY   = 1L << 19,
 	X_EVENT_MASK_SUBSTRUCTURE_REDIRECT = 1L << 20,
-	X_EVENT_MASK_FOCUS_CHANGE	= 1L << 21,
+	X_EVENT_MASK_FOCUS_CHANGE	   = 1L << 21,
 };
 
 enum {
-	X_KEY_PRESS	    = 2,
-	X_KEY_RELEASE	    = 3,
-	X_BUTTON_PRESS	    = 4,
-	X_BUTTON_RELEASE    = 5,
-	X_MOTION_NOTIFY	    = 6,
-	X_FOCUS_IN	    = 9,
-	X_FOCUS_OUT	    = 10,
-	X_EXPOSE	    = 12,
-	X_DESTROY_NOTIFY    = 17,
-	X_UNMAP_NOTIFY	    = 18,
-	X_MAP_NOTIFY	    = 19,
-	X_REPARENT_NOTIFY   = 21,
-	X_CONFIGURE_NOTIFY  = 22,
-	X_CLIENT_MESSAGE    = 33,
-	X_MAPPING_NOTIFY    = 34,
-	X_EVENT_IGNORED	    = 2,
+	X_KEY_PRESS	   = 2,
+	X_KEY_RELEASE	   = 3,
+	X_BUTTON_PRESS	   = 4,
+	X_BUTTON_RELEASE   = 5,
+	X_MOTION_NOTIFY	   = 6,
+	X_FOCUS_IN	   = 9,
+	X_FOCUS_OUT	   = 10,
+	X_EXPOSE	   = 12,
+	X_DESTROY_NOTIFY   = 17,
+	X_UNMAP_NOTIFY	   = 18,
+	X_MAP_NOTIFY	   = 19,
+	X_REPARENT_NOTIFY  = 21,
+	X_CONFIGURE_NOTIFY = 22,
+	X_CLIENT_MESSAGE   = 33,
+	X_MAPPING_NOTIFY   = 34,
+	X_EVENT_IGNORED	   = 2,
 };
 
 enum {
@@ -312,7 +313,7 @@ enum {
 };
 
 enum {
-	X_VISUAL_ID_MASK = 0x1,
+	X_VISUAL_ID_MASK     = 0x1,
 	X_VISUAL_SCREEN_MASK = 0x2,
 };
 
@@ -427,11 +428,11 @@ static int load_symbol(display_x11_dynamic_t *dx11, void **sym, strv_t name)
 	return 0;
 }
 
-#define LOAD_X11(_dx11, _name)                                      \
-	do {                                                        \
-		if (load_symbol((_dx11), (void **)&(_dx11)->x11._name, STRV("X" #_name))) { \
-			return 1;                                   \
-		}                                                   \
+#define LOAD_X11(_dx11, _name)                                                                                                             \
+	do {                                                                                                                               \
+		if (load_symbol((_dx11), (void **)&(_dx11)->x11._name, STRV("X" #_name))) {                                                \
+			return 1;                                                                                                          \
+		}                                                                                                                          \
 	} while (0)
 
 static int load_x11(display_x11_dynamic_t *dx11)
@@ -707,18 +708,18 @@ static int init_atoms(display_t *display)
 {
 	display_x11_dynamic_t *dx11 = display->data;
 
-	dx11->wm_protocols		   = dx11->x11.InternAtom(dx11->display, "WM_PROTOCOLS", X_FALSE);
-	dx11->wm_delete_window		   = dx11->x11.InternAtom(dx11->display, "WM_DELETE_WINDOW", X_FALSE);
-	dx11->wm_name			   = dx11->x11.InternAtom(dx11->display, "WM_NAME", X_FALSE);
-	dx11->net_wm_name		   = dx11->x11.InternAtom(dx11->display, "_NET_WM_NAME", X_FALSE);
-	dx11->utf8_string		   = dx11->x11.InternAtom(dx11->display, "UTF8_STRING", X_FALSE);
-	dx11->motif_wm_hints		   = dx11->x11.InternAtom(dx11->display, "_MOTIF_WM_HINTS", X_FALSE);
-	dx11->net_wm_state		   = dx11->x11.InternAtom(dx11->display, "_NET_WM_STATE", X_FALSE);
-	dx11->net_wm_state_fullscreen	   = dx11->x11.InternAtom(dx11->display, "_NET_WM_STATE_FULLSCREEN", X_FALSE);
+	dx11->wm_protocols	      = dx11->x11.InternAtom(dx11->display, "WM_PROTOCOLS", X_FALSE);
+	dx11->wm_delete_window	      = dx11->x11.InternAtom(dx11->display, "WM_DELETE_WINDOW", X_FALSE);
+	dx11->wm_name		      = dx11->x11.InternAtom(dx11->display, "WM_NAME", X_FALSE);
+	dx11->net_wm_name	      = dx11->x11.InternAtom(dx11->display, "_NET_WM_NAME", X_FALSE);
+	dx11->utf8_string	      = dx11->x11.InternAtom(dx11->display, "UTF8_STRING", X_FALSE);
+	dx11->motif_wm_hints	      = dx11->x11.InternAtom(dx11->display, "_MOTIF_WM_HINTS", X_FALSE);
+	dx11->net_wm_state	      = dx11->x11.InternAtom(dx11->display, "_NET_WM_STATE", X_FALSE);
+	dx11->net_wm_state_fullscreen = dx11->x11.InternAtom(dx11->display, "_NET_WM_STATE_FULLSCREEN", X_FALSE);
 
-	if (dx11->wm_protocols == X_NONE || dx11->wm_delete_window == X_NONE || dx11->wm_name == X_NONE ||
-	    dx11->net_wm_name == X_NONE || dx11->utf8_string == X_NONE || dx11->motif_wm_hints == X_NONE ||
-	    dx11->net_wm_state == X_NONE || dx11->net_wm_state_fullscreen == X_NONE) {
+	if (dx11->wm_protocols == X_NONE || dx11->wm_delete_window == X_NONE || dx11->wm_name == X_NONE || dx11->net_wm_name == X_NONE ||
+	    dx11->utf8_string == X_NONE || dx11->motif_wm_hints == X_NONE || dx11->net_wm_state == X_NONE ||
+	    dx11->net_wm_state_fullscreen == X_NONE) {
 		log_error("cdisplay", "display_x11_dynamic", NULL, "failed to intern X11 atoms");
 		return 1;
 	}
@@ -729,9 +730,9 @@ static int init_atoms(display_t *display)
 static int init_keys(display_t *display)
 {
 	display_x11_dynamic_t *dx11 = display->data;
-	int min_keycode	      = 0;
-	int max_keycode	      = 0;
-	int keysyms_per_keycode = 0;
+	int min_keycode		    = 0;
+	int max_keycode		    = 0;
+	int keysyms_per_keycode	    = 0;
 
 	dx11->x11.DisplayKeycodes(dx11->display, &min_keycode, &max_keycode);
 	if (min_keycode < 0 || min_keycode > max_keycode || max_keycode > 255) {
@@ -790,7 +791,7 @@ static int init_modifiers(display_t *display)
 static int open_display(display_t *display)
 {
 	display_x11_dynamic_t *dx11 = display->data;
-	strv_t name		   = proc_getenv(display->proc, STRV("DISPLAY"));
+	strv_t name		    = proc_getenv(display->proc, STRV("DISPLAY"));
 
 	if (name.data == NULL || name.len >= 256) {
 		log_error("cdisplay", "display_x11_dynamic", NULL, "failed to get display name");
@@ -806,8 +807,8 @@ static int open_display(display_t *display)
 		return 1;
 	}
 
-	dx11->screen	      = dx11->x11.DefaultScreen(dx11->display);
-	dx11->root	      = dx11->x11.RootWindow(dx11->display, dx11->screen);
+	dx11->screen	     = dx11->x11.DefaultScreen(dx11->display);
+	dx11->root	     = dx11->x11.RootWindow(dx11->display, dx11->screen);
 	dx11->white_pixel    = dx11->x11.WhitePixel(dx11->display, dx11->screen);
 	dx11->black_pixel    = dx11->x11.BlackPixel(dx11->display, dx11->screen);
 	dx11->default_visual = dx11->x11.DefaultVisual(dx11->display, dx11->screen);
@@ -842,7 +843,7 @@ static Visual *visual_from_id(display_x11_dynamic_t *dx11, VisualID id, int *dep
 static int create_colormap(window_t *wnd, Visual *visual)
 {
 	display_x11_dynamic_t *dx11 = wnd->display->data;
-	window_x11_dynamic_t *wx11 = wnd->data;
+	window_x11_dynamic_t *wx11  = wnd->data;
 
 	wx11->colormap = dx11->x11.CreateColormap(dx11->display, dx11->root, visual, X_ALLOC_NONE);
 	if (wx11->colormap == X_NONE) {
@@ -856,7 +857,7 @@ static int create_colormap(window_t *wnd, Visual *visual)
 static int free_colormap(window_t *wnd)
 {
 	display_x11_dynamic_t *dx11 = wnd->display->data;
-	window_x11_dynamic_t *wx11 = wnd->data;
+	window_x11_dynamic_t *wx11  = wnd->data;
 
 	if (wx11->colormap == X_NONE) {
 		return 0;
@@ -873,9 +874,9 @@ static int free_colormap(window_t *wnd)
 static int create_window(window_t *wnd, const window_config_t *config)
 {
 	display_x11_dynamic_t *dx11 = wnd->display->data;
-	window_x11_dynamic_t *wx11 = wnd->data;
-	Visual *visual		   = NULL;
-	int depth		   = X_COPY_FROM_PARENT;
+	window_x11_dynamic_t *wx11  = wnd->data;
+	Visual *visual		    = NULL;
+	int depth		    = X_COPY_FROM_PARENT;
 
 	if (config->visual != 0) {
 		visual = visual_from_id(dx11, config->visual, &depth);
@@ -894,10 +895,9 @@ static int create_window(window_t *wnd, const window_config_t *config)
 	XSetWindowAttributes attrs = {
 		.background_pixel = dx11->white_pixel,
 		.border_pixel	  = dx11->black_pixel,
-		.event_mask	  = X_EVENT_MASK_KEY_PRESS | X_EVENT_MASK_KEY_RELEASE | X_EVENT_MASK_BUTTON_PRESS |
-			    X_EVENT_MASK_BUTTON_RELEASE | X_EVENT_MASK_POINTER_MOTION | X_EVENT_MASK_EXPOSURE |
-			    X_EVENT_MASK_STRUCTURE | X_EVENT_MASK_FOCUS_CHANGE,
-		.colormap = wx11->colormap,
+		.event_mask = X_EVENT_MASK_KEY_PRESS | X_EVENT_MASK_KEY_RELEASE | X_EVENT_MASK_BUTTON_PRESS | X_EVENT_MASK_BUTTON_RELEASE |
+			      X_EVENT_MASK_POINTER_MOTION | X_EVENT_MASK_EXPOSURE | X_EVENT_MASK_STRUCTURE | X_EVENT_MASK_FOCUS_CHANGE,
+		.colormap   = wx11->colormap,
 	};
 	unsigned long value_mask = X_CW_BACK_PIXEL | X_CW_BORDER_PIXEL | X_CW_EVENT_MASK;
 	if (wx11->colormap != X_NONE) {
@@ -928,8 +928,8 @@ static int create_window(window_t *wnd, const window_config_t *config)
 static int set_wm_protocols(window_t *wnd)
 {
 	display_x11_dynamic_t *dx11 = wnd->display->data;
-	window_x11_dynamic_t *wx11 = wnd->data;
-	Atom protocols[]	   = {dx11->wm_delete_window};
+	window_x11_dynamic_t *wx11  = wnd->data;
+	Atom protocols[]	    = {dx11->wm_delete_window};
 
 	if (dx11->x11.SetWMProtocols(dx11->display, wx11->id, protocols, 1) == 0) {
 		log_error("cdisplay", "display_x11_dynamic", NULL, "failed to set WM protocols");
@@ -950,9 +950,11 @@ static int set_property_text(window_t *wnd, Atom property, Atom type, strv_t tex
 	}
 
 	display_x11_dynamic_t *dx11 = wnd->display->data;
-	window_x11_dynamic_t *wx11 = wnd->data;
+	window_x11_dynamic_t *wx11  = wnd->data;
 
-	if (dx11->x11.ChangeProperty(dx11->display, wx11->id, property, type, 8, X_PROP_MODE_REPLACE, (const unsigned char *)text.data, (int)text.len) == 0) {
+	if (dx11->x11.ChangeProperty(
+		    dx11->display, wx11->id, property, type, 8, X_PROP_MODE_REPLACE, (const unsigned char *)text.data, (int)text.len) ==
+	    0) {
 		log_error("cdisplay", "display_x11_dynamic", NULL, "failed to set window text property");
 		return 1;
 	}
@@ -963,9 +965,10 @@ static int set_property_text(window_t *wnd, Atom property, Atom type, strv_t tex
 static int set_property_long(window_t *wnd, Atom property, Atom type, const long *values, int count)
 {
 	display_x11_dynamic_t *dx11 = wnd->display->data;
-	window_x11_dynamic_t *wx11 = wnd->data;
+	window_x11_dynamic_t *wx11  = wnd->data;
 
-	if (dx11->x11.ChangeProperty(dx11->display, wx11->id, property, type, 32, X_PROP_MODE_REPLACE, (const unsigned char *)values, count) == 0) {
+	if (dx11->x11.ChangeProperty(
+		    dx11->display, wx11->id, property, type, 32, X_PROP_MODE_REPLACE, (const unsigned char *)values, count) == 0) {
 		log_error("cdisplay", "display_x11_dynamic", NULL, "failed to set window property");
 		return 1;
 	}
@@ -975,7 +978,7 @@ static int set_property_long(window_t *wnd, Atom property, Atom type, const long
 
 static int set_borderless(window_t *wnd, int borderless)
 {
-	display_x11_dynamic_t *dx11 = wnd->display->data;
+	display_x11_dynamic_t *dx11	       = wnd->display->data;
 	long hints[MOTIF_WM_HINTS_FIELD_COUNT] = {
 		MOTIF_WM_HINTS_DECORATIONS_FLAG,
 		0,
@@ -990,7 +993,7 @@ static int set_borderless(window_t *wnd, int borderless)
 static int set_fullscreen_property(window_t *wnd, int fullscreen)
 {
 	display_x11_dynamic_t *dx11 = wnd->display->data;
-	long state[]		   = {(long)dx11->net_wm_state_fullscreen};
+	long state[]		    = {(long)dx11->net_wm_state_fullscreen};
 
 	return set_property_long(wnd, dx11->net_wm_state, XA_ATOM, state, fullscreen ? 1 : 0);
 }
@@ -998,24 +1001,22 @@ static int set_fullscreen_property(window_t *wnd, int fullscreen)
 static int send_fullscreen_message(window_t *wnd, int fullscreen)
 {
 	display_x11_dynamic_t *dx11 = wnd->display->data;
-	window_x11_dynamic_t *wx11 = wnd->data;
-	XEvent event		   = {0};
+	window_x11_dynamic_t *wx11  = wnd->data;
+	XEvent event		    = {0};
 
-	event.xclient.type	  = X_CLIENT_MESSAGE;
-	event.xclient.window	  = wx11->id;
+	event.xclient.type	   = X_CLIENT_MESSAGE;
+	event.xclient.window	   = wx11->id;
 	event.xclient.message_type = dx11->net_wm_state;
-	event.xclient.format	  = 32;
-	event.xclient.data.l[0]	  = fullscreen ? NET_WM_STATE_ADD : NET_WM_STATE_REMOVE;
-	event.xclient.data.l[1]	  = (long)dx11->net_wm_state_fullscreen;
-	event.xclient.data.l[2]	  = 0;
-	event.xclient.data.l[3]	  = 1;
-	event.xclient.data.l[4]	  = 0;
+	event.xclient.format	   = 32;
+	event.xclient.data.l[0]	   = fullscreen ? NET_WM_STATE_ADD : NET_WM_STATE_REMOVE;
+	event.xclient.data.l[1]	   = (long)dx11->net_wm_state_fullscreen;
+	event.xclient.data.l[2]	   = 0;
+	event.xclient.data.l[3]	   = 1;
+	event.xclient.data.l[4]	   = 0;
 
-	if (dx11->x11.SendEvent(dx11->display,
-				dx11->root,
-				X_FALSE,
-				X_EVENT_MASK_SUBSTRUCTURE_REDIRECT | X_EVENT_MASK_SUBSTRUCTURE_NOTIFY,
-				&event) == 0) {
+	if (dx11->x11.SendEvent(
+		    dx11->display, dx11->root, X_FALSE, X_EVENT_MASK_SUBSTRUCTURE_REDIRECT | X_EVENT_MASK_SUBSTRUCTURE_NOTIFY, &event) ==
+	    0) {
 		log_error("cdisplay", "display_x11_dynamic", NULL, "failed to set fullscreen state");
 		return 1;
 	}
@@ -1037,7 +1038,7 @@ static int set_fullscreen(window_t *wnd, int fullscreen)
 static int read_x11_event(display_t *display, display_event_t *event)
 {
 	display_x11_dynamic_t *dx11 = display->data;
-	XEvent xev		   = {0};
+	XEvent xev		    = {0};
 
 	*event = (display_event_t){0};
 	dx11->x11.NextEvent(dx11->display, &xev);
@@ -1127,7 +1128,7 @@ static int display_x11_dynamic_init(display_t *display)
 	mem_set(display->data, 0, sizeof(display_x11_dynamic_t));
 
 	display_x11_dynamic_t *dx11 = display->data;
-	dx11->proc		     = display->proc;
+	dx11->proc		    = display->proc;
 	if (load_x11(dx11) || open_display(display) || init_keys(display) || init_modifiers(display) || init_atoms(display)) {
 		if (dx11->display != NULL) {
 			dx11->x11.CloseDisplay(dx11->display);
@@ -1247,7 +1248,7 @@ static int display_x11_dynamic_window_init(window_t *wnd, const window_config_t 
 
 	if (create_window(wnd, config) || set_wm_protocols(wnd)) {
 		display_x11_dynamic_t *dx11 = wnd->display->data;
-		window_x11_dynamic_t *wx11 = wnd->data;
+		window_x11_dynamic_t *wx11  = wnd->data;
 		if (wx11->id != X_NONE) {
 			dx11->x11.DestroyWindow(dx11->display, wx11->id);
 		}
@@ -1267,7 +1268,7 @@ static int display_x11_dynamic_window_free(window_t *wnd)
 	}
 
 	display_x11_dynamic_t *dx11 = wnd->display->data;
-	window_x11_dynamic_t *wx11 = wnd->data;
+	window_x11_dynamic_t *wx11  = wnd->data;
 
 	if (wx11->id != X_NONE) {
 		dx11->x11.DestroyWindow(dx11->display, wx11->id);
@@ -1319,7 +1320,7 @@ static int display_x11_dynamic_window_set_position(window_t *wnd, u16 x, u16 y)
 	}
 
 	display_x11_dynamic_t *dx11 = wnd->display->data;
-	window_x11_dynamic_t *wx11 = wnd->data;
+	window_x11_dynamic_t *wx11  = wnd->data;
 	return dx11->x11.MoveWindow(dx11->display, wx11->id, x, y) == 0 || dx11->x11.Flush(dx11->display) == 0;
 }
 
@@ -1330,7 +1331,7 @@ static int display_x11_dynamic_window_set_size(window_t *wnd, u16 width, u16 hei
 	}
 
 	display_x11_dynamic_t *dx11 = wnd->display->data;
-	window_x11_dynamic_t *wx11 = wnd->data;
+	window_x11_dynamic_t *wx11  = wnd->data;
 	return dx11->x11.ResizeWindow(dx11->display, wx11->id, width, height) == 0 || dx11->x11.Flush(dx11->display) == 0;
 }
 
@@ -1359,7 +1360,7 @@ static int display_x11_dynamic_window_show(window_t *wnd)
 	}
 
 	display_x11_dynamic_t *dx11 = wnd->display->data;
-	window_x11_dynamic_t *wx11 = wnd->data;
+	window_x11_dynamic_t *wx11  = wnd->data;
 	if (dx11->x11.MapWindow(dx11->display, wx11->id) == 0 || dx11->x11.Flush(dx11->display) == 0) {
 		return 1;
 	}
@@ -1375,7 +1376,7 @@ static int display_x11_dynamic_window_hide(window_t *wnd)
 	}
 
 	display_x11_dynamic_t *dx11 = wnd->display->data;
-	window_x11_dynamic_t *wx11 = wnd->data;
+	window_x11_dynamic_t *wx11  = wnd->data;
 	if (dx11->x11.UnmapWindow(dx11->display, wx11->id) == 0 || dx11->x11.Flush(dx11->display) == 0) {
 		return 1;
 	}
@@ -1445,7 +1446,7 @@ static display_driver_t display_x11_dynamic = {
 	.free		       = display_x11_dynamic_free,
 	.poll_events	       = display_x11_dynamic_poll_events,
 	.wait_events	       = display_x11_dynamic_wait_events,
-	.native	       = display_x11_dynamic_native,
+	.native		       = display_x11_dynamic_native,
 	.native_free	       = display_x11_dynamic_native_free,
 	.window_init	       = display_x11_dynamic_window_init,
 	.window_free	       = display_x11_dynamic_window_free,

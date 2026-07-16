@@ -21,22 +21,6 @@ typedef struct example_state_s {
 	int open;
 } example_state_t;
 
-static display_driver_t *find_display_driver(strv_t name)
-{
-	for (driver_t *i = DRIVER_START; i < DRIVER_END; i++) {
-		if (i->type != DISPLAY_DRIVER_TYPE) {
-			continue;
-		}
-
-		display_driver_t *drv = i->data;
-		if (strv_eq(strv_cstr(drv->name), name)) {
-			return drv;
-		}
-	}
-
-	return NULL;
-}
-
 static example_window_t *find_window(example_window_t *windows, size_t count, u32 id)
 {
 	for (size_t i = 0; i < count; i++) {
@@ -161,7 +145,7 @@ int main()
 	strv_t driver_name = STRV("X11-direct");
 #endif
 
-	display_driver_t *drv = find_display_driver(driver_name);
+	display_driver_t *drv = display_driver_find(driver_name);
 	if (drv == NULL) {
 		c_printf("X11 display driver not found\n");
 		cleanup(&display, windows, windows_cnt, &fs, &proc, &ss);

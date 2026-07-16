@@ -279,8 +279,8 @@ TEST(window_init_passes_config)
 	};
 	window_t window = {0};
 
-	window_init(&window, &display,
-		    &(window_config_t){.x = 11, .y = 22, .width = 333, .height = 444, .depth = 24, .visual = 0x12345678});
+	window_init(
+		&window, &display, &(window_config_t){.x = 11, .y = 22, .width = 333, .height = 444, .depth = 24, .visual = 0x12345678});
 
 	EXPECT_EQ(t_window_x, 11);
 	EXPECT_EQ(t_window_y, 22);
@@ -502,7 +502,7 @@ TEST(window_native_display_without_driver)
 
 	display_t display = {0};
 	window_t window	  = {
-		  .display = &display,
+		.display = &display,
 	};
 	window_native_t native = {0};
 
@@ -559,8 +559,8 @@ TEST(window_native_returns_driver_result)
 
 	t_window_reset();
 	t_window_native_ret = 1;
-	display_t display  = {
-		 .drv = &t_window_driver,
+	display_t display   = {
+		.drv = &t_window_driver,
 	};
 	window_t window = {
 		.display = &display,

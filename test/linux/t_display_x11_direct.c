@@ -80,18 +80,7 @@ static alloc_t t_alloc(t_alloc_t *state)
 
 static display_driver_t *t_x11_driver(void)
 {
-	for (driver_t *i = DRIVER_START; i < DRIVER_END; i++) {
-		if (i->type != DISPLAY_DRIVER_TYPE) {
-			continue;
-		}
-
-		display_driver_t *drv = i->data;
-		if (strv_eq(strv_cstr(drv->name), STRV("X11-direct"))) {
-			return drv;
-		}
-	}
-
-	return NULL;
+	return display_driver_find(STRV("X11-direct"));
 }
 
 static int t_x11_event_calls;
@@ -780,7 +769,7 @@ TEST(display_x11_direct_window_native_null_window)
 {
 	START;
 
-	display_driver_t *drv	  = t_x11_driver();
+	display_driver_t *drv  = t_x11_driver();
 	window_native_t native = {0};
 
 	EXPECT_NE(drv, NULL);
@@ -794,7 +783,7 @@ TEST(display_x11_direct_window_native_null_native)
 	START;
 
 	display_driver_t *drv = t_x11_driver();
-	window_t window	     = {.data = (void *)0x1234};
+	window_t window	      = {.data = (void *)0x1234};
 
 	EXPECT_NE(drv, NULL);
 	EXPECT_EQ(drv->window_native(&window, NULL), 1);
@@ -806,14 +795,14 @@ TEST(display_x11_direct_window_native_returns_window)
 {
 	START;
 
-	display_driver_t *drv = t_x11_driver();
-	fs_t fs		      = {0};
-	proc_t proc	      = {0};
-	sock_t ss	      = {0};
-	display_t display     = {0};
-	window_t window	      = {0};
-	void *server	      = NULL;
-	void *peer	      = NULL;
+	display_driver_t *drv  = t_x11_driver();
+	fs_t fs		       = {0};
+	proc_t proc	       = {0};
+	sock_t ss	       = {0};
+	display_t display      = {0};
+	window_t window	       = {0};
+	void *server	       = NULL;
+	void *peer	       = NULL;
 	window_native_t native = {0};
 
 	t_x11_open_window(drv, &fs, &proc, &ss, &display, &window, &server, &peer);
@@ -3207,7 +3196,7 @@ TEST(display_x11_direct_init_keyboard_mapping_alloc_failure)
 	display_t display     = {0};
 	void *server	      = NULL;
 	u8 setup[72]	      = {0};
-	t_alloc_t state	      = {.fail_alloc_after = 3};
+	t_alloc_t state	      = {.fail_alloc_after = 4};
 
 	t_x11_env_init(&fs, &proc, &ss);
 	t_x11_set_display(&proc, STRV(":0"));

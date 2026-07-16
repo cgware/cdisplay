@@ -5,18 +5,7 @@
 
 static display_driver_t *t_none_driver(void)
 {
-	for (driver_t *i = DRIVER_START; i < DRIVER_END; i++) {
-		if (i->type != DISPLAY_DRIVER_TYPE) {
-			continue;
-		}
-
-		display_driver_t *drv = i->data;
-		if (strv_eq(strv_cstr(drv->name), STRV("none"))) {
-			return drv;
-		}
-	}
-
-	return NULL;
+	return display_driver_find(STRV("none"));
 }
 TEST(display_none_driver_is_registered)
 {

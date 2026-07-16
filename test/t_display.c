@@ -101,6 +101,8 @@ static display_driver_t t_display_driver = {
 	.window_free = t_display_window_free,
 };
 
+DRIVER(t_display_non_display_driver, 1, NULL);
+
 static void t_display_reset(void)
 {
 	t_display_init_calls	    = 0;
@@ -425,7 +427,7 @@ TEST(display_poll_events_returns_driver_result)
 	t_display_reset();
 	t_display_poll_events_ret = 1;
 	display_t display	  = {
-			.drv = &t_display_driver,
+		.drv = &t_display_driver,
 	};
 
 	EXPECT_EQ(display_poll_events(&display), 1);
@@ -478,7 +480,7 @@ TEST(display_wait_events_returns_driver_result)
 	t_display_reset();
 	t_display_wait_events_ret = 1;
 	display_t display	  = {
-			.drv = &t_display_driver,
+		.drv = &t_display_driver,
 	};
 
 	EXPECT_EQ(display_wait_events(&display), 1);
@@ -555,7 +557,7 @@ TEST(display_native_returns_driver_result)
 		.drv = &t_display_driver,
 	};
 	display_native_t native = {0};
-	t_display_native_ret	  = 1;
+	t_display_native_ret	= 1;
 
 	EXPECT_EQ(display_native(&display, &native), 1);
 
@@ -622,6 +624,33 @@ TEST(display_native_free_returns_driver_result)
 	t_display_native_free_ret = 1;
 
 	EXPECT_EQ(display_native_free(&display, (void *)0x1234), 1);
+
+	END;
+}
+
+TEST(display_driver_find_finds_registered_driver)
+{
+	START;
+
+	EXPECT_NE(display_driver_find(STRV("none")), NULL);
+
+	END;
+}
+
+TEST(display_driver_find_returns_null_for_missing_driver)
+{
+	START;
+
+	EXPECT_EQ(display_driver_find(STRV("missing")), NULL);
+
+	END;
+}
+
+TEST(display_driver_find_skips_non_display_driver)
+{
+	START;
+
+	EXPECT_EQ(display_driver_find(STRV("t_display_non_display_driver")), NULL);
 
 	END;
 }
@@ -1031,6 +1060,9 @@ STEST(display)
 	RUN(display_native_free_null_data);
 	RUN(display_native_free_calls_driver);
 	RUN(display_native_free_returns_driver_result);
+	RUN(display_driver_find_finds_registered_driver);
+	RUN(display_driver_find_returns_null_for_missing_driver);
+	RUN(display_driver_find_skips_non_display_driver);
 	RUN(display_event_type_name_values);
 	RUN(display_key_name_values);
 	RUN(display_mouse_name_values);

@@ -1003,6 +1003,18 @@ static u32 display_windows_window_id(window_t *wnd)
 	return (u32)(uintptr_t)wwindows->handle;
 }
 
+static int display_windows_native(display_t *display, display_native_t *native)
+{
+	if (display == NULL || display->data == NULL || native == NULL) {
+		return 1;
+	}
+
+	display_windows_t *dwindows = display->data;
+	native->type		    = DISPLAY_NATIVE_WINDOWS;
+	native->display		    = dwindows->instance;
+	return native->display == NULL;
+}
+
 static int display_windows_window_native(window_t *wnd, window_native_t *native)
 {
 	if (wnd == NULL || wnd->data == NULL || native == NULL) {
@@ -1010,8 +1022,8 @@ static int display_windows_window_native(window_t *wnd, window_native_t *native)
 	}
 
 	window_windows_t *wwindows = wnd->data;
-	native->type		    = DISPLAY_NATIVE_WINDOWS;
-	native->window		    = wwindows->handle;
+	native->type		   = DISPLAY_NATIVE_WINDOWS;
+	native->window		   = wwindows->handle;
 	return native->window == NULL;
 }
 
@@ -1199,6 +1211,7 @@ static display_driver_t display_windows = {
 	.free		       = display_windows_free,
 	.poll_events	       = display_windows_poll_events,
 	.wait_events	       = display_windows_wait_events,
+	.native		       = display_windows_native,
 	.window_init	       = display_windows_window_init,
 	.window_free	       = display_windows_window_free,
 	.window_id	       = display_windows_window_id,
