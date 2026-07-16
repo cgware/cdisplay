@@ -1018,6 +1018,51 @@ TEST(display_x11_direct_window_init_custom_visual_writes_requests)
 	END;
 }
 
+TEST(display_x11_direct_window_init_omits_background)
+{
+	START;
+
+	display_driver_t *drv	= t_x11_driver();
+	fs_t fs			= {0};
+	proc_t proc		= {0};
+	sock_t ss		= {0};
+	display_t display	= {0};
+	window_t window		= {0};
+	void *server		= NULL;
+	void *peer		= NULL;
+	u8 create_request[40]	= {0};
+	u8 property_request[28] = {0};
+	u32 value_mask		= 0;
+
+	t_x11_open_window_config(drv,
+				 &fs,
+				 &proc,
+				 &ss,
+				 &display,
+				 &window,
+				 &(window_config_t){
+					 .width	     = 640,
+					 .height     = 480,
+					 .background = WINDOW_BACKGROUND_NONE,
+				 },
+				 &server,
+				 &peer);
+	t_x11_drain_display_init_requests(&ss, peer);
+	sock_read_all(&ss, peer, create_request, sizeof(create_request));
+	sock_read_all(&ss, peer, property_request, sizeof(property_request));
+
+	cbuf_get_u32le(create_request, 28, &value_mask);
+	EXPECT_EQ(value_mask & (1u << 1), 0);
+
+	window_free(&window);
+	display_free(&display);
+	sock_close(&ss, peer);
+	sock_close(&ss, server);
+	t_x11_env_free(&fs, &proc, &ss);
+
+	END;
+}
+
 TEST(display_x11_direct_window_free_custom_visual_writes_request)
 {
 	START;
@@ -4584,6 +4629,7 @@ STEST(display_x11_direct)
 	RUN(display_x11_direct_init_success);
 	RUN(display_x11_direct_window_init_writes_requests);
 	RUN(display_x11_direct_window_init_custom_visual_writes_requests);
+	RUN(display_x11_direct_window_init_omits_background);
 	RUN(display_x11_direct_window_free_custom_visual_writes_request);
 	RUN(display_x11_direct_window_set_title_writes_requests);
 	RUN(display_x11_direct_window_set_title_null_data);

@@ -8,6 +8,11 @@ typedef struct window_s {
 	void *data;
 } window_t;
 
+typedef enum window_background_e {
+	WINDOW_BACKGROUND_DEFAULT,
+	WINDOW_BACKGROUND_NONE,
+} window_background_t;
+
 typedef struct window_config_s {
 	u16 x;
 	u16 y;
@@ -15,6 +20,7 @@ typedef struct window_config_s {
 	u16 height;
 	u8 depth;
 	u32 visual;
+	window_background_t background;
 } window_config_t;
 
 typedef struct window_native_s {

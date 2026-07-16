@@ -1010,7 +1010,9 @@ static int create_window(window_t *wnd, const window_config_t *config)
 	u32 event_mask = X_EVENT_MASK_KEY_PRESS | X_EVENT_MASK_KEY_RELEASE | X_EVENT_MASK_BUTTON_PRESS | X_EVENT_MASK_BUTTON_RELEASE |
 			 X_EVENT_MASK_POINTER_MOTION | X_EVENT_MASK_EXPOSURE | X_EVENT_MASK_STRUCTURE | X_EVENT_MASK_FOCUS_CHANGE;
 
-	values[value_count++] = background_pixel;
+	if (config->background != WINDOW_BACKGROUND_NONE) {
+		values[value_count++] = background_pixel;
+	}
 	values[value_count++] = border_pixel;
 	values[value_count++] = event_mask;
 
@@ -1054,7 +1056,10 @@ static int create_window(window_t *wnd, const window_config_t *config)
 	u32 visual = config->visual == 0 ? X_COPY_FROM_PARENT : config->visual;
 	cbuf_write_u32le(request, &off, visual);
 
-	u32 value_mask = X_CW_BACK_PIXEL | X_CW_BORDER_PIXEL | X_CW_EVENT_MASK;
+	u32 value_mask = X_CW_BORDER_PIXEL | X_CW_EVENT_MASK;
+	if (config->background != WINDOW_BACKGROUND_NONE) {
+		value_mask |= X_CW_BACK_PIXEL;
+	}
 	if (wx11->colormap != 0) {
 		value_mask |= X_CW_COLORMAP;
 	}

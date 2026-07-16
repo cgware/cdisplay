@@ -159,6 +159,7 @@ typedef struct t_x11_state_s {
 	int query_extension_calls;
 	int alloc_id_calls;
 	int get_visual_info_calls;
+	unsigned long create_window_value_mask;
 	const char *display_name;
 	void *display_result;
 	int min_keycode;
@@ -317,8 +318,8 @@ static t_x11_window_t t_XCreateWindow(void *display, t_x11_window_t parent, int 
 	(void)depth;
 	(void)class;
 	(void)visual;
-	(void)value_mask;
 	(void)attrs;
+	t_x11.create_window_value_mask = value_mask;
 	return t_x11.create_window_result;
 }
 
@@ -1412,6 +1413,59 @@ TEST(display_x11_dynamic_window_init_success)
 	END;
 }
 
+TEST(display_x11_dynamic_window_init_uses_default_background)
+{
+	START;
+
+	t_x11_reset();
+	fs_t fs		  = {0};
+	proc_t proc	  = {0};
+	sock_t ss	  = {0};
+	display_t display = {0};
+	window_t window	  = {0};
+	t_x11_dynamic_env_init(&fs, &proc, &ss);
+
+	EXPECT_EQ(t_x11_open(&display, &window, &fs, &proc, &ss), 0);
+	EXPECT_EQ(t_x11.create_window_value_mask & (1u << 1), (1u << 1));
+
+	window_free(&window);
+	display_free(&display);
+	t_x11_dynamic_env_free(&fs, &proc, &ss);
+
+	END;
+}
+
+TEST(display_x11_dynamic_window_init_omits_background)
+{
+	START;
+
+	t_x11_reset();
+	fs_t fs		  = {0};
+	proc_t proc	  = {0};
+	sock_t ss	  = {0};
+	display_t display = {0};
+	window_t window	  = {0};
+	t_x11_dynamic_env_init(&fs, &proc, &ss);
+	T_X11_DYNAMIC_DRV();
+	display_init(&display, drv, &fs, &proc, &ss, ALLOC_STD);
+
+	EXPECT_NE(window_init(&window,
+			      &display,
+			      &(window_config_t){
+				      .width	  = 640,
+				      .height	  = 480,
+				      .background = WINDOW_BACKGROUND_NONE,
+			      }),
+		  NULL);
+	EXPECT_EQ(t_x11.create_window_value_mask & (1u << 1), 0);
+
+	window_free(&window);
+	display_free(&display);
+	t_x11_dynamic_env_free(&fs, &proc, &ss);
+
+	END;
+}
+
 TEST(display_x11_dynamic_window_native_returns_window)
 {
 	START;
@@ -2461,6 +2515,8 @@ STEST(display_x11_dynamic)
 	RUN(display_x11_dynamic_alloc_id_null_display);
 	RUN(display_x11_dynamic_visual_depth_null_display);
 	RUN(display_x11_dynamic_window_init_success);
+	RUN(display_x11_dynamic_window_init_uses_default_background);
+	RUN(display_x11_dynamic_window_init_omits_background);
 	RUN(display_x11_dynamic_window_native_returns_window);
 	RUN(display_x11_dynamic_window_init_alloc_failure);
 	RUN(display_x11_dynamic_window_init_custom_visual);
