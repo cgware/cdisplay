@@ -897,7 +897,7 @@ static int create_window(window_t *wnd, const window_config_t *config)
 		.border_pixel	  = dx11->black_pixel,
 		.event_mask = X_EVENT_MASK_KEY_PRESS | X_EVENT_MASK_KEY_RELEASE | X_EVENT_MASK_BUTTON_PRESS | X_EVENT_MASK_BUTTON_RELEASE |
 			      X_EVENT_MASK_POINTER_MOTION | X_EVENT_MASK_EXPOSURE | X_EVENT_MASK_STRUCTURE | X_EVENT_MASK_FOCUS_CHANGE,
-		.colormap   = wx11->colormap,
+		.colormap = wx11->colormap,
 	};
 	unsigned long value_mask = X_CW_BORDER_PIXEL | X_CW_EVENT_MASK;
 	if (config->background != WINDOW_BACKGROUND_NONE) {
