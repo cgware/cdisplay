@@ -1829,13 +1829,94 @@ TEST(display_x11_direct_poll_event_no_event)
 
 	t_x11_open_window(drv, &fs, &proc, &ss, &display, &window, &server, &peer);
 	log_set_quiet(0, 1);
-	EXPECT_EQ(display_poll_events(&display), 1);
+	EXPECT_EQ(display_poll_events(&display), 0);
 	log_set_quiet(0, 0);
+	EXPECT_EQ(t_x11_event_calls, 0);
 	EXPECT_EQ(t_x11_event.type, DISPLAY_EVENT_NONE);
 
 	window_free(&window);
 	display_free(&display);
 	sock_close(&ss, peer);
+	sock_close(&ss, server);
+	t_x11_env_free(&fs, &proc, &ss);
+
+	END;
+}
+
+TEST(display_x11_direct_poll_event_buffers_partial_event)
+{
+	START;
+
+	display_driver_t *drv = t_x11_driver();
+	fs_t fs		      = {0};
+	proc_t proc	      = {0};
+	sock_t ss	      = {0};
+	display_t display     = {0};
+	window_t window	      = {0};
+	void *server	      = NULL;
+	void *peer	      = NULL;
+	u8 event[32]	      = {0};
+
+	t_x11_open_window(drv, &fs, &proc, &ss, &display, &window, &server, &peer);
+	cbuf_set_u8le(event, 0, 22);
+	cbuf_set_u32le(event, 8, 0x00100000);
+	cbuf_set_u16le(event, 16, 10);
+	cbuf_set_u16le(event, 18, 20);
+	cbuf_set_u16le(event, 20, 640);
+	cbuf_set_u16le(event, 22, 480);
+
+	sock_write_all(&ss, peer, event, 8);
+	EXPECT_EQ(display_poll_events(&display), 0);
+	EXPECT_EQ(t_x11_event_calls, 0);
+
+	sock_write_all(&ss, peer, &event[8], sizeof(event) - 8);
+	EXPECT_EQ(display_poll_events(&display), 0);
+	EXPECT_EQ(t_x11_event_calls, 1);
+	EXPECT_EQ(t_x11_event.type, DISPLAY_EVENT_RESIZE);
+	EXPECT_EQ(t_x11_event.window, 0x00100000);
+	EXPECT_EQ(t_x11_event.x, 10);
+	EXPECT_EQ(t_x11_event.y, 20);
+	EXPECT_EQ(t_x11_event.width, 640);
+	EXPECT_EQ(t_x11_event.height, 480);
+
+	window_free(&window);
+	display_free(&display);
+	sock_close(&ss, peer);
+	sock_close(&ss, server);
+	t_x11_env_free(&fs, &proc, &ss);
+
+	END;
+}
+
+TEST(display_x11_direct_poll_event_read_failure)
+{
+	START;
+
+	display_driver_t *drv = t_x11_driver();
+	fs_t fs		      = {0};
+	proc_t proc	      = {0};
+	sock_t ss	      = {0};
+	display_t display     = {0};
+	window_t window	      = {0};
+	void *server	      = NULL;
+	void *peer	      = NULL;
+	u8 event[32]	      = {0};
+
+	t_x11_open_window(drv, &fs, &proc, &ss, &display, &window, &server, &peer);
+	cbuf_set_u8le(event, 0, 22);
+
+	sock_write_all(&ss, peer, event, 8);
+	EXPECT_EQ(display_poll_events(&display), 0);
+
+	sock_close(&ss, peer);
+	log_set_quiet(0, 1);
+	EXPECT_EQ(display_poll_events(&display), 1);
+	log_set_quiet(0, 0);
+
+	window_free(&window);
+	log_set_quiet(0, 1);
+	display_free(&display);
+	log_set_quiet(0, 0);
 	sock_close(&ss, server);
 	t_x11_env_free(&fs, &proc, &ss);
 
@@ -1952,6 +2033,36 @@ TEST(display_x11_direct_wait_event_null_event)
 
 	EXPECT_NE(drv, NULL);
 	EXPECT_EQ(drv->wait_events(&display), 1);
+
+	END;
+}
+
+TEST(display_x11_direct_wait_event_read_failure)
+{
+	START;
+
+	display_driver_t *drv = t_x11_driver();
+	fs_t fs		      = {0};
+	proc_t proc	      = {0};
+	sock_t ss	      = {0};
+	display_t display     = {0};
+	window_t window	      = {0};
+	void *server	      = NULL;
+	void *peer	      = NULL;
+
+	t_x11_open_window(drv, &fs, &proc, &ss, &display, &window, &server, &peer);
+
+	log_set_quiet(0, 1);
+	EXPECT_EQ(display_wait_events(&display), 1);
+	log_set_quiet(0, 0);
+	EXPECT_EQ(t_x11_event_calls, 0);
+	EXPECT_EQ(t_x11_event.type, DISPLAY_EVENT_NONE);
+
+	window_free(&window);
+	display_free(&display);
+	sock_close(&ss, peer);
+	sock_close(&ss, server);
+	t_x11_env_free(&fs, &proc, &ss);
 
 	END;
 }
@@ -4655,12 +4766,15 @@ STEST(display_x11_direct)
 	RUN(display_x11_direct_window_hide_null_data);
 	RUN(display_x11_direct_window_hide_write_failure);
 	RUN(display_x11_direct_poll_event_no_event);
+	RUN(display_x11_direct_poll_event_buffers_partial_event);
+	RUN(display_x11_direct_poll_event_read_failure);
 	RUN(display_x11_direct_poll_event_configure_notify);
 	RUN(display_x11_direct_poll_event_null_display);
 	RUN(display_x11_direct_poll_event_null_event);
 	RUN(display_x11_direct_poll_event_get_flags_failure);
 	RUN(display_x11_direct_wait_event_null_display);
 	RUN(display_x11_direct_wait_event_null_event);
+	RUN(display_x11_direct_wait_event_read_failure);
 	RUN(display_x11_direct_wait_event_unknown_event);
 	RUN(display_x11_direct_wait_event_configure_notify);
 	RUN(display_x11_direct_wait_event_skips_expose);

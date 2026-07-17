@@ -1,3 +1,4 @@
+#include "ctime.h"
 #include "display_driver.h"
 #include "fs.h"
 #include "log.h"
@@ -20,6 +21,18 @@ typedef struct example_state_s {
 	size_t count;
 	int open;
 } example_state_t;
+
+enum {
+	EXAMPLE_WINDOWS	    = 2,
+	EXAMPLE_MAX_DRIVERS = 8,
+};
+
+typedef struct example_display_s {
+	display_t display;
+	example_window_t windows[EXAMPLE_WINDOWS];
+	example_state_t state;
+	int initialized;
+} example_display_t;
 
 static example_window_t *find_window(example_window_t *windows, size_t count, u32 id)
 {
@@ -51,7 +64,7 @@ static void toggle_fullscreen(example_window_t *window)
 
 	int fullscreen = !window->fullscreen;
 	if (window_set_fullscreen(&window->wnd, fullscreen)) {
-		c_printf("failed to set fullscreen for window %u\n", window->id);
+		log_error("cdisplay_example", "event", NULL, "failed to set fullscreen for window %u", window->id);
 		return;
 	}
 
@@ -99,7 +112,7 @@ static void on_display_event(display_t *display, const display_event_t *event, v
 	}
 }
 
-static void cleanup(display_t *display, example_window_t *windows, size_t count, fs_t *fs, proc_t *proc, sock_t *ss)
+static void cleanup_display(display_t *display, example_window_t *windows, size_t count)
 {
 	for (size_t i = 0; i < count; i++) {
 		if (windows[i].wnd.display) {
@@ -109,10 +122,96 @@ static void cleanup(display_t *display, example_window_t *windows, size_t count,
 	if (display->drv) {
 		display_free(display);
 	}
+}
 
-	fs_free(fs);
-	proc_free(proc);
-	sock_free(ss);
+static void cleanup_example_display(example_display_t *example)
+{
+	if (example == NULL || !example->initialized) {
+		return;
+	}
+
+	cleanup_display(&example->display, example->windows, EXAMPLE_WINDOWS);
+	example->initialized = 0;
+}
+
+static int open_display_driver(example_display_t *example, display_driver_t *drv, fs_t *fs, proc_t *proc, sock_t *ss, u32 index)
+{
+	if (example == NULL) {
+		return -1;
+	}
+
+	if (drv == NULL || drv->window_native == NULL) {
+		return 0;
+	}
+
+	log_info("cdisplay_example", "init", NULL, "display driver: %s", drv->name);
+
+	if (display_init(&example->display, drv, fs, proc, ss, ALLOC_STD) == NULL) {
+		log_error("cdisplay_example", "init", NULL, "failed to initialize display driver: %s", drv->name);
+		cleanup_example_display(example);
+		return -1;
+	}
+	example->initialized = 1;
+
+	for (size_t i = 0; i < EXAMPLE_WINDOWS; i++) {
+		u16 position	       = (u16)(100 + (index * EXAMPLE_WINDOWS + (u32)i) * 40);
+		window_config_t config = {
+			.x	= position,
+			.y	= position,
+			.width	= 640,
+			.height = 480,
+		};
+		if (window_init(&example->windows[i].wnd, &example->display, &config) == NULL) {
+			log_error("cdisplay_example", "init", NULL, "failed to create window for display driver: %s", drv->name);
+			cleanup_example_display(example);
+			return -1;
+		}
+	}
+
+	for (size_t i = 0; i < EXAMPLE_WINDOWS; i++) {
+		if (window_show(&example->windows[i].wnd)) {
+			log_error("cdisplay_example", "init", NULL, "failed to show window for display driver: %s", drv->name);
+			cleanup_example_display(example);
+			return -1;
+		}
+	}
+
+	for (size_t i = 0; i < EXAMPLE_WINDOWS; i++) {
+		example->windows[i].id	       = window_id(&example->windows[i].wnd);
+		example->windows[i].open       = 1;
+		example->windows[i].fullscreen = 0;
+		log_info("cdisplay_example", "init", NULL, "%s window[%zu]=%u", drv->name, i, example->windows[i].id);
+	}
+
+	example->state = (example_state_t){
+		.windows = example->windows,
+		.count	 = EXAMPLE_WINDOWS,
+		.open	 = EXAMPLE_WINDOWS,
+	};
+	display_set_event_callback(&example->display, on_display_event, &example->state);
+
+	return 1;
+}
+
+static int poll_display_drivers(example_display_t *examples, u32 count)
+{
+	int open = 0;
+	for (u32 i = 0; i < count; i++) {
+		if (!examples[i].initialized || examples[i].state.open <= 0) {
+			continue;
+		}
+		open += examples[i].state.open;
+		if (display_poll_events(&examples[i].display)) {
+			log_error("cdisplay_example",
+				  "event",
+				  NULL,
+				  "failed to poll events from display driver: %s",
+				  examples[i].display.drv->name);
+			return -1;
+		}
+	}
+
+	return open;
 }
 
 int main()
@@ -135,78 +234,58 @@ int main()
 	sock_t ss = {0};
 	sock_init(&ss, 0, 0, ALLOC_STD);
 
-	display_t display	    = {0};
-	size_t windows_cnt	    = 2;
-	example_window_t windows[2] = {0};
-
-#if defined(C_WIN)
-	strv_t driver_name = STRV("windows");
-#else
-	strv_t driver_name = STRV("X11-direct");
-#endif
-
-	display_driver_t *drv = display_driver_find(driver_name);
-	if (drv == NULL) {
-		c_printf("X11 display driver not found\n");
-		cleanup(&display, windows, windows_cnt, &fs, &proc, &ss);
+	display_driver_t *drivers[EXAMPLE_MAX_DRIVERS]	= {0};
+	example_display_t displays[EXAMPLE_MAX_DRIVERS] = {0};
+	u32 driver_count				= display_driver_list(drivers, sizeof(drivers) / sizeof(drivers[0]));
+	if (driver_count > sizeof(drivers) / sizeof(drivers[0])) {
+		driver_count = sizeof(drivers) / sizeof(drivers[0]);
+	}
+	if (driver_count == 0) {
+		log_error("cdisplay_example", "init", NULL, "no display drivers found");
+		fs_free(&fs);
+		proc_free(&proc);
+		sock_free(&ss);
 		mem_print(DST_STD());
 		return 1;
 	}
 
-	if (display_init(&display, drv, &fs, &proc, &ss, ALLOC_STD) == NULL) {
-		c_printf("failed to initialize display\n");
-		cleanup(&display, windows, windows_cnt, &fs, &proc, &ss);
-		mem_print(DST_STD());
-		return 1;
-	}
-
-	for (size_t i = 0; i < windows_cnt; i++) {
-		window_config_t config = {
-			.x	= 100 * (u16)i,
-			.y	= 100 * (u16)i,
-			.width	= 640,
-			.height = 480,
-		};
-		if (window_init(&windows[i].wnd, &display, &config) == NULL) {
-			c_printf("failed to create window\n");
-			cleanup(&display, windows, windows_cnt, &fs, &proc, &ss);
-			mem_print(DST_STD());
-			return 1;
-		}
-	}
-
-	for (size_t i = 0; i < windows_cnt; i++) {
-		if (window_show(&windows[i].wnd)) {
-			c_printf("failed to show window\n");
-			cleanup(&display, windows, windows_cnt, &fs, &proc, &ss);
-			mem_print(DST_STD());
-			return 1;
-		}
-	}
-
-	for (size_t i = 0; i < windows_cnt; i++) {
-		windows[i].id	      = window_id(&windows[i].wnd);
-		windows[i].open	      = 1;
-		windows[i].fullscreen = 0;
-		c_printf("window[%zu]=%u\n", i, windows[i].id);
-	}
-
-	example_state_t state = {
-		.windows = windows,
-		.count	 = windows_cnt,
-		.open	 = (int)windows_cnt,
-	};
-	display_set_event_callback(&display, on_display_event, &state);
-
-	while (state.open > 0) {
-		if (display_wait_events(&display)) {
+	int ret	  = 0;
+	u32 count = 0;
+	for (u32 i = 0; i < driver_count; i++) {
+		int opened = open_display_driver(&displays[count], drivers[i], &fs, &proc, &ss, count);
+		if (opened < 0) {
+			ret = 1;
 			break;
 		}
+		if (opened > 0) {
+			count++;
+		}
+	}
+	if (ret == 0 && count == 0) {
+		log_error("cdisplay_example", "init", NULL, "no window display drivers found");
+		ret = 1;
 	}
 
-	cleanup(&display, windows, windows_cnt, &fs, &proc, &ss);
+	while (ret == 0) {
+		int open = poll_display_drivers(displays, count);
+		if (open < 0) {
+			ret = 1;
+			break;
+		}
+		if (open == 0) {
+			break;
+		}
+		c_sleep(10);
+	}
+
+	for (u32 i = 0; i < count; i++) {
+		cleanup_example_display(&displays[i]);
+	}
+	fs_free(&fs);
+	proc_free(&proc);
+	sock_free(&ss);
 
 	mem_print(DST_STD());
 
-	return 0;
+	return ret;
 }

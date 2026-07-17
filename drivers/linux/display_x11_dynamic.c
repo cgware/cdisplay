@@ -1122,7 +1122,7 @@ static int display_x11_dynamic_init(display_t *display)
 		return 1;
 	}
 
-	log_info("cdisplay", "display_x11_dynamic", NULL, "Initializing X11...\n");
+	log_info("cdisplay", "display_x11_dynamic", NULL, "Initializing X11...");
 
 	display->data = alloc_alloc(&display->alloc, sizeof(display_x11_dynamic_t));
 	if (display->data == NULL) {
@@ -1155,7 +1155,7 @@ static int display_x11_dynamic_free(display_t *display)
 
 	display_x11_dynamic_t *dx11 = display->data;
 
-	log_info("cdisplay", "display_x11_dynamic", NULL, "Freeing X11...\n");
+	log_info("cdisplay", "display_x11_dynamic", NULL, "Freeing X11...");
 
 	if (dx11->display != NULL) {
 		dx11->x11.CloseDisplay(dx11->display);

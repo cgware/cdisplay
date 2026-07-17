@@ -34,6 +34,8 @@ typedef struct display_x11_direct_s {
 	u8 max_keycode;
 	display_key_t keys[256];
 	display_modifier_t modifiers[8];
+	u8 event_data[32];
+	size_t event_used;
 } display_x11_direct_t;
 
 typedef struct window_x11_s {
@@ -54,6 +56,7 @@ enum {
 	X11_EVENT_TYPE_MASK	    = 0x7f,
 	X11_SOCKET_NONBLOCK	    = 04000,
 	X11_EVENT_IGNORED	    = 2,
+	X11_EVENT_NONE		    = 3,
 };
 
 enum {
@@ -1635,16 +1638,11 @@ static int init_modifiers(display_t *display)
 	return 0;
 }
 
-static int read_x11_event(display_t *display, display_event_t *event)
+static int parse_x11_event(display_t *display, const u8 *data, display_event_t *event)
 {
-	u8 data[X11_EVENT_SIZE]	   = {0};
 	display_x11_direct_t *dx11 = display->data;
 
 	*event = (display_event_t){0};
-
-	if (sock_read_all(display->ss, dx11->sock, data, sizeof(data))) {
-		return 1;
-	}
 
 	u8 type = data[0] & X11_EVENT_TYPE_MASK;
 	size_t off;
@@ -1760,6 +1758,48 @@ static int read_x11_event(display_t *display, display_event_t *event)
 	}
 }
 
+static int read_x11_event(display_t *display, display_event_t *event)
+{
+	u8 data[X11_EVENT_SIZE]	   = {0};
+	display_x11_direct_t *dx11 = display->data;
+
+	if (sock_read_all(display->ss, dx11->sock, data, sizeof(data))) {
+		return 1;
+	}
+
+	return parse_x11_event(display, data, event);
+}
+
+static int poll_x11_event(display_t *display, display_event_t *event)
+{
+	display_x11_direct_t *dx11 = display->data;
+	while (dx11->event_used < sizeof(dx11->event_data)) {
+		size_t n = 0;
+		cerr_t err;
+		do {
+			err = sock_read(display->ss,
+					dx11->sock,
+					&dx11->event_data[dx11->event_used],
+					sizeof(dx11->event_data) - dx11->event_used,
+					&n);
+		} while (err == CERR_INTERRUPT);
+
+		if (err == CERR_AGAIN) {
+			return X11_EVENT_NONE;
+		}
+		if (err != CERR_OK || n == 0) {
+			log_error("cdisplay", "display_x11_direct", NULL, "failed to read X11 event: %s", cerr_str(err));
+			dx11->event_used = 0;
+			return 1;
+		}
+		dx11->event_used += n;
+	}
+
+	int ret		 = parse_x11_event(display, dx11->event_data, event);
+	dx11->event_used = 0;
+	return ret;
+}
+
 static int destroy_window(window_t *wnd)
 {
 	u8 request[X_WINDOW_ID_REQUEST_SIZE] = {0};
@@ -1870,15 +1910,16 @@ static int display_x11_direct_poll_events(display_t *display)
 	int ret;
 	display_event_t event = {0};
 	do {
-		ret = read_x11_event(display, &event);
+		ret = poll_x11_event(display, &event);
 	} while (ret == X11_EVENT_IGNORED);
 
 	ret = sock_set_flags(display->ss, dx11->sock, flags) ? 1 : ret;
 	if (ret == 0) {
 		display_emit_event(display, &event);
+		return 0;
 	}
 
-	return ret;
+	return ret == X11_EVENT_NONE ? 0 : ret;
 }
 
 static int display_x11_direct_wait_events(display_t *display)
@@ -1911,7 +1952,7 @@ static int display_x11_direct_init(display_t *display)
 		return 1;
 	}
 
-	log_info("cdisplay", "display_x11_direct", NULL, "Initializing X11...\n");
+	log_info("cdisplay", "display_x11_direct", NULL, "Initializing X11...");
 
 	display->data = alloc_alloc(&display->alloc, sizeof(display_x11_direct_t));
 	if (display->data == NULL) {
@@ -1949,7 +1990,7 @@ static int display_x11_direct_free(display_t *display)
 
 	display_x11_direct_t *dx11 = display->data;
 
-	log_info("cdisplay", "display_x11_direct", NULL, "Freeing X11...\n");
+	log_info("cdisplay", "display_x11_direct", NULL, "Freeing X11...");
 	sock_close(display->ss, dx11->sock);
 	alloc_free(&display->alloc, dx11->visuals, dx11->visual_count * sizeof(*dx11->visuals));
 	buf_free(&dx11->request);

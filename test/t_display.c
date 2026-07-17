@@ -427,7 +427,7 @@ TEST(display_poll_events_returns_driver_result)
 	t_display_reset();
 	t_display_poll_events_ret = 1;
 	display_t display	  = {
-		.drv = &t_display_driver,
+			.drv = &t_display_driver,
 	};
 
 	EXPECT_EQ(display_poll_events(&display), 1);
@@ -480,7 +480,7 @@ TEST(display_wait_events_returns_driver_result)
 	t_display_reset();
 	t_display_wait_events_ret = 1;
 	display_t display	  = {
-		.drv = &t_display_driver,
+			.drv = &t_display_driver,
 	};
 
 	EXPECT_EQ(display_wait_events(&display), 1);
@@ -651,6 +651,21 @@ TEST(display_driver_find_skips_non_display_driver)
 	START;
 
 	EXPECT_EQ(display_driver_find(STRV("t_display_non_display_driver")), NULL);
+
+	END;
+}
+
+TEST(display_driver_list_lists_registered_display_drivers)
+{
+	START;
+
+	u32 count		     = display_driver_list(NULL, 0);
+	display_driver_t *drivers[1] = {0};
+
+	EXPECT_GT(count, 0);
+	EXPECT_EQ(display_driver_list(drivers, 1), count);
+	EXPECT_NE(drivers[0], NULL);
+	EXPECT_NE(display_driver_find(strv_cstr(drivers[0]->name)), NULL);
 
 	END;
 }
@@ -1063,6 +1078,7 @@ STEST(display)
 	RUN(display_driver_find_finds_registered_driver);
 	RUN(display_driver_find_returns_null_for_missing_driver);
 	RUN(display_driver_find_skips_non_display_driver);
+	RUN(display_driver_list_lists_registered_display_drivers);
 	RUN(display_event_type_name_values);
 	RUN(display_key_name_values);
 	RUN(display_mouse_name_values);
