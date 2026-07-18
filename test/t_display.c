@@ -161,7 +161,7 @@ TEST(display_init_null_display)
 	proc_t proc = {0};
 	sock_t ss   = {0};
 
-	EXPECT_EQ(display_init(NULL, &t_display_driver, &fs, &proc, &ss, ALLOC_STD), NULL);
+	EXPECT_NULL(display_init(NULL, &t_display_driver, &fs, &proc, &ss, ALLOC_STD));
 
 	END;
 }
@@ -175,7 +175,7 @@ TEST(display_init_null_driver)
 	proc_t proc	  = {0};
 	sock_t ss	  = {0};
 
-	EXPECT_EQ(display_init(&display, NULL, &fs, &proc, &ss, ALLOC_STD), NULL);
+	EXPECT_NULL(display_init(&display, NULL, &fs, &proc, &ss, ALLOC_STD));
 
 	END;
 }
@@ -188,7 +188,7 @@ TEST(display_init_null_fs)
 	proc_t proc	  = {0};
 	sock_t ss	  = {0};
 
-	EXPECT_EQ(display_init(&display, &t_display_driver, NULL, &proc, &ss, ALLOC_STD), NULL);
+	EXPECT_NULL(display_init(&display, &t_display_driver, NULL, &proc, &ss, ALLOC_STD));
 
 	END;
 }
@@ -201,7 +201,7 @@ TEST(display_init_null_proc)
 	fs_t fs		  = {0};
 	sock_t ss	  = {0};
 
-	EXPECT_EQ(display_init(&display, &t_display_driver, &fs, NULL, &ss, ALLOC_STD), NULL);
+	EXPECT_NULL(display_init(&display, &t_display_driver, &fs, NULL, &ss, ALLOC_STD));
 
 	END;
 }
@@ -214,7 +214,7 @@ TEST(display_init_null_sock)
 	fs_t fs		  = {0};
 	proc_t proc	  = {0};
 
-	EXPECT_EQ(display_init(&display, &t_display_driver, &fs, &proc, NULL, ALLOC_STD), NULL);
+	EXPECT_NULL(display_init(&display, &t_display_driver, &fs, &proc, NULL, ALLOC_STD));
 
 	END;
 }
@@ -229,7 +229,7 @@ TEST(display_init_calls_driver)
 	proc_t proc	  = {0};
 	sock_t ss	  = {0};
 
-	EXPECT_EQ(display_init(&display, &t_display_driver, &fs, &proc, &ss, ALLOC_STD), &display);
+	EXPECT_PTR(display_init(&display, &t_display_driver, &fs, &proc, &ss, ALLOC_STD), &display);
 	EXPECT_EQ(t_display_init_calls, 1);
 
 	END;
@@ -247,11 +247,11 @@ TEST(display_init_sets_fields)
 
 	display_init(&display, &t_display_driver, &fs, &proc, &ss, ALLOC_STD);
 
-	EXPECT_EQ(display.drv, &t_display_driver);
-	EXPECT_EQ(display.fs, &fs);
-	EXPECT_EQ(display.proc, &proc);
-	EXPECT_EQ(display.ss, &ss);
-	EXPECT_EQ(display.data, (void *)0x1234);
+	EXPECT_PTR(display.drv, &t_display_driver);
+	EXPECT_PTR(display.fs, &fs);
+	EXPECT_PTR(display.proc, &proc);
+	EXPECT_PTR(display.ss, &ss);
+	EXPECT_PTR(display.data, (void *)0x1234);
 
 	END;
 }
@@ -267,7 +267,7 @@ TEST(display_init_failure_returns_null)
 	proc_t proc	   = {0};
 	sock_t ss	   = {0};
 
-	EXPECT_EQ(display_init(&display, &t_display_driver, &fs, &proc, &ss, ALLOC_STD), NULL);
+	EXPECT_NULL(display_init(&display, &t_display_driver, &fs, &proc, &ss, ALLOC_STD));
 
 	END;
 }
@@ -285,11 +285,11 @@ TEST(display_init_failure_clears_fields)
 
 	display_init(&display, &t_display_driver, &fs, &proc, &ss, ALLOC_STD);
 
-	EXPECT_EQ(display.drv, NULL);
-	EXPECT_EQ(display.fs, NULL);
-	EXPECT_EQ(display.proc, NULL);
-	EXPECT_EQ(display.ss, NULL);
-	EXPECT_EQ(display.data, NULL);
+	EXPECT_NULL(display.drv);
+	EXPECT_NULL(display.fs);
+	EXPECT_NULL(display.proc);
+	EXPECT_NULL(display.ss);
+	EXPECT_NULL(display.data);
 
 	END;
 }
@@ -345,11 +345,11 @@ TEST(display_free_clears_fields)
 
 	display_free(&display);
 
-	EXPECT_EQ(display.drv, NULL);
-	EXPECT_EQ(display.fs, NULL);
-	EXPECT_EQ(display.proc, NULL);
-	EXPECT_EQ(display.ss, NULL);
-	EXPECT_EQ(display.data, NULL);
+	EXPECT_NULL(display.drv);
+	EXPECT_NULL(display.fs);
+	EXPECT_NULL(display.proc);
+	EXPECT_NULL(display.ss);
+	EXPECT_NULL(display.data);
 
 	END;
 }
@@ -374,7 +374,7 @@ TEST(display_set_event_callback_sets_fields)
 	};
 
 	EXPECT_EQ(display_set_event_callback(&display, t_display_event_cb, (void *)0x1234), 0);
-	EXPECT_EQ(display.event_user, (void *)0x1234);
+	EXPECT_PTR(display.event_user, (void *)0x1234);
 	display_emit_event(&display, &event);
 	EXPECT_EQ(t_display_event_calls, 1);
 	EXPECT_EQ(t_display_event.type, DISPLAY_EVENT_CLOSE);
@@ -542,7 +542,7 @@ TEST(display_native_calls_driver)
 	EXPECT_EQ(display_native(&display, &native), 0);
 	EXPECT_EQ(t_display_native_calls, 1);
 	EXPECT_EQ(native.type, DISPLAY_NATIVE_X11);
-	EXPECT_EQ(native.display, (void *)0x1234);
+	EXPECT_PTR(native.display, (void *)0x1234);
 	EXPECT_EQ(native.screen, 7);
 
 	END;
@@ -608,7 +608,7 @@ TEST(display_native_free_calls_driver)
 
 	EXPECT_EQ(display_native_free(&display, (void *)0x1234), 0);
 	EXPECT_EQ(t_display_native_free_calls, 1);
-	EXPECT_EQ(t_display_native_free_data, (void *)0x1234);
+	EXPECT_PTR(t_display_native_free_data, (void *)0x1234);
 
 	END;
 }
@@ -632,7 +632,7 @@ TEST(display_driver_find_finds_registered_driver)
 {
 	START;
 
-	EXPECT_NE(display_driver_find(STRV("none")), NULL);
+	EXPECT_NOT_NULL(display_driver_find(STRV("none")));
 
 	END;
 }
@@ -641,7 +641,7 @@ TEST(display_driver_find_returns_null_for_missing_driver)
 {
 	START;
 
-	EXPECT_EQ(display_driver_find(STRV("missing")), NULL);
+	EXPECT_NULL(display_driver_find(STRV("missing")));
 
 	END;
 }
@@ -650,7 +650,7 @@ TEST(display_driver_find_skips_non_display_driver)
 {
 	START;
 
-	EXPECT_EQ(display_driver_find(STRV("t_display_non_display_driver")), NULL);
+	EXPECT_NULL(display_driver_find(STRV("t_display_non_display_driver")));
 
 	END;
 }
@@ -664,8 +664,8 @@ TEST(display_driver_list_lists_registered_display_drivers)
 
 	EXPECT_GT(count, 0);
 	EXPECT_EQ(display_driver_list(drivers, 1), count);
-	EXPECT_NE(drivers[0], NULL);
-	EXPECT_NE(display_driver_find(strv_cstr(drivers[0]->name)), NULL);
+	EXPECT_NOT_NULL(drivers[0]);
+	EXPECT_NOT_NULL(display_driver_find(strv_cstr(drivers[0]->name)));
 
 	END;
 }
@@ -684,7 +684,7 @@ TEST(display_event_type_name_values)
 	EXPECT_STR(display_event_type_name(DISPLAY_EVENT_MOUSE_UP), "mouse up");
 	EXPECT_STR(display_event_type_name(DISPLAY_EVENT_FOCUS_GAINED), "focus gained");
 	EXPECT_STR(display_event_type_name(DISPLAY_EVENT_FOCUS_LOST), "focus lost");
-	EXPECT_STR(display_event_type_name((display_event_type_t)99), "unknown");
+	EXPECT_STR(display_event_type_name(99), "unknown");
 
 	END;
 }
@@ -798,7 +798,7 @@ TEST(display_key_name_values)
 	EXPECT_STR(display_key_name(DISPLAY_KEY_KP_SUBTRACT), "kp subtract");
 	EXPECT_STR(display_key_name(DISPLAY_KEY_KP_ADD), "kp add");
 	EXPECT_STR(display_key_name(DISPLAY_KEY_KP_ENTER), "kp enter");
-	EXPECT_STR(display_key_name((display_key_t)999), "unknown");
+	EXPECT_STR(display_key_name(999), "unknown");
 
 	END;
 }
@@ -817,7 +817,7 @@ TEST(display_mouse_name_values)
 	EXPECT_STR(display_mouse_name(DISPLAY_MOUSE_WHEEL_RIGHT), "wheel right");
 	EXPECT_STR(display_mouse_name(DISPLAY_MOUSE_BACK), "back");
 	EXPECT_STR(display_mouse_name(DISPLAY_MOUSE_FORWARD), "forward");
-	EXPECT_STR(display_mouse_name((display_mouse_t)99), "unknown");
+	EXPECT_STR(display_mouse_name(99), "unknown");
 
 	END;
 }
@@ -838,7 +838,7 @@ TEST(display_modifier_name_values)
 	EXPECT_STR(display_modifier_name(DISPLAY_MOD_MOUSE_RIGHT), "mouse right");
 	EXPECT_STR(display_modifier_name(DISPLAY_MOD_MOUSE_WHEEL_UP), "mouse wheel up");
 	EXPECT_STR(display_modifier_name(DISPLAY_MOD_MOUSE_WHEEL_DOWN), "mouse wheel down");
-	EXPECT_STR(display_modifier_name((display_modifier_t)0x80000000u), "unknown");
+	EXPECT_STR(display_modifier_name(0x80000000), "unknown");
 
 	END;
 }
@@ -902,7 +902,7 @@ TEST(display_modifiers_format_unknown)
 
 	char modifiers[32] = {0};
 
-	display_modifiers_format((display_modifier_t)0x80000000u, modifiers, sizeof(modifiers));
+	display_modifiers_format(0x80000000, modifiers, sizeof(modifiers));
 
 	EXPECT_STR(modifiers, "unknown");
 

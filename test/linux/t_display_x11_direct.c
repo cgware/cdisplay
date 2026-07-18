@@ -10,22 +10,22 @@
 #define T_X11_PATH   "/tmp/.X11-unix/X0"
 
 static const u8 t_x11_cookie[] = {
-	0xcf,
-	0x22,
-	0x17,
-	0x5a,
-	0xea,
-	0x39,
-	0x0a,
-	0xd7,
-	0xb4,
-	0xb6,
-	0x47,
-	0xd3,
-	0x65,
-	0xac,
-	0xa0,
-	0x81,
+	0xcfu,
+	0x22u,
+	0x17u,
+	0x5au,
+	0xeau,
+	0x39u,
+	0x0au,
+	0xd7u,
+	0xb4u,
+	0xb6u,
+	0x47u,
+	0xd3u,
+	0x65u,
+	0xacu,
+	0xa0u,
+	0x81u,
 };
 
 typedef struct t_alloc_s {
@@ -142,8 +142,8 @@ static void t_x11_write_file(fs_t *fs, strv_t path, buf_t data)
 
 static void t_x11_write_u16be(buf_t *buf, u16 val)
 {
-	buf_write_u8be(buf, (val >> 8) & 0xFF);
-	buf_write_u8be(buf, val & 0xFF);
+	buf_write_u8be(buf, (val >> 8) & 0xFFu);
+	buf_write_u8be(buf, val & 0xFFu);
 }
 
 static void t_x11_write_blob(buf_t *buf, const void *data, u16 size)
@@ -204,15 +204,15 @@ static void t_x11_setup_data(u8 *setup, size_t size, u8 screen_count, u16 vendor
 {
 	mem_set(setup, 0, size);
 
-	cbuf_set_u32le(setup, 4, 0x00100000);
-	cbuf_set_u32le(setup, 8, 0x001ffffe);
+	cbuf_set_u32le(setup, 4, 0x00100000u);
+	cbuf_set_u32le(setup, 8, 0x001ffffeu);
 	cbuf_set_u16le(setup, 16, vendor_length);
 	cbuf_set_u8le(setup, 20, screen_count);
 	cbuf_set_u8le(setup, 21, 0);
 	if (size >= 72) {
-		cbuf_set_u32le(setup, 32, 0x00000040);
-		cbuf_set_u32le(setup, 40, 0x00ffffff);
-		cbuf_set_u32le(setup, 44, 0x00000000);
+		cbuf_set_u32le(setup, 32, 0x00000040u);
+		cbuf_set_u32le(setup, 40, 0x00ffffffu);
+		cbuf_set_u32le(setup, 44, 0x00000000u);
 		cbuf_set_u8le(setup, 24, 32);
 		cbuf_set_u8le(setup, 25, 32);
 		cbuf_set_u8le(setup, 26, 8);
@@ -229,14 +229,14 @@ static void t_x11_atom_reply(u8 reply[32], u8 success, u32 atom)
 
 static void t_x11_default_atom_replies(u8 replies[256])
 {
-	t_x11_atom_reply(replies, 1, 0x000000f0);
-	t_x11_atom_reply(&replies[32], 1, 0x000000f1);
-	t_x11_atom_reply(&replies[64], 1, 0x000000f2);
-	t_x11_atom_reply(&replies[96], 1, 0x000000f3);
-	t_x11_atom_reply(&replies[128], 1, 0x000000f4);
-	t_x11_atom_reply(&replies[160], 1, 0x000000f5);
-	t_x11_atom_reply(&replies[192], 1, 0x000000f6);
-	t_x11_atom_reply(&replies[224], 1, 0x000000f7);
+	t_x11_atom_reply(replies, 1, 0x000000f0u);
+	t_x11_atom_reply(&replies[32], 1, 0x000000f1u);
+	t_x11_atom_reply(&replies[64], 1, 0x000000f2u);
+	t_x11_atom_reply(&replies[96], 1, 0x000000f3u);
+	t_x11_atom_reply(&replies[128], 1, 0x000000f4u);
+	t_x11_atom_reply(&replies[160], 1, 0x000000f5u);
+	t_x11_atom_reply(&replies[192], 1, 0x000000f6u);
+	t_x11_atom_reply(&replies[224], 1, 0x000000f7u);
 }
 
 static void t_x11_keyboard_mapping(buf_t *buf)
@@ -249,37 +249,37 @@ static void t_x11_keyboard_mapping(buf_t *buf)
 	cbuf_set_u32le(reply, 4, 33);
 
 	cbuf_set_u32le(keysyms, 0 * 4, 'A');
-	cbuf_set_u32le(keysyms, 1 * 4, 0xff1b);
-	cbuf_set_u32le(keysyms, 2 * 4, 0xffbe);
+	cbuf_set_u32le(keysyms, 1 * 4, 0xff1bu);
+	cbuf_set_u32le(keysyms, 2 * 4, 0xffbeu);
 	cbuf_set_u32le(keysyms, 3 * 4, '1');
-	cbuf_set_u32le(keysyms, 4 * 4, 0xff0d);
-	cbuf_set_u32le(keysyms, 5 * 4, 0xff09);
-	cbuf_set_u32le(keysyms, 6 * 4, 0xff08);
+	cbuf_set_u32le(keysyms, 4 * 4, 0xff0du);
+	cbuf_set_u32le(keysyms, 5 * 4, 0xff09u);
+	cbuf_set_u32le(keysyms, 6 * 4, 0xff08u);
 	cbuf_set_u32le(keysyms, 7 * 4, ' ');
-	cbuf_set_u32le(keysyms, 8 * 4, 0xff51);
-	cbuf_set_u32le(keysyms, 9 * 4, 0xff53);
-	cbuf_set_u32le(keysyms, 10 * 4, 0xff52);
-	cbuf_set_u32le(keysyms, 11 * 4, 0xff54);
-	cbuf_set_u32le(keysyms, 12 * 4, 0xffe1);
-	cbuf_set_u32le(keysyms, 13 * 4, 0xffe2);
-	cbuf_set_u32le(keysyms, 14 * 4, 0xffe3);
-	cbuf_set_u32le(keysyms, 15 * 4, 0xffe4);
-	cbuf_set_u32le(keysyms, 16 * 4, 0xffe9);
-	cbuf_set_u32le(keysyms, 17 * 4, 0xffea);
-	cbuf_set_u32le(keysyms, 18 * 4, 0xffeb);
-	cbuf_set_u32le(keysyms, 19 * 4, 0xffec);
-	cbuf_set_u32le(keysyms, 20 * 4, 0xffe5);
-	cbuf_set_u32le(keysyms, 21 * 4, 0xff7f);
-	cbuf_set_u32le(keysyms, 22 * 4, 0xff14);
-	cbuf_set_u32le(keysyms, 23 * 4, 0xff13);
-	cbuf_set_u32le(keysyms, 24 * 4, 0xff63);
-	cbuf_set_u32le(keysyms, 25 * 4, 0xffff);
-	cbuf_set_u32le(keysyms, 26 * 4, 0xff50);
-	cbuf_set_u32le(keysyms, 27 * 4, 0xff57);
-	cbuf_set_u32le(keysyms, 28 * 4, 0xff55);
-	cbuf_set_u32le(keysyms, 29 * 4, 0xff56);
+	cbuf_set_u32le(keysyms, 8 * 4, 0xff51u);
+	cbuf_set_u32le(keysyms, 9 * 4, 0xff53u);
+	cbuf_set_u32le(keysyms, 10 * 4, 0xff52u);
+	cbuf_set_u32le(keysyms, 11 * 4, 0xff54u);
+	cbuf_set_u32le(keysyms, 12 * 4, 0xffe1u);
+	cbuf_set_u32le(keysyms, 13 * 4, 0xffe2u);
+	cbuf_set_u32le(keysyms, 14 * 4, 0xffe3u);
+	cbuf_set_u32le(keysyms, 15 * 4, 0xffe4u);
+	cbuf_set_u32le(keysyms, 16 * 4, 0xffe9u);
+	cbuf_set_u32le(keysyms, 17 * 4, 0xffeau);
+	cbuf_set_u32le(keysyms, 18 * 4, 0xffebu);
+	cbuf_set_u32le(keysyms, 19 * 4, 0xffecu);
+	cbuf_set_u32le(keysyms, 20 * 4, 0xffe5u);
+	cbuf_set_u32le(keysyms, 21 * 4, 0xff7fu);
+	cbuf_set_u32le(keysyms, 22 * 4, 0xff14u);
+	cbuf_set_u32le(keysyms, 23 * 4, 0xff13u);
+	cbuf_set_u32le(keysyms, 24 * 4, 0xff63u);
+	cbuf_set_u32le(keysyms, 25 * 4, 0xffffu);
+	cbuf_set_u32le(keysyms, 26 * 4, 0xff50u);
+	cbuf_set_u32le(keysyms, 27 * 4, 0xff57u);
+	cbuf_set_u32le(keysyms, 28 * 4, 0xff55u);
+	cbuf_set_u32le(keysyms, 29 * 4, 0xff56u);
 	cbuf_set_u32le(keysyms, 30 * 4, 'a');
-	cbuf_set_u32le(keysyms, 31 * 4, 0xff61);
+	cbuf_set_u32le(keysyms, 31 * 4, 0xff61u);
 
 	buf_add(buf, sizeof(reply), reply, NULL);
 	buf_add(buf, sizeof(keysyms), keysyms, NULL);
@@ -294,36 +294,36 @@ static void t_x11_extended_keyboard_mapping(buf_t *buf)
 	cbuf_set_u8le(reply, 1, 1);
 	cbuf_set_u32le(reply, 4, 63);
 
-	cbuf_set_u32le(keysyms, 33 * 4, 0x0060);
-	cbuf_set_u32le(keysyms, 34 * 4, 0x003d);
-	cbuf_set_u32le(keysyms, 35 * 4, 0x002d);
-	cbuf_set_u32le(keysyms, 36 * 4, 0x005b);
-	cbuf_set_u32le(keysyms, 37 * 4, 0x005d);
-	cbuf_set_u32le(keysyms, 38 * 4, 0x005c);
-	cbuf_set_u32le(keysyms, 39 * 4, 0x003b);
-	cbuf_set_u32le(keysyms, 40 * 4, 0x0027);
-	cbuf_set_u32le(keysyms, 41 * 4, 0x002c);
-	cbuf_set_u32le(keysyms, 42 * 4, 0x002e);
-	cbuf_set_u32le(keysyms, 43 * 4, 0x002f);
-	cbuf_set_u32le(keysyms, 44 * 4, 0xff67);
-	cbuf_set_u32le(keysyms, 45 * 4, 0xffaf);
-	cbuf_set_u32le(keysyms, 46 * 4, 0xffaa);
-	cbuf_set_u32le(keysyms, 47 * 4, 0xffad);
-	cbuf_set_u32le(keysyms, 48 * 4, 0xffab);
-	cbuf_set_u32le(keysyms, 49 * 4, 0xff8d);
-	cbuf_set_u32le(keysyms, 50 * 4, 0xff9e);
-	cbuf_set_u32le(keysyms, 51 * 4, 0xff9c);
-	cbuf_set_u32le(keysyms, 52 * 4, 0xff99);
-	cbuf_set_u32le(keysyms, 53 * 4, 0xff9b);
-	cbuf_set_u32le(keysyms, 54 * 4, 0xff96);
-	cbuf_set_u32le(keysyms, 55 * 4, 0xff9d);
-	cbuf_set_u32le(keysyms, 56 * 4, 0xff98);
-	cbuf_set_u32le(keysyms, 57 * 4, 0xff95);
-	cbuf_set_u32le(keysyms, 58 * 4, 0xff97);
-	cbuf_set_u32le(keysyms, 59 * 4, 0xff9a);
-	cbuf_set_u32le(keysyms, 60 * 4, 0xffae);
-	cbuf_set_u32le(keysyms, 61 * 4, 0xffb0);
-	cbuf_set_u32le(keysyms, 62 * 4, 0xff9f);
+	cbuf_set_u32le(keysyms, 33 * 4, 0x0060u);
+	cbuf_set_u32le(keysyms, 34 * 4, 0x003du);
+	cbuf_set_u32le(keysyms, 35 * 4, 0x002du);
+	cbuf_set_u32le(keysyms, 36 * 4, 0x005bu);
+	cbuf_set_u32le(keysyms, 37 * 4, 0x005du);
+	cbuf_set_u32le(keysyms, 38 * 4, 0x005cu);
+	cbuf_set_u32le(keysyms, 39 * 4, 0x003bu);
+	cbuf_set_u32le(keysyms, 40 * 4, 0x0027u);
+	cbuf_set_u32le(keysyms, 41 * 4, 0x002cu);
+	cbuf_set_u32le(keysyms, 42 * 4, 0x002eu);
+	cbuf_set_u32le(keysyms, 43 * 4, 0x002fu);
+	cbuf_set_u32le(keysyms, 44 * 4, 0xff67u);
+	cbuf_set_u32le(keysyms, 45 * 4, 0xffafu);
+	cbuf_set_u32le(keysyms, 46 * 4, 0xffaau);
+	cbuf_set_u32le(keysyms, 47 * 4, 0xffadu);
+	cbuf_set_u32le(keysyms, 48 * 4, 0xffabu);
+	cbuf_set_u32le(keysyms, 49 * 4, 0xff8du);
+	cbuf_set_u32le(keysyms, 50 * 4, 0xff9eu);
+	cbuf_set_u32le(keysyms, 51 * 4, 0xff9cu);
+	cbuf_set_u32le(keysyms, 52 * 4, 0xff99u);
+	cbuf_set_u32le(keysyms, 53 * 4, 0xff9bu);
+	cbuf_set_u32le(keysyms, 54 * 4, 0xff96u);
+	cbuf_set_u32le(keysyms, 55 * 4, 0xff9du);
+	cbuf_set_u32le(keysyms, 56 * 4, 0xff98u);
+	cbuf_set_u32le(keysyms, 57 * 4, 0xff95u);
+	cbuf_set_u32le(keysyms, 58 * 4, 0xff97u);
+	cbuf_set_u32le(keysyms, 59 * 4, 0xff9au);
+	cbuf_set_u32le(keysyms, 60 * 4, 0xffaeu);
+	cbuf_set_u32le(keysyms, 61 * 4, 0xffb0u);
+	cbuf_set_u32le(keysyms, 62 * 4, 0xff9fu);
 
 	buf_add(buf, sizeof(reply), reply, NULL);
 	buf_add(buf, sizeof(keysyms), keysyms, NULL);
@@ -637,8 +637,8 @@ static void t_x11_write_client_event(sock_t *ss, void *peer, u32 window)
 	cbuf_set_u8le(event, 0, 33);
 	cbuf_set_u8le(event, 1, 32);
 	cbuf_set_u32le(event, 4, window);
-	cbuf_set_u32le(event, 8, 0x000000f0);
-	cbuf_set_u32le(event, 12, 0x000000f1);
+	cbuf_set_u32le(event, 8, 0x000000f0u);
+	cbuf_set_u32le(event, 12, 0x000000f1u);
 	sock_write_all(ss, peer, event, sizeof(event));
 }
 
@@ -649,8 +649,8 @@ static void t_x11_write_unknown_client_event(sock_t *ss, void *peer, u32 window)
 	cbuf_set_u8le(event, 0, 33);
 	cbuf_set_u8le(event, 1, 32);
 	cbuf_set_u32le(event, 4, window);
-	cbuf_set_u32le(event, 8, 0x000000f0);
-	cbuf_set_u32le(event, 12, 0x000000ff);
+	cbuf_set_u32le(event, 8, 0x000000f0u);
+	cbuf_set_u32le(event, 12, 0x000000ffu);
 	sock_write_all(ss, peer, event, sizeof(event));
 }
 
@@ -674,7 +674,7 @@ TEST(display_x11_direct_driver_is_registered)
 {
 	START;
 
-	EXPECT_NE(t_x11_driver(), NULL);
+	EXPECT_NOT_NULL(t_x11_driver());
 
 	END;
 }
@@ -684,7 +684,7 @@ TEST(display_x11_direct_init_null_display)
 	START;
 
 	display_driver_t *drv = t_x11_driver();
-	EXPECT_NE(drv, NULL);
+	EXPECT_NOT_NULL(drv);
 	EXPECT_EQ(drv->init(NULL), 1);
 
 	END;
@@ -698,7 +698,7 @@ TEST(display_x11_direct_init_alloc_failure)
 	t_alloc_t state	      = {.fail_alloc_after = 1};
 	display_t display     = {.alloc = t_alloc(&state)};
 
-	EXPECT_NE(drv, NULL);
+	EXPECT_NOT_NULL(drv);
 	EXPECT_EQ(drv->init(&display), 1);
 
 	END;
@@ -709,7 +709,7 @@ TEST(display_x11_direct_free_null_display)
 	START;
 
 	display_driver_t *drv = t_x11_driver();
-	EXPECT_NE(drv, NULL);
+	EXPECT_NOT_NULL(drv);
 	EXPECT_EQ(drv->free(NULL), 1);
 
 	END;
@@ -720,7 +720,7 @@ TEST(display_x11_direct_window_init_null_window)
 	START;
 
 	display_driver_t *drv = t_x11_driver();
-	EXPECT_NE(drv, NULL);
+	EXPECT_NOT_NULL(drv);
 	EXPECT_EQ(drv->window_init(NULL, &(window_config_t){.width = 640, .height = 480}), 1);
 
 	END;
@@ -735,7 +735,7 @@ TEST(display_x11_direct_window_init_alloc_failure)
 	display_t display     = {.alloc = t_alloc(&state)};
 	window_t wnd	      = {.display = &display};
 
-	EXPECT_NE(drv, NULL);
+	EXPECT_NOT_NULL(drv);
 	EXPECT_EQ(drv->window_init(&wnd, &(window_config_t){.width = 640, .height = 480}), 1);
 
 	END;
@@ -746,7 +746,7 @@ TEST(display_x11_direct_window_free_null_window)
 	START;
 
 	display_driver_t *drv = t_x11_driver();
-	EXPECT_NE(drv, NULL);
+	EXPECT_NOT_NULL(drv);
 	EXPECT_EQ(drv->window_free(NULL), 1);
 
 	END;
@@ -759,7 +759,7 @@ TEST(display_x11_direct_window_id_null_data)
 	display_driver_t *drv = t_x11_driver();
 	window_t window	      = {0};
 
-	EXPECT_NE(drv, NULL);
+	EXPECT_NOT_NULL(drv);
 	EXPECT_EQ(drv->window_id(&window), 0);
 
 	END;
@@ -772,7 +772,7 @@ TEST(display_x11_direct_window_native_null_window)
 	display_driver_t *drv  = t_x11_driver();
 	window_native_t native = {0};
 
-	EXPECT_NE(drv, NULL);
+	EXPECT_NOT_NULL(drv);
 	EXPECT_EQ(drv->window_native(NULL, &native), 1);
 
 	END;
@@ -783,9 +783,9 @@ TEST(display_x11_direct_window_native_null_native)
 	START;
 
 	display_driver_t *drv = t_x11_driver();
-	window_t window	      = {.data = (void *)0x1234};
+	window_t window	      = {.data = (void *)0x1234u};
 
-	EXPECT_NE(drv, NULL);
+	EXPECT_NOT_NULL(drv);
 	EXPECT_EQ(drv->window_native(&window, NULL), 1);
 
 	END;
@@ -809,7 +809,7 @@ TEST(display_x11_direct_window_native_returns_window)
 
 	EXPECT_EQ(drv->window_native(&window, &native), 0);
 	EXPECT_EQ(native.type, DISPLAY_NATIVE_X11);
-	EXPECT_EQ(native.window, (void *)(uintptr_t)0x00100000);
+	EXPECT_PTR(native.window, (void *)(uintptr_t)0x00100000);
 
 	window_free(&window);
 	t_x11_close_display(&fs, &proc, &ss, &display, server, peer);
@@ -835,7 +835,7 @@ TEST(display_x11_direct_init_success)
 	t_x11_listen(&ss, &server);
 	t_x11_script_setup(&ss, server);
 	log_set_quiet(0, 1);
-	EXPECT_EQ(display_init(&display, drv, &fs, &proc, &ss, ALLOC_STD), &display);
+	EXPECT_PTR(display_init(&display, drv, &fs, &proc, &ss, ALLOC_STD), &display);
 	log_set_quiet(0, 0);
 
 	display_free(&display);
@@ -889,7 +889,7 @@ TEST(display_x11_direct_window_init_writes_requests)
 	t_x11_script_setup(&ss, server);
 	log_set_quiet(0, 1);
 	display_init(&display, drv, &fs, &proc, &ss, ALLOC_STD);
-	EXPECT_EQ(window_init(&window, &display, &(window_config_t){.x = 11, .y = 22, .width = 333, .height = 444}), &window);
+	EXPECT_PTR(window_init(&window, &display, &(window_config_t){.x = 11, .y = 22, .width = 333, .height = 444}), &window);
 	log_set_quiet(0, 0);
 
 	sock_accept(&ss, server, &peer);
@@ -935,7 +935,7 @@ TEST(display_x11_direct_window_init_writes_requests)
 	EXPECT_EQ(y, 22);
 	EXPECT_EQ(width, 333);
 	EXPECT_EQ(height, 444);
-	EXPECT_EQ(event_mask, (1u << 0) | (1u << 1) | (1u << 2) | (1u << 3) | (1u << 6) | (1u << 15) | (1u << 17) | (1u << 21));
+	EXPECT_EQ(event_mask, (1 << 0) | (1 << 1) | (1 << 2) | (1 << 3) | (1 << 6) | (1 << 15) | (1 << 17) | (1 << 21));
 
 	cbuf_get_u32le(property_request, 8, &property);
 	cbuf_get_u32le(property_request, 12, &property_type);
@@ -983,7 +983,7 @@ TEST(display_x11_direct_window_init_custom_visual_writes_requests)
 				 &ss,
 				 &display,
 				 &window,
-				 &(window_config_t){.width = 640, .height = 480, .depth = 24, .visual = 0x21},
+				 &(window_config_t){.width = 640, .height = 480, .depth = 24, .visual = 0x21u},
 				 &server,
 				 &peer);
 	t_x11_drain_display_init_requests(&ss, peer);
@@ -1006,7 +1006,7 @@ TEST(display_x11_direct_window_init_custom_visual_writes_requests)
 	EXPECT_EQ(create_request[0], 1);
 	EXPECT_EQ(create_request[1], 24);
 	EXPECT_EQ(create_visual, 0x21);
-	EXPECT_EQ(value_mask, (1u << 1) | (1u << 3) | (1u << 11) | (1u << 13));
+	EXPECT_EQ(value_mask, (1 << 1) | (1 << 3) | (1 << 11) | (1 << 13));
 	EXPECT_EQ(create_colormap, colormap);
 
 	window_free(&window);
@@ -1052,7 +1052,7 @@ TEST(display_x11_direct_window_init_omits_background)
 	sock_read_all(&ss, peer, property_request, sizeof(property_request));
 
 	cbuf_get_u32le(create_request, 28, &value_mask);
-	EXPECT_EQ(value_mask & (1u << 1), 0);
+	EXPECT_EQ(value_mask & (1 << 1), 0);
 
 	window_free(&window);
 	display_free(&display);
@@ -1085,7 +1085,7 @@ TEST(display_x11_direct_window_free_custom_visual_writes_request)
 				 &ss,
 				 &display,
 				 &window,
-				 &(window_config_t){.width = 640, .height = 480, .depth = 24, .visual = 0x21},
+				 &(window_config_t){.width = 640, .height = 480, .depth = 24, .visual = 0x21u},
 				 &server,
 				 &peer);
 	t_x11_drain_display_init_requests(&ss, peer);
@@ -1176,7 +1176,7 @@ TEST(display_x11_direct_window_set_title_null_data)
 	display_driver_t *drv = t_x11_driver();
 	window_t window	      = {0};
 
-	EXPECT_NE(drv, NULL);
+	EXPECT_NOT_NULL(drv);
 	EXPECT_EQ(drv->window_set_title(&window, STRV("title")), 1);
 
 	END;
@@ -1326,7 +1326,7 @@ TEST(display_x11_direct_window_geometry_writes_requests)
 	cbuf_get_u32le(position_request, 12, &first);
 	cbuf_get_u32le(position_request, 16, &second);
 	EXPECT_EQ(position_request[0], 12);
-	EXPECT_EQ(mask, (1u << 0) | (1u << 1));
+	EXPECT_EQ(mask, (1 << 0) | (1 << 1));
 	EXPECT_EQ(first, 11);
 	EXPECT_EQ(second, 22);
 
@@ -1334,7 +1334,7 @@ TEST(display_x11_direct_window_geometry_writes_requests)
 	cbuf_get_u32le(size_request, 12, &first);
 	cbuf_get_u32le(size_request, 16, &second);
 	EXPECT_EQ(size_request[0], 12);
-	EXPECT_EQ(mask, (1u << 2) | (1u << 3));
+	EXPECT_EQ(mask, (1 << 2) | (1 << 3));
 	EXPECT_EQ(first, 333);
 	EXPECT_EQ(second, 444);
 
@@ -1354,7 +1354,7 @@ TEST(display_x11_direct_window_set_position_null_data)
 	display_driver_t *drv = t_x11_driver();
 	window_t window	      = {0};
 
-	EXPECT_NE(drv, NULL);
+	EXPECT_NOT_NULL(drv);
 	EXPECT_EQ(drv->window_set_position(&window, 11, 22), 1);
 
 	END;
@@ -1367,7 +1367,7 @@ TEST(display_x11_direct_window_set_size_null_data)
 	display_driver_t *drv = t_x11_driver();
 	window_t window	      = {0};
 
-	EXPECT_NE(drv, NULL);
+	EXPECT_NOT_NULL(drv);
 	EXPECT_EQ(drv->window_set_size(&window, 333, 444), 1);
 
 	END;
@@ -1380,7 +1380,7 @@ TEST(display_x11_direct_window_set_borderless_null_data)
 	display_driver_t *drv = t_x11_driver();
 	window_t window	      = {0};
 
-	EXPECT_NE(drv, NULL);
+	EXPECT_NOT_NULL(drv);
 	EXPECT_EQ(drv->window_set_borderless(&window, 1), 1);
 
 	END;
@@ -1482,7 +1482,7 @@ TEST(display_x11_direct_window_set_fullscreen_null_data)
 	display_driver_t *drv = t_x11_driver();
 	window_t window	      = {0};
 
-	EXPECT_NE(drv, NULL);
+	EXPECT_NOT_NULL(drv);
 	EXPECT_EQ(drv->window_set_fullscreen(&window, 1), 1);
 
 	END;
@@ -1606,7 +1606,7 @@ TEST(display_x11_direct_window_set_fullscreen_mapped_writes_client_message)
 	EXPECT_EQ(show_request[0], 8);
 	EXPECT_EQ(request[0], 25);
 	EXPECT_EQ(destination, 0x00000040);
-	EXPECT_EQ(mask, (1u << 19) | (1u << 20));
+	EXPECT_EQ(mask, (1 << 19) | (1 << 20));
 	EXPECT_EQ(request[12], 33);
 	EXPECT_EQ(request[13], 32);
 	EXPECT_EQ(window_id, 0x00100000);
@@ -1766,7 +1766,7 @@ TEST(display_x11_direct_window_show_null_data)
 	display_driver_t *drv = t_x11_driver();
 	window_t window	      = {0};
 
-	EXPECT_NE(drv, NULL);
+	EXPECT_NOT_NULL(drv);
 	EXPECT_EQ(drv->window_show(&window), 1);
 
 	END;
@@ -1779,7 +1779,7 @@ TEST(display_x11_direct_window_hide_null_data)
 	display_driver_t *drv = t_x11_driver();
 	window_t window	      = {0};
 
-	EXPECT_NE(drv, NULL);
+	EXPECT_NOT_NULL(drv);
 	EXPECT_EQ(drv->window_hide(&window), 1);
 
 	END;
@@ -1859,7 +1859,7 @@ TEST(display_x11_direct_poll_event_buffers_partial_event)
 
 	t_x11_open_window(drv, &fs, &proc, &ss, &display, &window, &server, &peer);
 	cbuf_set_u8le(event, 0, 22);
-	cbuf_set_u32le(event, 8, 0x00100000);
+	cbuf_set_u32le(event, 8, 0x00100000u);
 	cbuf_set_u16le(event, 16, 10);
 	cbuf_set_u16le(event, 18, 20);
 	cbuf_set_u16le(event, 20, 640);
@@ -1937,7 +1937,7 @@ TEST(display_x11_direct_poll_event_configure_notify)
 	void *peer	      = NULL;
 
 	t_x11_open_window(drv, &fs, &proc, &ss, &display, &window, &server, &peer);
-	t_x11_write_configure_event(&ss, peer, 0x00100000, 10, 20, 640, 480);
+	t_x11_write_configure_event(&ss, peer, 0x00100000u, 10, 20, 640, 480);
 
 	EXPECT_EQ(display_poll_events(&display), 0);
 	EXPECT_EQ(t_x11_event_calls, 1);
@@ -1963,7 +1963,7 @@ TEST(display_x11_direct_poll_event_null_display)
 
 	display_driver_t *drv = t_x11_driver();
 
-	EXPECT_NE(drv, NULL);
+	EXPECT_NOT_NULL(drv);
 	EXPECT_EQ(drv->poll_events(NULL), 1);
 
 	END;
@@ -1976,7 +1976,7 @@ TEST(display_x11_direct_poll_event_null_event)
 	display_driver_t *drv = t_x11_driver();
 	display_t display     = {0};
 
-	EXPECT_NE(drv, NULL);
+	EXPECT_NOT_NULL(drv);
 	EXPECT_EQ(drv->poll_events(&display), 1);
 
 	END;
@@ -2018,7 +2018,7 @@ TEST(display_x11_direct_wait_event_null_display)
 
 	display_driver_t *drv = t_x11_driver();
 
-	EXPECT_NE(drv, NULL);
+	EXPECT_NOT_NULL(drv);
 	EXPECT_EQ(drv->wait_events(NULL), 1);
 
 	END;
@@ -2031,7 +2031,7 @@ TEST(display_x11_direct_wait_event_null_event)
 	display_driver_t *drv = t_x11_driver();
 	display_t display     = {0};
 
-	EXPECT_NE(drv, NULL);
+	EXPECT_NOT_NULL(drv);
 	EXPECT_EQ(drv->wait_events(&display), 1);
 
 	END;
@@ -2110,7 +2110,7 @@ TEST(display_x11_direct_wait_event_configure_notify)
 	void *peer	      = NULL;
 
 	t_x11_open_window(drv, &fs, &proc, &ss, &display, &window, &server, &peer);
-	t_x11_write_configure_event(&ss, peer, 0x00100000, 10, 20, 640, 480);
+	t_x11_write_configure_event(&ss, peer, 0x00100000u, 10, 20, 640, 480);
 
 	EXPECT_EQ(display_wait_events(&display), 0);
 	EXPECT_EQ(t_x11_event.type, DISPLAY_EVENT_RESIZE);
@@ -2143,8 +2143,8 @@ TEST(display_x11_direct_wait_event_skips_expose)
 	void *peer	      = NULL;
 
 	t_x11_open_window(drv, &fs, &proc, &ss, &display, &window, &server, &peer);
-	t_x11_write_expose_event(&ss, peer, 0x00100000);
-	t_x11_write_configure_event(&ss, peer, 0x00100000, 10, 20, 640, 480);
+	t_x11_write_expose_event(&ss, peer, 0x00100000u);
+	t_x11_write_configure_event(&ss, peer, 0x00100000u, 10, 20, 640, 480);
 
 	EXPECT_EQ(display_wait_events(&display), 0);
 	EXPECT_EQ(t_x11_event.type, DISPLAY_EVENT_RESIZE);
@@ -2177,8 +2177,8 @@ TEST(display_x11_direct_wait_event_skips_map_notify)
 	void *peer	      = NULL;
 
 	t_x11_open_window(drv, &fs, &proc, &ss, &display, &window, &server, &peer);
-	t_x11_write_map_event(&ss, peer, 0x00100000);
-	t_x11_write_configure_event(&ss, peer, 0x00100000, 10, 20, 640, 480);
+	t_x11_write_map_event(&ss, peer, 0x00100000u);
+	t_x11_write_configure_event(&ss, peer, 0x00100000u, 10, 20, 640, 480);
 
 	EXPECT_EQ(display_wait_events(&display), 0);
 	EXPECT_EQ(t_x11_event.type, DISPLAY_EVENT_RESIZE);
@@ -2211,8 +2211,8 @@ TEST(display_x11_direct_wait_event_skips_unmap_notify)
 	void *peer	      = NULL;
 
 	t_x11_open_window(drv, &fs, &proc, &ss, &display, &window, &server, &peer);
-	t_x11_write_unmap_event(&ss, peer, 0x00100000);
-	t_x11_write_configure_event(&ss, peer, 0x00100000, 10, 20, 640, 480);
+	t_x11_write_unmap_event(&ss, peer, 0x00100000u);
+	t_x11_write_configure_event(&ss, peer, 0x00100000u, 10, 20, 640, 480);
 
 	EXPECT_EQ(display_wait_events(&display), 0);
 	EXPECT_EQ(t_x11_event.type, DISPLAY_EVENT_RESIZE);
@@ -2245,8 +2245,8 @@ TEST(display_x11_direct_wait_event_skips_reparent_notify)
 	void *peer	      = NULL;
 
 	t_x11_open_window(drv, &fs, &proc, &ss, &display, &window, &server, &peer);
-	t_x11_write_reparent_event(&ss, peer, 0x00100000);
-	t_x11_write_configure_event(&ss, peer, 0x00100000, 10, 20, 640, 480);
+	t_x11_write_reparent_event(&ss, peer, 0x00100000u);
+	t_x11_write_configure_event(&ss, peer, 0x00100000u, 10, 20, 640, 480);
 
 	EXPECT_EQ(display_wait_events(&display), 0);
 	EXPECT_EQ(t_x11_event.type, DISPLAY_EVENT_RESIZE);
@@ -2280,7 +2280,7 @@ TEST(display_x11_direct_wait_event_skips_mapping_notify)
 
 	t_x11_open_window(drv, &fs, &proc, &ss, &display, &window, &server, &peer);
 	t_x11_write_mapping_event(&ss, peer);
-	t_x11_write_configure_event(&ss, peer, 0x00100000, 10, 20, 640, 480);
+	t_x11_write_configure_event(&ss, peer, 0x00100000u, 10, 20, 640, 480);
 
 	EXPECT_EQ(display_wait_events(&display), 0);
 	EXPECT_EQ(t_x11_event.type, DISPLAY_EVENT_RESIZE);
@@ -2313,7 +2313,7 @@ TEST(display_x11_direct_wait_event_client_message_close)
 	void *peer	      = NULL;
 
 	t_x11_open_window(drv, &fs, &proc, &ss, &display, &window, &server, &peer);
-	t_x11_write_client_event(&ss, peer, 0x00100000);
+	t_x11_write_client_event(&ss, peer, 0x00100000u);
 
 	EXPECT_EQ(display_wait_events(&display), 0);
 	EXPECT_EQ(t_x11_event.type, DISPLAY_EVENT_CLOSE);
@@ -2342,8 +2342,8 @@ TEST(display_x11_direct_wait_event_skips_unknown_client_message)
 	void *peer	      = NULL;
 
 	t_x11_open_window(drv, &fs, &proc, &ss, &display, &window, &server, &peer);
-	t_x11_write_unknown_client_event(&ss, peer, 0x00100000);
-	t_x11_write_configure_event(&ss, peer, 0x00100000, 10, 20, 640, 480);
+	t_x11_write_unknown_client_event(&ss, peer, 0x00100000u);
+	t_x11_write_configure_event(&ss, peer, 0x00100000u, 10, 20, 640, 480);
 
 	EXPECT_EQ(display_wait_events(&display), 0);
 	EXPECT_EQ(t_x11_event.type, DISPLAY_EVENT_RESIZE);
@@ -2372,14 +2372,14 @@ TEST(display_x11_direct_wait_event_inputs)
 	void *peer	      = NULL;
 
 	t_x11_open_window(drv, &fs, &proc, &ss, &display, &window, &server, &peer);
-	t_x11_write_key_event(&ss, peer, 2, 38, 0x00100000, 11, 22, 1);
-	t_x11_write_key_event(&ss, peer, 3, 38, 0x00100000, 12, 23, 2);
-	t_x11_write_key_event(&ss, peer, 2, 9, 0x00100000, 12, 23, 2);
-	t_x11_write_key_event(&ss, peer, 2, 10, 0x00100000, 12, 23, 2);
-	t_x11_write_key_event(&ss, peer, 2, 40, 0x00100000, 12, 23, 2);
-	t_x11_write_key_event(&ss, peer, 4, 1, 0x00100000, 13, 24, 4);
-	t_x11_write_key_event(&ss, peer, 5, 1, 0x00100000, 14, 25, 8);
-	t_x11_write_motion_event(&ss, peer, 0x00100000, 15, 26, 16);
+	t_x11_write_key_event(&ss, peer, 2, 38, 0x00100000u, 11, 22, 1);
+	t_x11_write_key_event(&ss, peer, 3, 38, 0x00100000u, 12, 23, 2);
+	t_x11_write_key_event(&ss, peer, 2, 9, 0x00100000u, 12, 23, 2);
+	t_x11_write_key_event(&ss, peer, 2, 10, 0x00100000u, 12, 23, 2);
+	t_x11_write_key_event(&ss, peer, 2, 40, 0x00100000u, 12, 23, 2);
+	t_x11_write_key_event(&ss, peer, 4, 1, 0x00100000u, 13, 24, 4);
+	t_x11_write_key_event(&ss, peer, 5, 1, 0x00100000u, 14, 25, 8);
+	t_x11_write_motion_event(&ss, peer, 0x00100000u, 15, 26, 16);
 
 	EXPECT_EQ(display_wait_events(&display), 0);
 	EXPECT_EQ(t_x11_event.type, DISPLAY_EVENT_KEY_DOWN);
@@ -2445,15 +2445,15 @@ TEST(display_x11_direct_wait_event_mouse_buttons)
 	void *peer	      = NULL;
 
 	t_x11_open_window(drv, &fs, &proc, &ss, &display, &window, &server, &peer);
-	t_x11_write_key_event(&ss, peer, 4, 2, 0x00100000, 10, 20, 1);
-	t_x11_write_key_event(&ss, peer, 4, 3, 0x00100000, 11, 21, 2);
-	t_x11_write_key_event(&ss, peer, 4, 4, 0x00100000, 12, 22, 3);
-	t_x11_write_key_event(&ss, peer, 4, 5, 0x00100000, 13, 23, 4);
-	t_x11_write_key_event(&ss, peer, 4, 6, 0x00100000, 14, 24, 5);
-	t_x11_write_key_event(&ss, peer, 4, 7, 0x00100000, 15, 25, 6);
-	t_x11_write_key_event(&ss, peer, 4, 8, 0x00100000, 16, 26, 7);
-	t_x11_write_key_event(&ss, peer, 4, 9, 0x00100000, 17, 27, 8);
-	t_x11_write_key_event(&ss, peer, 4, 10, 0x00100000, 18, 28, 9);
+	t_x11_write_key_event(&ss, peer, 4, 2, 0x00100000u, 10, 20, 1);
+	t_x11_write_key_event(&ss, peer, 4, 3, 0x00100000u, 11, 21, 2);
+	t_x11_write_key_event(&ss, peer, 4, 4, 0x00100000u, 12, 22, 3);
+	t_x11_write_key_event(&ss, peer, 4, 5, 0x00100000u, 13, 23, 4);
+	t_x11_write_key_event(&ss, peer, 4, 6, 0x00100000u, 14, 24, 5);
+	t_x11_write_key_event(&ss, peer, 4, 7, 0x00100000u, 15, 25, 6);
+	t_x11_write_key_event(&ss, peer, 4, 8, 0x00100000u, 16, 26, 7);
+	t_x11_write_key_event(&ss, peer, 4, 9, 0x00100000u, 17, 27, 8);
+	t_x11_write_key_event(&ss, peer, 4, 10, 0x00100000u, 18, 28, 9);
 
 	EXPECT_EQ(display_wait_events(&display), 0);
 	EXPECT_EQ(t_x11_event.type, DISPLAY_EVENT_MOUSE_DOWN);
@@ -2514,15 +2514,15 @@ TEST(display_x11_direct_wait_event_extended_keys)
 	void *peer	      = NULL;
 
 	t_x11_open_window(drv, &fs, &proc, &ss, &display, &window, &server, &peer);
-	t_x11_write_key_event(&ss, peer, 2, 30, 0x00100000, 10, 20, 0);
-	t_x11_write_key_event(&ss, peer, 2, 31, 0x00100000, 10, 20, 0);
-	t_x11_write_key_event(&ss, peer, 2, 32, 0x00100000, 10, 20, 0);
-	t_x11_write_key_event(&ss, peer, 2, 39, 0x00100000, 10, 20, 0);
-	t_x11_write_key_event(&ss, peer, 2, 33, 0x00100000, 10, 20, 0);
-	t_x11_write_key_event(&ss, peer, 2, 34, 0x00100000, 10, 20, 0);
-	t_x11_write_key_event(&ss, peer, 2, 35, 0x00100000, 10, 20, 0);
-	t_x11_write_key_event(&ss, peer, 2, 36, 0x00100000, 10, 20, 0);
-	t_x11_write_key_event(&ss, peer, 2, 37, 0x00100000, 10, 20, 0);
+	t_x11_write_key_event(&ss, peer, 2, 30, 0x00100000u, 10, 20, 0);
+	t_x11_write_key_event(&ss, peer, 2, 31, 0x00100000u, 10, 20, 0);
+	t_x11_write_key_event(&ss, peer, 2, 32, 0x00100000u, 10, 20, 0);
+	t_x11_write_key_event(&ss, peer, 2, 39, 0x00100000u, 10, 20, 0);
+	t_x11_write_key_event(&ss, peer, 2, 33, 0x00100000u, 10, 20, 0);
+	t_x11_write_key_event(&ss, peer, 2, 34, 0x00100000u, 10, 20, 0);
+	t_x11_write_key_event(&ss, peer, 2, 35, 0x00100000u, 10, 20, 0);
+	t_x11_write_key_event(&ss, peer, 2, 36, 0x00100000u, 10, 20, 0);
+	t_x11_write_key_event(&ss, peer, 2, 37, 0x00100000u, 10, 20, 0);
 
 	EXPECT_EQ(display_wait_events(&display), 0);
 	EXPECT_EQ(t_x11_event.type, DISPLAY_EVENT_KEY_DOWN);
@@ -2599,15 +2599,15 @@ TEST(display_x11_direct_wait_event_keypad_keys)
 	t_x11_script_setup_data_keyboard_atoms(
 		&ss, server, 1, setup, sizeof(setup), keyboard.data, keyboard.used, atom_reply, sizeof(atom_reply));
 	log_set_quiet(0, 1);
-	EXPECT_EQ(display_init(&display, drv, &fs, &proc, &ss, ALLOC_STD), &display);
+	EXPECT_PTR(display_init(&display, drv, &fs, &proc, &ss, ALLOC_STD), &display);
 	t_x11_event_reset();
 	display_set_event_callback(&display, t_x11_event_cb, NULL);
-	EXPECT_EQ(window_init(&window, &display, &(window_config_t){.width = 640, .height = 480}), &window);
+	EXPECT_PTR(window_init(&window, &display, &(window_config_t){.width = 640, .height = 480}), &window);
 	log_set_quiet(0, 0);
 	sock_accept(&ss, server, &peer);
 
 	for (u8 keycode = 41; keycode <= 70; keycode++) {
-		t_x11_write_key_event(&ss, peer, 2, keycode, 0x00100000, 10, 20, 0);
+		t_x11_write_key_event(&ss, peer, 2, keycode, 0x00100000u, 10, 20, 0);
 	}
 
 	EXPECT_EQ(display_wait_events(&display), 0);
@@ -2724,7 +2724,7 @@ TEST(display_x11_direct_wait_event_modifiers)
 	void *peer	      = NULL;
 
 	t_x11_open_window(drv, &fs, &proc, &ss, &display, &window, &server, &peer);
-	t_x11_write_key_event(&ss, peer, 2, 38, 0x00100000, 11, 22, 64 | 256 | 512 | 1024 | 2048 | 4096);
+	t_x11_write_key_event(&ss, peer, 2, 38, 0x00100000u, 11, 22, 64 | 256 | 512 | 1024 | 2048 | 4096);
 
 	EXPECT_EQ(display_wait_events(&display), 0);
 	EXPECT_EQ(t_x11_event.type, DISPLAY_EVENT_KEY_DOWN);
@@ -2756,9 +2756,9 @@ TEST(display_x11_direct_wait_event_focus_and_close)
 	void *peer	      = NULL;
 
 	t_x11_open_window(drv, &fs, &proc, &ss, &display, &window, &server, &peer);
-	t_x11_write_focus_event(&ss, peer, 9, 0x00100000);
-	t_x11_write_focus_event(&ss, peer, 10, 0x00100000);
-	t_x11_write_destroy_event(&ss, peer, 0x00100000);
+	t_x11_write_focus_event(&ss, peer, 9, 0x00100000u);
+	t_x11_write_focus_event(&ss, peer, 10, 0x00100000u);
+	t_x11_write_destroy_event(&ss, peer, 0x00100000u);
 
 	EXPECT_EQ(display_wait_events(&display), 0);
 	EXPECT_EQ(t_x11_event.type, DISPLAY_EVENT_FOCUS_GAINED);
@@ -2799,7 +2799,7 @@ TEST(display_x11_direct_init_wild_authority)
 	t_x11_listen(&ss, &server);
 	t_x11_script_setup(&ss, server);
 	log_set_quiet(0, 1);
-	EXPECT_EQ(display_init(&display, drv, &fs, &proc, &ss, ALLOC_STD), &display);
+	EXPECT_PTR(display_init(&display, drv, &fs, &proc, &ss, ALLOC_STD), &display);
 	log_set_quiet(0, 0);
 
 	display_free(&display);
@@ -2829,7 +2829,7 @@ TEST(display_x11_direct_init_unknown_authority_family)
 	t_x11_listen(&ss, &server);
 	t_x11_script_setup(&ss, server);
 	log_set_quiet(0, 1);
-	EXPECT_EQ(display_init(&display, drv, &fs, &proc, &ss, ALLOC_STD), &display);
+	EXPECT_PTR(display_init(&display, drv, &fs, &proc, &ss, ALLOC_STD), &display);
 	log_set_quiet(0, 0);
 
 	sock_accept(&ss, server, &peer);
@@ -2857,7 +2857,7 @@ TEST(display_x11_direct_init_missing_display_env)
 
 	t_x11_env_init(&fs, &proc, &ss);
 	log_set_quiet(0, 1);
-	EXPECT_EQ(display_init(&display, drv, &fs, &proc, &ss, ALLOC_STD), NULL);
+	EXPECT_NULL(display_init(&display, drv, &fs, &proc, &ss, ALLOC_STD));
 	log_set_quiet(0, 0);
 	t_x11_env_free(&fs, &proc, &ss);
 
@@ -2877,7 +2877,7 @@ TEST(display_x11_direct_init_invalid_display_name)
 	t_x11_env_init(&fs, &proc, &ss);
 	t_x11_set_display(&proc, STRV("localhost:0"));
 	log_set_quiet(0, 1);
-	EXPECT_EQ(display_init(&display, drv, &fs, &proc, &ss, ALLOC_STD), NULL);
+	EXPECT_NULL(display_init(&display, drv, &fs, &proc, &ss, ALLOC_STD));
 	log_set_quiet(0, 0);
 	t_x11_env_free(&fs, &proc, &ss);
 
@@ -2897,7 +2897,7 @@ TEST(display_x11_direct_init_invalid_display_number)
 	t_x11_env_init(&fs, &proc, &ss);
 	t_x11_set_display(&proc, STRV(":abc"));
 	log_set_quiet(0, 1);
-	EXPECT_EQ(display_init(&display, drv, &fs, &proc, &ss, ALLOC_STD), NULL);
+	EXPECT_NULL(display_init(&display, drv, &fs, &proc, &ss, ALLOC_STD));
 	log_set_quiet(0, 0);
 	t_x11_env_free(&fs, &proc, &ss);
 
@@ -2917,7 +2917,7 @@ TEST(display_x11_direct_init_connect_not_found)
 	t_x11_env_init(&fs, &proc, &ss);
 	t_x11_set_display(&proc, STRV(":0"));
 	log_set_quiet(0, 1);
-	EXPECT_EQ(display_init(&display, drv, &fs, &proc, &ss, ALLOC_STD), NULL);
+	EXPECT_NULL(display_init(&display, drv, &fs, &proc, &ss, ALLOC_STD));
 	log_set_quiet(0, 0);
 	t_x11_env_free(&fs, &proc, &ss);
 
@@ -2939,7 +2939,7 @@ TEST(display_x11_direct_init_missing_xauthority_env)
 	t_x11_set_display(&proc, STRV(":0"));
 	t_x11_listen(&ss, &server);
 	log_set_quiet(0, 1);
-	EXPECT_EQ(display_init(&display, drv, &fs, &proc, &ss, ALLOC_STD), NULL);
+	EXPECT_NULL(display_init(&display, drv, &fs, &proc, &ss, ALLOC_STD));
 	log_set_quiet(0, 0);
 	sock_close(&ss, server);
 	t_x11_env_free(&fs, &proc, &ss);
@@ -2963,7 +2963,7 @@ TEST(display_x11_direct_init_missing_xauthority_file)
 	t_x11_set_xauthority(&proc);
 	t_x11_listen(&ss, &server);
 	log_set_quiet(0, 1);
-	EXPECT_EQ(display_init(&display, drv, &fs, &proc, &ss, ALLOC_STD), NULL);
+	EXPECT_NULL(display_init(&display, drv, &fs, &proc, &ss, ALLOC_STD));
 	log_set_quiet(0, 0);
 	sock_close(&ss, server);
 	t_x11_env_free(&fs, &proc, &ss);
@@ -2989,7 +2989,7 @@ TEST(display_x11_direct_init_missing_hostname)
 	t_x11_write_authority(&fs);
 	t_x11_listen(&ss, &server);
 	log_set_quiet(0, 1);
-	EXPECT_EQ(display_init(&display, drv, &fs, &proc, &ss, ALLOC_STD), NULL);
+	EXPECT_NULL(display_init(&display, drv, &fs, &proc, &ss, ALLOC_STD));
 	log_set_quiet(0, 0);
 	sock_close(&ss, server);
 	t_x11_env_free(&fs, &proc, &ss);
@@ -3007,7 +3007,7 @@ TEST(display_x11_direct_init_malformed_authority)
 	sock_t ss	      = {0};
 	display_t display     = {0};
 	void *server	      = NULL;
-	u8 malformed[]	      = {0x01, 0x00, 0x00};
+	u8 malformed[]	      = {0x01u, 0x00u, 0x00u};
 	buf_t malformed_buf   = {.data = malformed, .used = sizeof(malformed)};
 
 	t_x11_env_init(&fs, &proc, &ss);
@@ -3016,7 +3016,7 @@ TEST(display_x11_direct_init_malformed_authority)
 	t_x11_write_file(&fs, STRV(T_XAUTHORITY), malformed_buf);
 	t_x11_listen(&ss, &server);
 	log_set_quiet(0, 1);
-	EXPECT_EQ(display_init(&display, drv, &fs, &proc, &ss, ALLOC_STD), NULL);
+	EXPECT_NULL(display_init(&display, drv, &fs, &proc, &ss, ALLOC_STD));
 	log_set_quiet(0, 0);
 	sock_close(&ss, server);
 	t_x11_env_free(&fs, &proc, &ss);
@@ -3042,7 +3042,7 @@ TEST(display_x11_direct_init_rejected_setup)
 	t_x11_listen(&ss, &server);
 	t_x11_script_setup_header(&ss, server, 0, 0);
 	log_set_quiet(0, 1);
-	EXPECT_EQ(display_init(&display, drv, &fs, &proc, &ss, ALLOC_STD), NULL);
+	EXPECT_NULL(display_init(&display, drv, &fs, &proc, &ss, ALLOC_STD));
 	log_set_quiet(0, 0);
 	sock_close(&ss, server);
 	t_x11_env_free(&fs, &proc, &ss);
@@ -3068,7 +3068,7 @@ TEST(display_x11_direct_init_short_setup)
 	t_x11_listen(&ss, &server);
 	t_x11_script_setup_header(&ss, server, 1, 1);
 	log_set_quiet(0, 1);
-	EXPECT_EQ(display_init(&display, drv, &fs, &proc, &ss, ALLOC_STD), NULL);
+	EXPECT_NULL(display_init(&display, drv, &fs, &proc, &ss, ALLOC_STD));
 	log_set_quiet(0, 0);
 	sock_close(&ss, server);
 	t_x11_env_free(&fs, &proc, &ss);
@@ -3094,7 +3094,7 @@ TEST(display_x11_direct_init_truncated_setup)
 	t_x11_listen(&ss, &server);
 	t_x11_script_setup_header(&ss, server, 1, 8);
 	log_set_quiet(0, 1);
-	EXPECT_EQ(display_init(&display, drv, &fs, &proc, &ss, ALLOC_STD), NULL);
+	EXPECT_NULL(display_init(&display, drv, &fs, &proc, &ss, ALLOC_STD));
 	log_set_quiet(0, 0);
 	sock_close(&ss, server);
 	t_x11_env_free(&fs, &proc, &ss);
@@ -3122,7 +3122,7 @@ TEST(display_x11_direct_init_setup_without_screens)
 	t_x11_setup_data(setup, sizeof(setup), 0, 0);
 	t_x11_script_setup_data(&ss, server, 1, setup, sizeof(setup));
 	log_set_quiet(0, 1);
-	EXPECT_EQ(display_init(&display, drv, &fs, &proc, &ss, ALLOC_STD), NULL);
+	EXPECT_NULL(display_init(&display, drv, &fs, &proc, &ss, ALLOC_STD));
 	log_set_quiet(0, 0);
 	sock_close(&ss, server);
 	t_x11_env_free(&fs, &proc, &ss);
@@ -3150,7 +3150,7 @@ TEST(display_x11_direct_init_invalid_screen_offset)
 	t_x11_setup_data(setup, sizeof(setup), 1, 0);
 	t_x11_script_setup_data(&ss, server, 1, setup, sizeof(setup));
 	log_set_quiet(0, 1);
-	EXPECT_EQ(display_init(&display, drv, &fs, &proc, &ss, ALLOC_STD), NULL);
+	EXPECT_NULL(display_init(&display, drv, &fs, &proc, &ss, ALLOC_STD));
 	log_set_quiet(0, 0);
 	sock_close(&ss, server);
 	t_x11_env_free(&fs, &proc, &ss);
@@ -3179,7 +3179,7 @@ TEST(display_x11_direct_init_setup_alloc_failure)
 	t_x11_setup_data(setup, sizeof(setup), 1, 0);
 	t_x11_script_setup_data(&ss, server, 1, setup, sizeof(setup));
 	log_set_quiet(0, 1);
-	EXPECT_EQ(display_init(&display, drv, &fs, &proc, &ss, t_alloc(&state)), NULL);
+	EXPECT_NULL(display_init(&display, drv, &fs, &proc, &ss, t_alloc(&state)));
 	log_set_quiet(0, 0);
 	sock_close(&ss, server);
 	t_x11_env_free(&fs, &proc, &ss);
@@ -3209,7 +3209,7 @@ TEST(display_x11_direct_init_invalid_keycode_range)
 	cbuf_set_u8le(setup, 27, 8);
 	t_x11_script_setup_data(&ss, server, 1, setup, sizeof(setup));
 	log_set_quiet(0, 1);
-	EXPECT_EQ(display_init(&display, drv, &fs, &proc, &ss, ALLOC_STD), NULL);
+	EXPECT_NULL(display_init(&display, drv, &fs, &proc, &ss, ALLOC_STD));
 	log_set_quiet(0, 0);
 	sock_close(&ss, server);
 	t_x11_env_free(&fs, &proc, &ss);
@@ -3237,7 +3237,7 @@ TEST(display_x11_direct_init_keyboard_mapping_read_failure)
 	t_x11_setup_data(setup, sizeof(setup), 1, 0);
 	t_x11_script_setup_data_keyboard_atoms(&ss, server, 1, setup, sizeof(setup), NULL, 0, NULL, 0);
 	log_set_quiet(0, 1);
-	EXPECT_EQ(display_init(&display, drv, &fs, &proc, &ss, ALLOC_STD), NULL);
+	EXPECT_NULL(display_init(&display, drv, &fs, &proc, &ss, ALLOC_STD));
 	log_set_quiet(0, 0);
 	sock_close(&ss, server);
 	t_x11_env_free(&fs, &proc, &ss);
@@ -3270,7 +3270,7 @@ TEST(display_x11_direct_init_keyboard_mapping_rejected)
 	t_x11_script_setup_data_keyboard_atoms(
 		&ss, server, 1, setup, sizeof(setup), keyboard_reply, sizeof(keyboard_reply), atom_reply, sizeof(atom_reply));
 	log_set_quiet(0, 1);
-	EXPECT_EQ(display_init(&display, drv, &fs, &proc, &ss, ALLOC_STD), NULL);
+	EXPECT_NULL(display_init(&display, drv, &fs, &proc, &ss, ALLOC_STD));
 	log_set_quiet(0, 0);
 	sock_close(&ss, server);
 	t_x11_env_free(&fs, &proc, &ss);
@@ -3303,7 +3303,7 @@ TEST(display_x11_direct_init_keyboard_mapping_invalid)
 	t_x11_script_setup_data_keyboard_atoms(
 		&ss, server, 1, setup, sizeof(setup), keyboard_reply, sizeof(keyboard_reply), atom_reply, sizeof(atom_reply));
 	log_set_quiet(0, 1);
-	EXPECT_EQ(display_init(&display, drv, &fs, &proc, &ss, ALLOC_STD), NULL);
+	EXPECT_NULL(display_init(&display, drv, &fs, &proc, &ss, ALLOC_STD));
 	log_set_quiet(0, 0);
 	sock_close(&ss, server);
 	t_x11_env_free(&fs, &proc, &ss);
@@ -3333,7 +3333,7 @@ TEST(display_x11_direct_init_keyboard_mapping_data_read_failure)
 	t_x11_keyboard_reply(keyboard_reply, 1, 1, 33);
 	t_x11_script_setup_data_keyboard_atoms(&ss, server, 1, setup, sizeof(setup), keyboard_reply, sizeof(keyboard_reply), NULL, 0);
 	log_set_quiet(0, 1);
-	EXPECT_EQ(display_init(&display, drv, &fs, &proc, &ss, ALLOC_STD), NULL);
+	EXPECT_NULL(display_init(&display, drv, &fs, &proc, &ss, ALLOC_STD));
 	log_set_quiet(0, 0);
 	sock_close(&ss, server);
 	t_x11_env_free(&fs, &proc, &ss);
@@ -3362,7 +3362,7 @@ TEST(display_x11_direct_init_keyboard_mapping_alloc_failure)
 	t_x11_setup_data(setup, sizeof(setup), 1, 0);
 	t_x11_script_setup_data(&ss, server, 1, setup, sizeof(setup));
 	log_set_quiet(0, 1);
-	EXPECT_EQ(display_init(&display, drv, &fs, &proc, &ss, t_alloc(&state)), NULL);
+	EXPECT_NULL(display_init(&display, drv, &fs, &proc, &ss, t_alloc(&state)));
 	log_set_quiet(0, 0);
 	sock_close(&ss, server);
 	t_x11_env_free(&fs, &proc, &ss);
@@ -3393,7 +3393,7 @@ TEST(display_x11_direct_init_modifier_mapping_read_failure)
 	t_x11_keyboard_mapping(&keyboard);
 	t_x11_script_setup_data_keyboard_atoms(&ss, server, 1, setup, sizeof(setup), keyboard.data, keyboard.used, NULL, 0);
 	log_set_quiet(0, 1);
-	EXPECT_EQ(display_init(&display, drv, &fs, &proc, &ss, ALLOC_STD), NULL);
+	EXPECT_NULL(display_init(&display, drv, &fs, &proc, &ss, ALLOC_STD));
 	log_set_quiet(0, 0);
 	buf_free(&keyboard);
 	sock_close(&ss, server);
@@ -3428,7 +3428,7 @@ TEST(display_x11_direct_init_modifier_mapping_rejected)
 	buf_add(&mapping, sizeof(modifier_reply), modifier_reply, NULL);
 	t_x11_script_setup_data_keyboard_atoms(&ss, server, 1, setup, sizeof(setup), mapping.data, mapping.used, NULL, 0);
 	log_set_quiet(0, 1);
-	EXPECT_EQ(display_init(&display, drv, &fs, &proc, &ss, ALLOC_STD), NULL);
+	EXPECT_NULL(display_init(&display, drv, &fs, &proc, &ss, ALLOC_STD));
 	log_set_quiet(0, 0);
 	buf_free(&mapping);
 	sock_close(&ss, server);
@@ -3463,7 +3463,7 @@ TEST(display_x11_direct_init_modifier_mapping_invalid)
 	buf_add(&mapping, sizeof(modifier_reply), modifier_reply, NULL);
 	t_x11_script_setup_data_keyboard_atoms(&ss, server, 1, setup, sizeof(setup), mapping.data, mapping.used, NULL, 0);
 	log_set_quiet(0, 1);
-	EXPECT_EQ(display_init(&display, drv, &fs, &proc, &ss, ALLOC_STD), NULL);
+	EXPECT_NULL(display_init(&display, drv, &fs, &proc, &ss, ALLOC_STD));
 	log_set_quiet(0, 0);
 	buf_free(&mapping);
 	sock_close(&ss, server);
@@ -3498,7 +3498,7 @@ TEST(display_x11_direct_init_modifier_mapping_data_read_failure)
 	buf_add(&mapping, sizeof(modifier_reply), modifier_reply, NULL);
 	t_x11_script_setup_data_keyboard_atoms(&ss, server, 1, setup, sizeof(setup), mapping.data, mapping.used, NULL, 0);
 	log_set_quiet(0, 1);
-	EXPECT_EQ(display_init(&display, drv, &fs, &proc, &ss, ALLOC_STD), NULL);
+	EXPECT_NULL(display_init(&display, drv, &fs, &proc, &ss, ALLOC_STD));
 	log_set_quiet(0, 0);
 	buf_free(&mapping);
 	sock_close(&ss, server);
@@ -3532,7 +3532,7 @@ TEST(display_x11_direct_init_modifier_mapping_alloc_failure)
 	t_x11_modifier_mapping(&mapping);
 	t_x11_script_setup_data_keyboard_atoms(&ss, server, 1, setup, sizeof(setup), mapping.data, mapping.used, NULL, 0);
 	log_set_quiet(0, 1);
-	EXPECT_EQ(display_init(&display, drv, &fs, &proc, &ss, t_alloc(&state)), NULL);
+	EXPECT_NULL(display_init(&display, drv, &fs, &proc, &ss, t_alloc(&state)));
 	log_set_quiet(0, 0);
 	buf_free(&mapping);
 	sock_close(&ss, server);
@@ -3570,7 +3570,7 @@ TEST(display_x11_direct_init_empty_modifier_mapping)
 	buf_add(&mapping, sizeof(modifier_reply), modifier_reply, NULL);
 	t_x11_script_setup_data_keyboard_atoms(
 		&ss, server, 1, setup, sizeof(setup), mapping.data, mapping.used, atom_reply, sizeof(atom_reply));
-	EXPECT_EQ(display_init(&display, drv, &fs, &proc, &ss, ALLOC_STD), &display);
+	EXPECT_PTR(display_init(&display, drv, &fs, &proc, &ss, ALLOC_STD), &display);
 	sock_accept(&ss, server, &peer);
 	display_free(&display);
 	sock_close(&ss, peer);
@@ -3601,7 +3601,7 @@ TEST(display_x11_direct_init_intern_atom_read_failure)
 	t_x11_setup_data(setup, sizeof(setup), 1, 0);
 	t_x11_script_setup_data_atoms(&ss, server, 1, setup, sizeof(setup), NULL, 0);
 	log_set_quiet(0, 1);
-	EXPECT_EQ(display_init(&display, drv, &fs, &proc, &ss, ALLOC_STD), NULL);
+	EXPECT_NULL(display_init(&display, drv, &fs, &proc, &ss, ALLOC_STD));
 	log_set_quiet(0, 0);
 
 	sock_close(&ss, server);
@@ -3632,7 +3632,7 @@ TEST(display_x11_direct_init_intern_atom_rejected_reply)
 	t_x11_atom_reply(atom_reply, 0, 0);
 	t_x11_script_setup_data_atoms(&ss, server, 1, setup, sizeof(setup), atom_reply, sizeof(atom_reply));
 	log_set_quiet(0, 1);
-	EXPECT_EQ(display_init(&display, drv, &fs, &proc, &ss, ALLOC_STD), NULL);
+	EXPECT_NULL(display_init(&display, drv, &fs, &proc, &ss, ALLOC_STD));
 	log_set_quiet(0, 0);
 
 	sock_close(&ss, server);
@@ -3663,7 +3663,7 @@ TEST(display_x11_direct_init_intern_atom_missing)
 	t_x11_atom_reply(atom_reply, 1, 0);
 	t_x11_script_setup_data_atoms(&ss, server, 1, setup, sizeof(setup), atom_reply, sizeof(atom_reply));
 	log_set_quiet(0, 1);
-	EXPECT_EQ(display_init(&display, drv, &fs, &proc, &ss, ALLOC_STD), NULL);
+	EXPECT_NULL(display_init(&display, drv, &fs, &proc, &ss, ALLOC_STD));
 	log_set_quiet(0, 0);
 
 	sock_close(&ss, server);
@@ -3689,7 +3689,7 @@ TEST(display_x11_direct_init_socket_open_failure)
 	sock_init(&ss, 0, 1, t_alloc(&state));
 	proc.hostname = STR("host");
 	t_x11_set_display(&proc, STRV(":0"));
-	EXPECT_EQ(display_init(&display, drv, &fs, &proc, &ss, ALLOC_STD), NULL);
+	EXPECT_NULL(display_init(&display, drv, &fs, &proc, &ss, ALLOC_STD));
 	log_set_quiet(0, 0);
 	t_x11_env_free(&fs, &proc, &ss);
 
@@ -3723,7 +3723,7 @@ TEST(display_x11_direct_window_init_resource_exhausted)
 	display_init(&display, drv, &fs, &proc, &ss, ALLOC_STD);
 	window_init(&first, &display, &(window_config_t){.width = 640, .height = 480});
 	window_init(&second, &display, &(window_config_t){.width = 640, .height = 480});
-	EXPECT_EQ(window_init(&third, &display, &(window_config_t){.width = 640, .height = 480}), NULL);
+	EXPECT_NULL(window_init(&third, &display, &(window_config_t){.width = 640, .height = 480}));
 	log_set_quiet(0, 0);
 
 	window_free(&second);
@@ -3760,7 +3760,7 @@ TEST(display_x11_direct_window_init_colormap_resource_exhausted)
 	log_set_quiet(0, 1);
 	display_init(&display, drv, &fs, &proc, &ss, ALLOC_STD);
 	window_init(&first, &display, &(window_config_t){.width = 640, .height = 480});
-	EXPECT_EQ(window_init(&second, &display, &(window_config_t){.width = 640, .height = 480, .depth = 24, .visual = 0x21}), NULL);
+	EXPECT_NULL(window_init(&second, &display, &(window_config_t){.width = 640, .height = 480, .depth = 24, .visual = 0x21}));
 	log_set_quiet(0, 0);
 
 	window_free(&first);
@@ -3794,7 +3794,7 @@ TEST(display_x11_direct_window_init_colormap_write_failure)
 	display_init(&display, drv, &fs, &proc, &ss, ALLOC_STD);
 	sock_accept(&ss, server, &peer);
 	sock_close(&ss, peer);
-	EXPECT_EQ(window_init(&window, &display, &(window_config_t){.width = 640, .height = 480, .depth = 24, .visual = 0x21}), NULL);
+	EXPECT_NULL(window_init(&window, &display, &(window_config_t){.width = 640, .height = 480, .depth = 24, .visual = 0x21}));
 	log_set_quiet(0, 0);
 
 	display_free(&display);
@@ -3827,7 +3827,7 @@ TEST(display_x11_direct_window_init_create_write_failure)
 	display_init(&display, drv, &fs, &proc, &ss, ALLOC_STD);
 	sock_accept(&ss, server, &peer);
 	sock_close(&ss, peer);
-	EXPECT_EQ(window_init(&window, &display, &(window_config_t){.width = 640, .height = 480}), NULL);
+	EXPECT_NULL(window_init(&window, &display, &(window_config_t){.width = 640, .height = 480}));
 	log_set_quiet(0, 0);
 
 	display_free(&display);
@@ -3912,7 +3912,7 @@ TEST(display_x11_direct_window_init_wm_protocols_write_failure)
 	sock_read_all(&ss, peer, atom_request7, sizeof(atom_request7));
 	sock_read_all(&ss, peer, atom_request8, sizeof(atom_request8));
 	sock_setopt(&ss, peer, SOCK_OPT_RCVBUF, &rcvbuf, sizeof(rcvbuf));
-	EXPECT_EQ(window_init(&window, &display, &(window_config_t){.width = 640, .height = 480}), NULL);
+	EXPECT_NULL(window_init(&window, &display, &(window_config_t){.width = 640, .height = 480}));
 	log_set_quiet(0, 0);
 
 	display_free(&display);
@@ -3950,8 +3950,8 @@ TEST(display_x11_direct_window_free_destroy_write_failure)
 	window_free(&window);
 	log_set_quiet(0, 0);
 
-	EXPECT_EQ(window.display, NULL);
-	EXPECT_EQ(window.data, NULL);
+	EXPECT_NULL(window.display);
+	EXPECT_NULL(window.data);
 
 	display_free(&display);
 	sock_close(&ss, server);
@@ -3979,7 +3979,7 @@ TEST(display_x11_direct_window_free_colormap_write_failure)
 				 &ss,
 				 &display,
 				 &window,
-				 &(window_config_t){.width = 640, .height = 480, .depth = 24, .visual = 0x21},
+				 &(window_config_t){.width = 640, .height = 480, .depth = 24, .visual = 0x21u},
 				 &server,
 				 &peer);
 	t_x11_drain_display_init_requests(&ss, peer);
@@ -3992,8 +3992,8 @@ TEST(display_x11_direct_window_free_colormap_write_failure)
 	window_free(&window);
 	log_set_quiet(0, 0);
 
-	EXPECT_EQ(window.display, NULL);
-	EXPECT_EQ(window.data, NULL);
+	EXPECT_NULL(window.display);
+	EXPECT_NULL(window.data);
 
 	display_free(&display);
 	sock_close(&ss, server);
@@ -4024,7 +4024,7 @@ TEST(display_x11_direct_init_valid_authority_writes_cookie)
 	t_x11_write_authority(&fs);
 	t_x11_listen(&ss, &server);
 	log_set_quiet(0, 1);
-	EXPECT_EQ(display_init(&display, drv, &fs, &proc, &ss, ALLOC_STD), NULL);
+	EXPECT_NULL(display_init(&display, drv, &fs, &proc, &ss, ALLOC_STD));
 	log_set_quiet(0, 0);
 
 	sock_accept(&ss, server, &peer);
@@ -4064,9 +4064,9 @@ TEST(display_x11_direct_visual_depth_returns_setup_depth)
 	t_x11_set_xauthority(&proc);
 	t_x11_write_authority(&fs);
 	t_x11_listen(&ss, &server);
-	t_x11_script_setup_visual(&ss, server, 0x21, 32);
+	t_x11_script_setup_visual(&ss, server, 0x21u, 32);
 	log_set_quiet(0, 1);
-	EXPECT_EQ(display_init(&display, drv, &fs, &proc, &ss, ALLOC_STD), &display);
+	EXPECT_PTR(display_init(&display, drv, &fs, &proc, &ss, ALLOC_STD), &display);
 	log_set_quiet(0, 0);
 	EXPECT_EQ(display_visual_depth(&display, 0x21, &depth), 0);
 	EXPECT_EQ(depth, 32);
@@ -4094,9 +4094,9 @@ TEST(display_x11_direct_visual_depth_rejects_unknown_visual)
 	t_x11_set_xauthority(&proc);
 	t_x11_write_authority(&fs);
 	t_x11_listen(&ss, &server);
-	t_x11_script_setup_visual(&ss, server, 0x21, 32);
+	t_x11_script_setup_visual(&ss, server, 0x21u, 32);
 	log_set_quiet(0, 1);
-	EXPECT_EQ(display_init(&display, drv, &fs, &proc, &ss, ALLOC_STD), &display);
+	EXPECT_PTR(display_init(&display, drv, &fs, &proc, &ss, ALLOC_STD), &display);
 	EXPECT_EQ(display_visual_depth(&display, 0x22, &(u8){0}), 1);
 	log_set_quiet(0, 0);
 
@@ -4129,7 +4129,7 @@ TEST(display_x11_direct_ext_init_writes_query)
 	cbuf_set_u8le(reply, 10, 80);
 	cbuf_set_u8le(reply, 11, 160);
 	sock_write_all(&ss, peer, reply, sizeof(reply));
-	EXPECT_EQ(display_ext_init(&ext, &display, STRV("RANDR")), &ext);
+	EXPECT_PTR(display_ext_init(&ext, &display, STRV("RANDR")), &ext);
 	EXPECT_EQ(ext.opcode, 130);
 	EXPECT_EQ(ext.first_event, 80);
 	EXPECT_EQ(ext.first_error, 160);
@@ -4192,7 +4192,7 @@ TEST(display_x11_direct_ext_call_reads_reply_data)
 	ext.display = &display;
 	cbuf_set_u8le(response, 0, 1);
 	cbuf_set_u32le(response, 4, 1);
-	cbuf_set_u32le(response, 32, 0x12345678);
+	cbuf_set_u32le(response, 32, 0x12345678u);
 	sock_write_all(&ss, peer, response, sizeof(response));
 	EXPECT_EQ(display_ext_call(&ext, 7, NULL, 0, &reply), 0);
 	EXPECT_EQ(reply.size, 4);
@@ -4224,7 +4224,7 @@ TEST(display_x11_direct_ext_call_accepts_empty_reply)
 	sock_write_all(&ss, peer, response, sizeof(response));
 	EXPECT_EQ(display_ext_call(&ext, 7, NULL, 0, &reply), 0);
 	EXPECT_EQ(reply.size, 0);
-	EXPECT_EQ(reply.data, NULL);
+	EXPECT_NULL(reply.data);
 
 	t_x11_close_display(&fs, &proc, &ss, &display, server, peer);
 
@@ -4248,7 +4248,7 @@ TEST(display_x11_direct_ext_init_rejects_unavailable_extension)
 	t_x11_open_display(drv, &fs, &proc, &ss, &display, &server, &peer);
 	sock_write_all(&ss, peer, response, sizeof(response));
 	log_set_quiet(0, 1);
-	EXPECT_EQ(display_ext_init(&ext, &display, STRV("missing")), NULL);
+	EXPECT_NULL(display_ext_init(&ext, &display, STRV("missing")));
 	log_set_quiet(0, 0);
 
 	t_x11_close_display(&fs, &proc, &ss, &display, server, peer);
@@ -4401,7 +4401,7 @@ TEST(display_x11_direct_init_rejects_truncated_depth)
 	t_x11_listen(&ss, &server);
 	t_x11_script_setup_data(&ss, server, 1, setup, sizeof(setup));
 	log_set_quiet(0, 1);
-	EXPECT_EQ(display_init(&display, drv, &fs, &proc, &ss, ALLOC_STD), NULL);
+	EXPECT_NULL(display_init(&display, drv, &fs, &proc, &ss, ALLOC_STD));
 	log_set_quiet(0, 0);
 
 	sock_close(&ss, server);
@@ -4432,7 +4432,7 @@ TEST(display_x11_direct_init_rejects_truncated_visual)
 	t_x11_listen(&ss, &server);
 	t_x11_script_setup_data(&ss, server, 1, setup, sizeof(setup));
 	log_set_quiet(0, 1);
-	EXPECT_EQ(display_init(&display, drv, &fs, &proc, &ss, ALLOC_STD), NULL);
+	EXPECT_NULL(display_init(&display, drv, &fs, &proc, &ss, ALLOC_STD));
 	log_set_quiet(0, 0);
 
 	sock_close(&ss, server);
@@ -4458,7 +4458,7 @@ TEST(display_x11_direct_init_rejects_visual_alloc_failure)
 	cbuf_set_u8le(setup, 71, 1);
 	cbuf_set_u8le(setup, 72, 24);
 	cbuf_set_u16le(setup, 74, 1);
-	cbuf_set_u32le(setup, 80, 0x21);
+	cbuf_set_u32le(setup, 80, 0x21u);
 	t_x11_env_init(&fs, &proc, &ss);
 	t_x11_set_display(&proc, STRV(":0"));
 	t_x11_set_xauthority(&proc);
@@ -4466,7 +4466,7 @@ TEST(display_x11_direct_init_rejects_visual_alloc_failure)
 	t_x11_listen(&ss, &server);
 	t_x11_script_setup_data(&ss, server, 1, setup, sizeof(setup));
 	log_set_quiet(0, 1);
-	EXPECT_EQ(display_init(&display, drv, &fs, &proc, &ss, t_alloc(&state)), NULL);
+	EXPECT_NULL(display_init(&display, drv, &fs, &proc, &ss, t_alloc(&state)));
 	log_set_quiet(0, 0);
 
 	sock_close(&ss, server);
@@ -4491,7 +4491,7 @@ TEST(display_x11_direct_ext_init_rejects_request_alloc_failure)
 
 	t_x11_open_display(drv, &fs, &proc, &ss, &display, &server, &peer);
 	display.alloc = t_alloc(&state);
-	EXPECT_EQ(display_ext_init(&ext, &display, STRV("RANDR")), NULL);
+	EXPECT_NULL(display_ext_init(&ext, &display, STRV("RANDR")));
 
 	t_x11_close_display(&fs, &proc, &ss, &display, server, peer);
 

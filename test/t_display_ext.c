@@ -79,8 +79,8 @@ TEST(display_ext_init_sets_extension)
 	display_t display = {.drv = &t_driver};
 	display_ext_t ext = {0};
 
-	EXPECT_EQ(display_ext_init(&ext, &display, STRV("test")), &ext);
-	EXPECT_EQ(ext.display, &display);
+	EXPECT_PTR(display_ext_init(&ext, &display, STRV("test")), &ext);
+	EXPECT_PTR(ext.display, &display);
 	EXPECT_EQ(ext.opcode, 128);
 	EXPECT_EQ(ext.first_event, 64);
 	EXPECT_EQ(ext.first_error, 32);
@@ -98,8 +98,8 @@ TEST(display_ext_init_clears_failed_extension)
 	display_t display = {.drv = &t_driver};
 	display_ext_t ext = {.opcode = 1, .first_event = 2, .first_error = 3};
 
-	EXPECT_EQ(display_ext_init(&ext, &display, STRV("test")), NULL);
-	EXPECT_EQ(ext.display, NULL);
+	EXPECT_NULL(display_ext_init(&ext, &display, STRV("test")));
+	EXPECT_NULL(ext.display);
 	EXPECT_EQ(ext.opcode, 0);
 	EXPECT_EQ(ext.first_event, 0);
 	EXPECT_EQ(ext.first_error, 0);
@@ -116,12 +116,12 @@ TEST(display_ext_init_rejects_invalid_arguments)
 	display_t no_init	= {.drv = &driver};
 	display_ext_t ext	= {0};
 
-	EXPECT_EQ(display_ext_init(NULL, &no_init, STRV("test")), NULL);
-	EXPECT_EQ(display_ext_init(&ext, NULL, STRV("test")), NULL);
-	EXPECT_EQ(display_ext_init(&ext, &no_driver, STRV("test")), NULL);
-	EXPECT_EQ(display_ext_init(&ext, &no_init, STRV("test")), NULL);
-	EXPECT_EQ(display_ext_init(&ext, &(display_t){.drv = &t_driver}, (strv_t){0}), NULL);
-	EXPECT_EQ(display_ext_init(&ext, &(display_t){.drv = &t_driver}, STRVN("", 0)), NULL);
+	EXPECT_NULL(display_ext_init(NULL, &no_init, STRV("test")));
+	EXPECT_NULL(display_ext_init(&ext, NULL, STRV("test")));
+	EXPECT_NULL(display_ext_init(&ext, &no_driver, STRV("test")));
+	EXPECT_NULL(display_ext_init(&ext, &no_init, STRV("test")));
+	EXPECT_NULL(display_ext_init(&ext, &(display_t){.drv = &t_driver}, (strv_t){0}));
+	EXPECT_NULL(display_ext_init(&ext, &(display_t){.drv = &t_driver}, STRVN("", 0)));
 
 	END;
 }
@@ -184,7 +184,7 @@ TEST(display_ext_call_sets_reply)
 	EXPECT_EQ(display_ext_call(&ext, 2, NULL, 0, &reply), 0);
 	EXPECT_EQ(reply.header[0], 1);
 	EXPECT_EQ(reply.size, 4);
-	EXPECT_NE(reply.data, NULL);
+	EXPECT_NOT_NULL(reply.data);
 	EXPECT_EQ(t_calls, 1);
 	display_ext_reply_free(&reply);
 
@@ -204,7 +204,7 @@ TEST(display_ext_call_frees_failed_reply)
 	EXPECT_EQ(display_ext_call(&ext, 2, NULL, 0, &reply), 1);
 	EXPECT_EQ(reply.header[0], 0);
 	EXPECT_EQ(reply.size, 0);
-	EXPECT_EQ(reply.data, NULL);
+	EXPECT_NULL(reply.data);
 
 	END;
 }
@@ -237,7 +237,7 @@ TEST(display_ext_reply_free_clears_reply)
 
 	display_ext_reply_free(&reply);
 	EXPECT_EQ(reply.header[0], 0);
-	EXPECT_EQ(reply.data, NULL);
+	EXPECT_NULL(reply.data);
 	EXPECT_EQ(reply.size, 0);
 
 	END;

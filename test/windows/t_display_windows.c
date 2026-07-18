@@ -372,7 +372,7 @@ TEST(display_windows_driver_is_registered)
 {
 	START;
 
-	EXPECT_NE(t_windows_driver(), NULL);
+	EXPECT_NOT_NULL(t_windows_driver());
 
 	END;
 }
@@ -411,8 +411,8 @@ TEST(display_windows_init_fails_without_symbols)
 	display_t display     = {0};
 	display_driver_t *drv = t_windows_driver();
 
-	EXPECT_NE(drv, NULL);
-	EXPECT_EQ(display_init(&display, drv, &fs, &proc, &ss, ALLOC_STD), NULL);
+	EXPECT_NOT_NULL(drv);
+	EXPECT_NULL(display_init(&display, drv, &fs, &proc, &ss, ALLOC_STD));
 
 	fs_free(&fs);
 	proc_free(&proc);
