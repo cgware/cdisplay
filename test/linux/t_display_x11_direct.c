@@ -757,17 +757,138 @@ TEST(display_x11_direct_window_init_null_window)
 	END;
 }
 
-TEST(display_x11_direct_window_init_alloc_failure)
+TEST(display_x11_direct_window_init_rejects_missing_display_data)
 {
 	START;
 
 	display_driver_t *drv = t_x11_driver();
-	t_alloc_t state	      = {.fail_alloc_after = 1};
-	display_t display     = {.alloc = t_alloc(&state)};
+	display_t display     = {0};
 	window_t wnd	      = {.display = &display};
 
 	EXPECT_NOT_NULL(drv);
 	EXPECT_EQ(drv->window_init(&wnd, &(window_config_t){.width = 640, .height = 480}), 1);
+
+	END;
+}
+
+TEST(display_x11_direct_window_init_slot_alloc_failure)
+{
+	START;
+
+	display_driver_t *drv  = t_x11_driver();
+	fs_t fs		       = {0};
+	proc_t proc	       = {0};
+	sock_t ss	       = {0};
+	display_t display      = {0};
+	window_t windows[8]    = {0};
+	window_t failed_window = {0};
+	void *server	       = NULL;
+	void *peer	       = NULL;
+	t_alloc_t state	       = {0};
+
+	t_x11_env_init(&fs, &proc, &ss);
+	t_x11_set_display(&proc, STRV(":0"));
+	t_x11_set_xauthority(&proc);
+	t_x11_write_authority(&fs);
+	t_x11_listen(&ss, &server);
+	t_x11_script_setup(&ss, server);
+	log_set_quiet(0, 1);
+	EXPECT_NOT_NULL(display_init(&display, drv, &fs, &proc, &ss, t_alloc(&state)));
+	log_set_quiet(0, 0);
+	sock_accept(&ss, server, &peer);
+
+	for (size_t i = 0; i < sizeof(windows) / sizeof(windows[0]); ++i) {
+		EXPECT_NOT_NULL(window_init(&windows[i], &display, &(window_config_t){.width = 640, .height = 480}));
+	}
+
+	state.fail_realloc = 1;
+	EXPECT_NULL(window_init(&failed_window, &display, &(window_config_t){.width = 640, .height = 480}));
+
+	for (size_t i = 0; i < sizeof(windows) / sizeof(windows[0]); ++i) {
+		window_free(&windows[i]);
+	}
+	display_free(&display);
+	sock_close(&ss, peer);
+	sock_close(&ss, server);
+	t_x11_env_free(&fs, &proc, &ss);
+
+	END;
+}
+
+TEST(display_x11_direct_window_data_rejects_released_slot)
+{
+	START;
+
+	display_driver_t *drv = t_x11_driver();
+	fs_t fs		      = {0};
+	proc_t proc	      = {0};
+	sock_t ss	      = {0};
+	display_t display     = {0};
+	window_t window	      = {0};
+	void *server	      = NULL;
+	void *peer	      = NULL;
+
+	t_x11_env_init(&fs, &proc, &ss);
+	t_x11_set_display(&proc, STRV(":0"));
+	t_x11_set_xauthority(&proc);
+	t_x11_write_authority(&fs);
+	t_x11_listen(&ss, &server);
+	t_x11_script_setup(&ss, server);
+	log_set_quiet(0, 1);
+	EXPECT_NOT_NULL(display_init(&display, drv, &fs, &proc, &ss, ALLOC_STD));
+	log_set_quiet(0, 0);
+	sock_accept(&ss, server, &peer);
+
+	EXPECT_NOT_NULL(window_init(&window, &display, &(window_config_t){.width = 640, .height = 480}));
+	void *slot = window.data;
+	EXPECT_EQ(drv->window_free(&window), 0);
+	window.data = slot;
+	EXPECT_EQ(drv->window_id(&window), 0);
+
+	display_free(&display);
+	sock_close(&ss, peer);
+	sock_close(&ss, server);
+	t_x11_env_free(&fs, &proc, &ss);
+
+	END;
+}
+
+TEST(display_x11_direct_window_init_reuses_released_slot)
+{
+	START;
+
+	display_driver_t *drv = t_x11_driver();
+	fs_t fs		      = {0};
+	proc_t proc	      = {0};
+	sock_t ss	      = {0};
+	display_t display     = {0};
+	window_t first	      = {0};
+	window_t second	      = {0};
+	void *server	      = NULL;
+	void *peer	      = NULL;
+
+	t_x11_env_init(&fs, &proc, &ss);
+	t_x11_set_display(&proc, STRV(":0"));
+	t_x11_set_xauthority(&proc);
+	t_x11_write_authority(&fs);
+	t_x11_listen(&ss, &server);
+	t_x11_script_setup(&ss, server);
+	log_set_quiet(0, 1);
+	EXPECT_NOT_NULL(display_init(&display, drv, &fs, &proc, &ss, ALLOC_STD));
+	log_set_quiet(0, 0);
+	sock_accept(&ss, server, &peer);
+
+	EXPECT_NOT_NULL(window_init(&first, &display, &(window_config_t){.width = 640, .height = 480}));
+	void *slot = first.data;
+	window_free(&first);
+	EXPECT_NOT_NULL(window_init(&second, &display, &(window_config_t){.width = 640, .height = 480}));
+	EXPECT_EQ(second.data, slot);
+
+	window_free(&second);
+	display_free(&display);
+	sock_close(&ss, peer);
+	sock_close(&ss, server);
+	t_x11_env_free(&fs, &proc, &ss);
 
 	END;
 }
@@ -2361,6 +2482,38 @@ TEST(display_x11_direct_poll_event_configure_notify)
 	END;
 }
 
+TEST(display_x11_direct_poll_event_skips_removed_window)
+{
+	START;
+
+	display_driver_t *drv = t_x11_driver();
+	fs_t fs		      = {0};
+	proc_t proc	      = {0};
+	sock_t ss	      = {0};
+	display_t display     = {0};
+	window_t first	      = {0};
+	window_t second	      = {0};
+	void *server	      = NULL;
+	void *peer	      = NULL;
+
+	t_x11_open_window(drv, &fs, &proc, &ss, &display, &first, &server, &peer);
+	EXPECT_NOT_NULL(window_init(&second, &display, &(window_config_t){.width = 640, .height = 480}));
+	window_free(&first);
+	t_x11_write_configure_event(&ss, peer, window_id(&second), 10, 20, 640, 480);
+
+	EXPECT_EQ(display_poll_events(&display), 0);
+	EXPECT_EQ(t_x11_event.type, DISPLAY_EVENT_RESIZE);
+	EXPECT_EQ(t_x11_event.window, window_id(&second));
+
+	window_free(&second);
+	display_free(&display);
+	sock_close(&ss, peer);
+	sock_close(&ss, server);
+	t_x11_env_free(&fs, &proc, &ss);
+
+	END;
+}
+
 TEST(display_x11_direct_poll_event_null_display)
 {
 	START;
@@ -3756,7 +3909,7 @@ TEST(display_x11_direct_init_keyboard_mapping_alloc_failure)
 	display_t display     = {0};
 	void *server	      = NULL;
 	u8 setup[72]	      = {0};
-	t_alloc_t state	      = {.fail_alloc_after = 4};
+	t_alloc_t state	      = {.fail_alloc_after = 5};
 
 	t_x11_env_init(&fs, &proc, &ss);
 	t_x11_set_display(&proc, STRV(":0"));
@@ -3923,7 +4076,7 @@ TEST(display_x11_direct_init_modifier_mapping_alloc_failure)
 	void *server	      = NULL;
 	u8 setup[72]	      = {0};
 	buf_t mapping	      = {0};
-	t_alloc_t state	      = {.fail_alloc_after = 5};
+	t_alloc_t state	      = {.fail_alloc_after = 6};
 
 	t_x11_env_init(&fs, &proc, &ss);
 	t_x11_set_display(&proc, STRV(":0"));
@@ -4854,7 +5007,7 @@ TEST(display_x11_direct_init_rejects_visual_alloc_failure)
 	proc_t proc	      = {0};
 	sock_t ss	      = {0};
 	display_t display     = {0};
-	t_alloc_t state	      = {.fail_alloc_after = 4};
+	t_alloc_t state	      = {.fail_alloc_after = 5};
 	void *server	      = NULL;
 	u8 setup[104]	      = {0};
 
@@ -5137,7 +5290,10 @@ STEST(display_x11_direct)
 	RUN(display_x11_direct_init_alloc_failure);
 	RUN(display_x11_direct_free_null_display);
 	RUN(display_x11_direct_window_init_null_window);
-	RUN(display_x11_direct_window_init_alloc_failure);
+	RUN(display_x11_direct_window_init_rejects_missing_display_data);
+	RUN(display_x11_direct_window_init_slot_alloc_failure);
+	RUN(display_x11_direct_window_data_rejects_released_slot);
+	RUN(display_x11_direct_window_init_reuses_released_slot);
 	RUN(display_x11_direct_window_free_null_window);
 	RUN(display_x11_direct_window_id_null_data);
 	RUN(display_x11_direct_window_native_null_window);
@@ -5190,6 +5346,7 @@ STEST(display_x11_direct)
 	RUN(display_x11_direct_poll_event_buffers_partial_event);
 	RUN(display_x11_direct_poll_event_read_failure);
 	RUN(display_x11_direct_poll_event_configure_notify);
+	RUN(display_x11_direct_poll_event_skips_removed_window);
 	RUN(display_x11_direct_poll_event_null_display);
 	RUN(display_x11_direct_poll_event_null_event);
 	RUN(display_x11_direct_poll_event_get_flags_failure);

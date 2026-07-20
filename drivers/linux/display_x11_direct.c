@@ -1,5 +1,6 @@
 #include "display_driver.h"
 
+#include "arr.h"
 #include "buf.h"
 #include "cbuf.h"
 #include "cerr.h"
@@ -36,6 +37,7 @@ typedef struct display_x11_direct_s {
 	display_modifier_t modifiers[8];
 	u8 event_data[32];
 	size_t event_used;
+	arr_t windows;
 } display_x11_direct_t;
 
 typedef struct window_x11_s {
@@ -51,6 +53,11 @@ typedef struct window_x11_s {
 	int mapped;
 } window_x11_t;
 
+typedef struct window_x11_slot_s {
+	int used;
+	window_x11_t window;
+} window_x11_slot_t;
+
 enum {
 	X11_PAD_SIZE		    = 4,
 	X11_CONNECTION_SETUP_SIZE   = 12,
@@ -65,6 +72,60 @@ enum {
 	X11_EVENT_IGNORED	    = 2,
 	X11_EVENT_NONE		    = 3,
 };
+
+static window_x11_t *display_x11_direct_window_data(window_t *wnd)
+{
+	if (wnd == NULL || wnd->display == NULL || wnd->display->data == NULL || wnd->data == NULL) {
+		return NULL;
+	}
+
+	display_x11_direct_t *dx11 = wnd->display->data;
+	uint id			   = (uint)(uintptr_t)wnd->data - 1;
+	window_x11_slot_t *slot	   = arr_get(&dx11->windows, id);
+	if (slot == NULL || !slot->used) {
+		return NULL;
+	}
+
+	return &slot->window;
+}
+
+static window_x11_t *display_x11_direct_window_alloc(window_t *wnd)
+{
+	display_x11_direct_t *dx11 = wnd->display->data;
+	window_x11_slot_t *slot	   = NULL;
+	uint id			   = 0;
+
+	for (; id < dx11->windows.cnt; ++id) {
+		slot = arr_get(&dx11->windows, id);
+		if (slot != NULL && !slot->used) {
+			break;
+		}
+	}
+
+	if (id == dx11->windows.cnt) {
+		slot = arr_add(&dx11->windows, &id);
+		if (slot == NULL) {
+			return NULL;
+		}
+	}
+
+	mem_set(slot, 0, sizeof(*slot));
+	slot->used = 1;
+	wnd->data  = (void *)(uintptr_t)(id + 1);
+
+	return &slot->window;
+}
+
+static void display_x11_direct_window_release(window_t *wnd)
+{
+	display_x11_direct_t *dx11 = wnd->display->data;
+	uint id			   = (uint)(uintptr_t)wnd->data - 1;
+	window_x11_slot_t *slot	   = arr_get(&dx11->windows, id);
+	if (slot != NULL) {
+		mem_set(slot, 0, sizeof(*slot));
+	}
+	wnd->data = NULL;
+}
 
 enum {
 	X11_QUERY_EXTENSION = 98,
@@ -957,7 +1018,7 @@ static int create_colormap(window_t *wnd, u32 visual)
 	u8 request[X_CREATE_COLORMAP_REQUEST_SIZE] = {0};
 
 	display_x11_direct_t *dx11 = wnd->display->data;
-	window_x11_t *wx11	   = wnd->data;
+	window_x11_t *wx11	   = display_x11_direct_window_data(wnd);
 
 	if (alloc_resource_id(dx11, &wx11->colormap)) {
 		return 1;
@@ -982,7 +1043,7 @@ static int create_colormap(window_t *wnd, u32 visual)
 
 static int free_colormap(window_t *wnd)
 {
-	window_x11_t *wx11 = wnd->data;
+	window_x11_t *wx11 = display_x11_direct_window_data(wnd);
 	if (wx11->colormap == 0) {
 		return 0;
 	}
@@ -1026,7 +1087,7 @@ static int create_window(window_t *wnd, const window_config_t *config)
 	values[value_count++] = border_pixel;
 	values[value_count++] = event_mask;
 
-	window_x11_t *wx11 = wnd->data;
+	window_x11_t *wx11 = display_x11_direct_window_data(wnd);
 	if (alloc_resource_id(dx11, &wx11->id)) {
 		return 1;
 	}
@@ -1150,7 +1211,7 @@ static int set_property_text(window_t *wnd, u32 property, u32 type, strv_t text)
 		return 1;
 	}
 
-	window_x11_t *wx11 = wnd->data;
+	window_x11_t *wx11 = display_x11_direct_window_data(wnd);
 
 	write_change_property_text_request(request, wx11, property, type, text, request_size);
 
@@ -1174,7 +1235,7 @@ static int set_property_u32(window_t *wnd, u32 property, u32 type, const u32 *va
 	u8 request[X_CHANGE_PROPERTY_HEADER_SIZE + MOTIF_WM_HINTS_FIELD_COUNT * sizeof(u32)] = {0};
 	mem_set(request, 0, request_size);
 
-	window_x11_t *wx11 = wnd->data;
+	window_x11_t *wx11 = display_x11_direct_window_data(wnd);
 
 	size_t off = 0;
 	cbuf_write_u8le(request, &off, X_CHANGE_PROPERTY);
@@ -1231,7 +1292,7 @@ static int send_fullscreen_message(window_t *wnd, int fullscreen)
 	u8 request[X_SEND_EVENT_REQUEST_SIZE] = {0};
 	size_t off			      = 0;
 
-	window_x11_t *wx11	   = wnd->data;
+	window_x11_t *wx11	   = display_x11_direct_window_data(wnd);
 	display_x11_direct_t *dx11 = wnd->display->data;
 
 	cbuf_write_u8le(request, &off, X_SEND_EVENT);
@@ -1260,7 +1321,7 @@ static int send_fullscreen_message(window_t *wnd, int fullscreen)
 
 static int set_fullscreen(window_t *wnd, int fullscreen)
 {
-	window_x11_t *wx11 = wnd->data;
+	window_x11_t *wx11 = display_x11_direct_window_data(wnd);
 
 	if (wx11->mapped) {
 		return send_fullscreen_message(wnd, fullscreen);
@@ -1802,7 +1863,7 @@ static int destroy_window(window_t *wnd)
 {
 	u8 request[X_WINDOW_ID_REQUEST_SIZE] = {0};
 
-	window_x11_t *wx11 = wnd->data;
+	window_x11_t *wx11 = display_x11_direct_window_data(wnd);
 
 	size_t off = 0;
 	cbuf_write_u8le(request, &off, X_DESTROY_WINDOW);
@@ -1822,7 +1883,7 @@ static int destroy_window(window_t *wnd)
 
 static int map_window(window_t *wnd)
 {
-	window_x11_t *wx11 = wnd->data;
+	window_x11_t *wx11 = display_x11_direct_window_data(wnd);
 
 	u8 request[X_WINDOW_ID_REQUEST_SIZE] = {0};
 	size_t off			     = 0;
@@ -1843,7 +1904,7 @@ static int map_window(window_t *wnd)
 
 static int unmap_window(window_t *wnd)
 {
-	window_x11_t *wx11 = wnd->data;
+	window_x11_t *wx11 = display_x11_direct_window_data(wnd);
 
 	u8 request[X_WINDOW_ID_REQUEST_SIZE] = {0};
 	size_t off			     = 0;
@@ -1866,7 +1927,7 @@ static int configure_window(window_t *wnd, u32 value_mask, const u32 *values, si
 {
 	u8 request[X_CONFIGURE_WINDOW_REQUEST_SIZE + X11_PAD_SIZE * 4] = {0};
 
-	window_x11_t *wx11 = wnd->data;
+	window_x11_t *wx11 = display_x11_direct_window_data(wnd);
 
 	size_t off = 0;
 	cbuf_write_u8le(request, &off, X_CONFIGURE_WINDOW);
@@ -1958,20 +2019,21 @@ static int display_x11_direct_init(display_t *display)
 	}
 	mem_set(display->data, 0, sizeof(display_x11_direct_t));
 
-	if (open_display(display)) {
-		display_x11_direct_t *dx11 = display->data;
+	display_x11_direct_t *dx11 = display->data;
+	if (arr_init(&dx11->windows, 8, sizeof(window_x11_slot_t), display->alloc) == NULL || open_display(display)) {
 		alloc_free(&display->alloc, dx11->visuals, dx11->visual_count * sizeof(*dx11->visuals));
 		buf_free(&dx11->request);
+		arr_free(&dx11->windows);
 		alloc_free(&display->alloc, display->data, sizeof(display_x11_direct_t));
 		display->data = NULL;
 		return 1;
 	}
 
 	if (init_keys(display) || init_modifiers(display) || init_atoms(display)) {
-		display_x11_direct_t *dx11 = display->data;
 		sock_close(display->ss, dx11->sock);
 		alloc_free(&display->alloc, dx11->visuals, dx11->visual_count * sizeof(*dx11->visuals));
 		buf_free(&dx11->request);
+		arr_free(&dx11->windows);
 		alloc_free(&display->alloc, display->data, sizeof(display_x11_direct_t));
 		display->data = NULL;
 		return 1;
@@ -1998,6 +2060,7 @@ static int display_x11_direct_free(display_t *display)
 	sock_close(display->ss, dx11->sock);
 	alloc_free(&display->alloc, dx11->visuals, dx11->visual_count * sizeof(*dx11->visuals));
 	buf_free(&dx11->request);
+	arr_free(&dx11->windows);
 
 	alloc_free(&display->alloc, display->data, sizeof(display_x11_direct_t));
 
@@ -2006,33 +2069,29 @@ static int display_x11_direct_free(display_t *display)
 
 static int display_x11_direct_window_init(window_t *wnd, const window_config_t *config)
 {
-	if (wnd == NULL || wnd->display == NULL || wnd->display->alloc.alloc == NULL || config == NULL) {
+	if (wnd == NULL || wnd->display == NULL || wnd->display->data == NULL || wnd->display->alloc.alloc == NULL || config == NULL) {
 		return 1;
 	}
 
-	wnd->data = alloc_alloc(&wnd->display->alloc, sizeof(window_x11_t));
-	if (wnd->data == NULL) {
+	window_x11_t *wx11 = display_x11_direct_window_alloc(wnd);
+	if (wx11 == NULL) {
 		return 1;
 	}
-	mem_set(wnd->data, 0, sizeof(window_x11_t));
-	window_x11_t *wx11 = wnd->data;
-	wx11->x		   = config->x;
-	wx11->y		   = config->y;
-	wx11->width	   = config->width;
-	wx11->height	   = config->height;
+	wx11->x	     = config->x;
+	wx11->y	     = config->y;
+	wx11->width  = config->width;
+	wx11->height = config->height;
 
 	if (create_window(wnd, config)) {
 		free_colormap(wnd);
-		alloc_free(&wnd->display->alloc, wnd->data, sizeof(window_x11_t));
-		wnd->data = NULL;
+		display_x11_direct_window_release(wnd);
 		return 1;
 	}
 
 	if (set_wm_protocols(wnd)) {
 		destroy_window(wnd);
 		free_colormap(wnd);
-		alloc_free(&wnd->display->alloc, wnd->data, sizeof(window_x11_t));
-		wnd->data = NULL;
+		display_x11_direct_window_release(wnd);
 		return 1;
 	}
 
@@ -2041,42 +2100,44 @@ static int display_x11_direct_window_init(window_t *wnd, const window_config_t *
 
 static int display_x11_direct_window_free(window_t *wnd)
 {
-	if (wnd == NULL) {
+	window_x11_t *wx11 = display_x11_direct_window_data(wnd);
+	if (wx11 == NULL) {
 		return 1;
 	}
 
 	destroy_window(wnd);
 	free_colormap(wnd);
-	alloc_free(&wnd->display->alloc, wnd->data, sizeof(window_x11_t));
+	display_x11_direct_window_release(wnd);
 
 	return 0;
 }
 
 static u32 display_x11_direct_window_id(window_t *wnd)
 {
-	if (wnd == NULL || wnd->data == NULL) {
+	window_x11_t *wx11 = display_x11_direct_window_data(wnd);
+	if (wx11 == NULL) {
 		return 0;
 	}
 
-	window_x11_t *wx11 = wnd->data;
 	return wx11->id;
 }
 
 static int display_x11_direct_window_native(window_t *wnd, window_native_t *native)
 {
-	if (wnd == NULL || wnd->data == NULL || native == NULL) {
+	window_x11_t *wx11 = display_x11_direct_window_data(wnd);
+	if (wx11 == NULL || native == NULL) {
 		return 1;
 	}
 
-	window_x11_t *wx11 = wnd->data;
-	native->type	   = DISPLAY_NATIVE_X11;
-	native->window	   = (void *)(uintptr_t)wx11->id;
+	native->type   = DISPLAY_NATIVE_X11;
+	native->window = (void *)(uintptr_t)wx11->id;
 	return wx11->id == 0;
 }
 
 static int display_x11_direct_window_set_title(window_t *wnd, strv_t title)
 {
-	if (wnd == NULL || wnd->data == NULL || title.len >= sizeof(((window_x11_t *)0)->title) || (title.data == NULL && title.len > 0)) {
+	window_x11_t *wx11 = display_x11_direct_window_data(wnd);
+	if (wx11 == NULL || title.len >= sizeof(wx11->title) || (title.data == NULL && title.len > 0)) {
 		return 1;
 	}
 
@@ -2086,7 +2147,6 @@ static int display_x11_direct_window_set_title(window_t *wnd, strv_t title)
 		return 1;
 	}
 
-	window_x11_t *wx11 = wnd->data;
 	if (title.len > 0) {
 		mem_copy(wx11->title, sizeof(wx11->title), title.data, title.len);
 	}
@@ -2096,12 +2156,12 @@ static int display_x11_direct_window_set_title(window_t *wnd, strv_t title)
 
 static int display_x11_direct_window_get_title(window_t *wnd, char *title, size_t size)
 {
-	if (wnd == NULL || wnd->data == NULL || title == NULL || size == 0) {
+	window_x11_t *wx11 = display_x11_direct_window_data(wnd);
+	if (wx11 == NULL || title == NULL || size == 0) {
 		return 1;
 	}
 
-	window_x11_t *wx11 = wnd->data;
-	size_t len	   = 0;
+	size_t len = 0;
 	while (len < sizeof(wx11->title) && wx11->title[len] != 0) {
 		len++;
 	}
@@ -2115,7 +2175,8 @@ static int display_x11_direct_window_get_title(window_t *wnd, char *title, size_
 
 static int display_x11_direct_window_set_position(window_t *wnd, u16 x, u16 y)
 {
-	if (wnd == NULL || wnd->data == NULL) {
+	window_x11_t *wx11 = display_x11_direct_window_data(wnd);
+	if (wx11 == NULL) {
 		return 1;
 	}
 
@@ -2125,27 +2186,27 @@ static int display_x11_direct_window_set_position(window_t *wnd, u16 x, u16 y)
 		return 1;
 	}
 
-	window_x11_t *wx11 = wnd->data;
-	wx11->x		   = x;
-	wx11->y		   = y;
+	wx11->x = x;
+	wx11->y = y;
 	return 0;
 }
 
 static int display_x11_direct_window_get_position(window_t *wnd, u16 *x, u16 *y)
 {
-	if (wnd == NULL || wnd->data == NULL || x == NULL || y == NULL) {
+	window_x11_t *wx11 = display_x11_direct_window_data(wnd);
+	if (wx11 == NULL || x == NULL || y == NULL) {
 		return 1;
 	}
 
-	window_x11_t *wx11 = wnd->data;
-	*x		   = wx11->x;
-	*y		   = wx11->y;
+	*x = wx11->x;
+	*y = wx11->y;
 	return 0;
 }
 
 static int display_x11_direct_window_set_size(window_t *wnd, u16 width, u16 height)
 {
-	if (wnd == NULL || wnd->data == NULL) {
+	window_x11_t *wx11 = display_x11_direct_window_data(wnd);
+	if (wx11 == NULL) {
 		return 1;
 	}
 
@@ -2155,27 +2216,27 @@ static int display_x11_direct_window_set_size(window_t *wnd, u16 width, u16 heig
 		return 1;
 	}
 
-	window_x11_t *wx11 = wnd->data;
-	wx11->width	   = width;
-	wx11->height	   = height;
+	wx11->width  = width;
+	wx11->height = height;
 	return 0;
 }
 
 static int display_x11_direct_window_get_size(window_t *wnd, u16 *width, u16 *height)
 {
-	if (wnd == NULL || wnd->data == NULL || width == NULL || height == NULL) {
+	window_x11_t *wx11 = display_x11_direct_window_data(wnd);
+	if (wx11 == NULL || width == NULL || height == NULL) {
 		return 1;
 	}
 
-	window_x11_t *wx11 = wnd->data;
-	*width		   = wx11->width;
-	*height		   = wx11->height;
+	*width	= wx11->width;
+	*height = wx11->height;
 	return 0;
 }
 
 static int display_x11_direct_window_set_borderless(window_t *wnd, int borderless)
 {
-	if (wnd == NULL || wnd->data == NULL) {
+	window_x11_t *wx11 = display_x11_direct_window_data(wnd);
+	if (wx11 == NULL) {
 		return 1;
 	}
 
@@ -2183,25 +2244,25 @@ static int display_x11_direct_window_set_borderless(window_t *wnd, int borderles
 		return 1;
 	}
 
-	window_x11_t *wx11 = wnd->data;
-	wx11->borderless   = borderless != 0;
+	wx11->borderless = borderless != 0;
 	return 0;
 }
 
 static int display_x11_direct_window_get_borderless(window_t *wnd, int *borderless)
 {
-	if (wnd == NULL || wnd->data == NULL || borderless == NULL) {
+	window_x11_t *wx11 = display_x11_direct_window_data(wnd);
+	if (wx11 == NULL || borderless == NULL) {
 		return 1;
 	}
 
-	window_x11_t *wx11 = wnd->data;
-	*borderless	   = wx11->borderless;
+	*borderless = wx11->borderless;
 	return 0;
 }
 
 static int display_x11_direct_window_set_fullscreen(window_t *wnd, int fullscreen)
 {
-	if (wnd == NULL || wnd->data == NULL) {
+	window_x11_t *wx11 = display_x11_direct_window_data(wnd);
+	if (wx11 == NULL) {
 		return 1;
 	}
 
@@ -2209,25 +2270,25 @@ static int display_x11_direct_window_set_fullscreen(window_t *wnd, int fullscree
 		return 1;
 	}
 
-	window_x11_t *wx11 = wnd->data;
-	wx11->fullscreen   = fullscreen != 0;
+	wx11->fullscreen = fullscreen != 0;
 	return 0;
 }
 
 static int display_x11_direct_window_get_fullscreen(window_t *wnd, int *fullscreen)
 {
-	if (wnd == NULL || wnd->data == NULL || fullscreen == NULL) {
+	window_x11_t *wx11 = display_x11_direct_window_data(wnd);
+	if (wx11 == NULL || fullscreen == NULL) {
 		return 1;
 	}
 
-	window_x11_t *wx11 = wnd->data;
-	*fullscreen	   = wx11->fullscreen;
+	*fullscreen = wx11->fullscreen;
 	return 0;
 }
 
 static int display_x11_direct_window_show(window_t *wnd)
 {
-	if (wnd == NULL || wnd->data == NULL) {
+	window_x11_t *wx11 = display_x11_direct_window_data(wnd);
+	if (wx11 == NULL) {
 		return 1;
 	}
 
@@ -2235,14 +2296,14 @@ static int display_x11_direct_window_show(window_t *wnd)
 		return 1;
 	}
 
-	window_x11_t *wx11 = wnd->data;
-	wx11->mapped	   = 1;
+	wx11->mapped = 1;
 	return 0;
 }
 
 static int display_x11_direct_window_hide(window_t *wnd)
 {
-	if (wnd == NULL || wnd->data == NULL) {
+	window_x11_t *wx11 = display_x11_direct_window_data(wnd);
+	if (wx11 == NULL) {
 		return 1;
 	}
 
@@ -2250,8 +2311,7 @@ static int display_x11_direct_window_hide(window_t *wnd)
 		return 1;
 	}
 
-	window_x11_t *wx11 = wnd->data;
-	wx11->mapped	   = 0;
+	wx11->mapped = 0;
 	return 0;
 }
 

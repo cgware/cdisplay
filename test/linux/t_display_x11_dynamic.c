@@ -695,6 +695,7 @@ static void t_x11_dynamic_env_free(fs_t *fs, proc_t *proc, sock_t *ss)
 
 typedef struct t_alloc_s {
 	int fail_alloc;
+	int fail_realloc;
 } t_alloc_t;
 
 static void *t_alloc_alloc(alloc_t *alloc, size_t size)
@@ -708,7 +709,11 @@ static void *t_alloc_alloc(alloc_t *alloc, size_t size)
 
 static int t_alloc_realloc(alloc_t *alloc, void **ptr, size_t *old_size, size_t new_size)
 {
-	(void)alloc;
+	t_alloc_t *state = alloc->priv;
+	if (state->fail_realloc) {
+		return 1;
+	}
+
 	void *data = mem_realloc(*ptr, new_size, *old_size);
 	if (data == NULL) {
 		return 1;
@@ -1615,7 +1620,42 @@ TEST(display_x11_dynamic_window_native_returns_window)
 	END;
 }
 
-TEST(display_x11_dynamic_window_init_alloc_failure)
+TEST(display_x11_dynamic_window_init_slot_alloc_failure)
+{
+	START;
+
+	t_x11_reset();
+	fs_t fs		       = {0};
+	proc_t proc	       = {0};
+	sock_t ss	       = {0};
+	display_t display      = {0};
+	window_t windows[8]    = {0};
+	window_t failed_window = {0};
+	t_alloc_t state	       = {0};
+	t_x11_dynamic_env_init(&fs, &proc, &ss);
+	T_X11_DYNAMIC_DRV();
+	EXPECT_NOT_NULL(display_init(&display, drv, &fs, &proc, &ss, t_alloc(&state)));
+
+	for (size_t i = 0; i < sizeof(windows) / sizeof(windows[0]); ++i) {
+		t_x11.create_window_result = (t_x11_window_t)(0x44u + i);
+		EXPECT_NOT_NULL(window_init(&windows[i], &display, &(window_config_t){.width = 640, .height = 480}));
+	}
+
+	t_x11.create_window_result = 0x99u;
+	state.fail_realloc	   = 1;
+	EXPECT_NULL(window_init(&failed_window, &display, &(window_config_t){.width = 640, .height = 480}));
+
+	for (size_t i = 0; i < sizeof(windows) / sizeof(windows[0]); ++i) {
+		window_free(&windows[i]);
+	}
+
+	display_free(&display);
+	t_x11_dynamic_env_free(&fs, &proc, &ss);
+
+	END;
+}
+
+TEST(display_x11_dynamic_window_data_rejects_released_slot)
 {
 	START;
 
@@ -1625,14 +1665,45 @@ TEST(display_x11_dynamic_window_init_alloc_failure)
 	sock_t ss	  = {0};
 	display_t display = {0};
 	window_t window	  = {0};
-	t_alloc_t state	  = {.fail_alloc = 1};
 	t_x11_dynamic_env_init(&fs, &proc, &ss);
 	T_X11_DYNAMIC_DRV();
-	display_init(&display, drv, &fs, &proc, &ss, ALLOC_STD);
-	display.alloc = t_alloc(&state);
 
-	EXPECT_NULL(window_init(&window, &display, &(window_config_t){.width = 640, .height = 480}));
+	EXPECT_EQ(t_x11_open(&display, &window, &fs, &proc, &ss), 0);
+	void *slot = window.data;
+	EXPECT_EQ(drv->window_free(&window), 0);
+	window.data = slot;
+	EXPECT_EQ(drv->window_id(&window), 0);
 
+	display_free(&display);
+	t_x11_dynamic_env_free(&fs, &proc, &ss);
+
+	END;
+}
+
+TEST(display_x11_dynamic_window_init_reuses_released_slot)
+{
+	START;
+
+	t_x11_reset();
+	fs_t fs		  = {0};
+	proc_t proc	  = {0};
+	sock_t ss	  = {0};
+	display_t display = {0};
+	window_t first	  = {0};
+	window_t second	  = {0};
+	t_x11_dynamic_env_init(&fs, &proc, &ss);
+	T_X11_DYNAMIC_DRV();
+	EXPECT_NOT_NULL(display_init(&display, drv, &fs, &proc, &ss, ALLOC_STD));
+
+	t_x11.create_window_result = 0x44u;
+	EXPECT_NOT_NULL(window_init(&first, &display, &(window_config_t){.width = 640, .height = 480}));
+	void *slot = first.data;
+	window_free(&first);
+	t_x11.create_window_result = 0x55u;
+	EXPECT_NOT_NULL(window_init(&second, &display, &(window_config_t){.width = 640, .height = 480}));
+	EXPECT_EQ(second.data, slot);
+
+	window_free(&second);
 	display_free(&display);
 	t_x11_dynamic_env_free(&fs, &proc, &ss);
 
@@ -3025,7 +3096,9 @@ STEST(display_x11_dynamic)
 	RUN(display_x11_dynamic_window_init_uses_default_background);
 	RUN(display_x11_dynamic_window_init_omits_background);
 	RUN(display_x11_dynamic_window_native_returns_window);
-	RUN(display_x11_dynamic_window_init_alloc_failure);
+	RUN(display_x11_dynamic_window_init_slot_alloc_failure);
+	RUN(display_x11_dynamic_window_data_rejects_released_slot);
+	RUN(display_x11_dynamic_window_init_reuses_released_slot);
 	RUN(display_x11_dynamic_window_init_custom_visual);
 	RUN(display_x11_dynamic_window_init_unknown_visual);
 	RUN(display_x11_dynamic_window_init_empty_visual_result);
