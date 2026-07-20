@@ -15,6 +15,7 @@ static int t_display_poll_events_ret;
 static int t_display_wait_events_ret;
 static int t_display_native_ret;
 static int t_display_native_free_ret;
+static int t_display_available_ret;
 static int t_display_event_calls;
 static display_event_t t_display_event;
 static display_native_t t_display_native;
@@ -76,6 +77,13 @@ static int t_display_native_free_fn(display_t *display, void *data)
 	return t_display_native_free_ret;
 }
 
+static int t_display_available_fn(display_driver_t *driver, proc_t *proc)
+{
+	(void)driver;
+	(void)proc;
+	return t_display_available_ret;
+}
+
 static int t_display_window_init(window_t *window, const window_config_t *config)
 {
 	(void)window;
@@ -116,6 +124,7 @@ static void t_display_reset(void)
 	t_display_wait_events_ret   = 0;
 	t_display_native_ret	    = 0;
 	t_display_native_free_ret   = 0;
+	t_display_available_ret	    = 1;
 	t_display_event_calls	    = 0;
 	t_display_event		    = (display_event_t){0};
 	t_display_native	    = (display_native_t){0};
@@ -670,6 +679,52 @@ TEST(display_driver_list_lists_registered_display_drivers)
 	END;
 }
 
+TEST(display_driver_available_rejects_null_driver)
+{
+	START;
+
+	proc_t proc = {0};
+
+	EXPECT_EQ(display_driver_available(NULL, &proc), 0);
+
+	END;
+}
+
+TEST(display_driver_available_rejects_null_proc)
+{
+	START;
+
+	EXPECT_EQ(display_driver_available(&t_display_driver, NULL), 0);
+
+	END;
+}
+
+TEST(display_driver_available_accepts_missing_hook)
+{
+	START;
+
+	proc_t proc = {0};
+
+	EXPECT_EQ(display_driver_available(&t_display_driver, &proc), 1);
+
+	END;
+}
+
+TEST(display_driver_available_returns_hook_result)
+{
+	START;
+
+	t_display_reset();
+	t_display_available_ret = 0;
+	display_driver_t driver = t_display_driver;
+	driver.available	= t_display_available_fn;
+	proc_t proc		= {0};
+
+	EXPECT_EQ(display_driver_available(&driver, &proc), 0);
+
+	END;
+}
+
 TEST(display_event_type_name_values)
 {
 	START;
@@ -1079,6 +1134,10 @@ STEST(display)
 	RUN(display_driver_find_returns_null_for_missing_driver);
 	RUN(display_driver_find_skips_non_display_driver);
 	RUN(display_driver_list_lists_registered_display_drivers);
+	RUN(display_driver_available_rejects_null_driver);
+	RUN(display_driver_available_rejects_null_proc);
+	RUN(display_driver_available_accepts_missing_hook);
+	RUN(display_driver_available_returns_hook_result);
 	RUN(display_event_type_name_values);
 	RUN(display_key_name_values);
 	RUN(display_mouse_name_values);

@@ -1982,6 +1982,12 @@ static int display_x11_direct_init(display_t *display)
 	return 0;
 }
 
+static int display_x11_direct_available(display_driver_t *driver, proc_t *proc)
+{
+	(void)driver;
+	return proc != NULL && proc_getenv(proc, STRV("DISPLAY")).data != NULL;
+}
+
 static int display_x11_direct_free(display_t *display)
 {
 	if (display == NULL) {
@@ -2152,6 +2158,7 @@ static int display_x11_direct_window_hide(window_t *wnd)
 
 static display_driver_t display_x11_direct = {
 	.name		       = "X11-direct",
+	.available	       = display_x11_direct_available,
 	.init		       = display_x11_direct_init,
 	.free		       = display_x11_direct_free,
 	.poll_events	       = display_x11_direct_poll_events,

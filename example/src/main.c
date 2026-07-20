@@ -252,6 +252,9 @@ int main()
 	int ret	  = 0;
 	u32 count = 0;
 	for (u32 i = 0; i < driver_count; i++) {
+		if (!display_driver_available(drivers[i], &proc)) {
+			continue;
+		}
 		int opened = open_display_driver(&displays[count], drivers[i], &fs, &proc, &ss, count);
 		if (opened < 0) {
 			ret = 1;

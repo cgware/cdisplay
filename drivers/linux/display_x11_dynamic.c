@@ -1147,6 +1147,12 @@ static int display_x11_dynamic_init(display_t *display)
 	return 0;
 }
 
+static int display_x11_dynamic_available(display_driver_t *driver, proc_t *proc)
+{
+	(void)driver;
+	return proc != NULL && proc_getenv(proc, STRV("DISPLAY")).data != NULL;
+}
+
 static int display_x11_dynamic_free(display_t *display)
 {
 	if (display == NULL || display->data == NULL) {
@@ -1445,6 +1451,7 @@ static int display_x11_dynamic_visual_depth(display_t *display, u32 visual, u8 *
 
 static display_driver_t display_x11_dynamic = {
 	.name		       = "X11-dynamic",
+	.available	       = display_x11_dynamic_available,
 	.init		       = display_x11_dynamic_init,
 	.free		       = display_x11_dynamic_free,
 	.poll_events	       = display_x11_dynamic_poll_events,

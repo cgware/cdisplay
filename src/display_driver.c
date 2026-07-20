@@ -33,3 +33,15 @@ u32 display_driver_list(display_driver_t **drivers, u32 capacity)
 
 	return count;
 }
+
+int display_driver_available(display_driver_t *driver, proc_t *proc)
+{
+	if (driver == NULL || proc == NULL) {
+		return 0;
+	}
+	if (driver->available == NULL) {
+		return 1;
+	}
+
+	return driver->available(driver, proc);
+}

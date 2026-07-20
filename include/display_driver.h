@@ -9,6 +9,7 @@
 
 typedef struct display_driver_s {
 	const char *name;
+	int (*available)(struct display_driver_s *driver, proc_t *proc);
 	int (*init)(display_t *display);
 	int (*free)(display_t *display);
 	int (*poll_events)(display_t *display);
@@ -38,6 +39,7 @@ typedef struct display_driver_s {
 
 display_driver_t *display_driver_find(strv_t name);
 u32 display_driver_list(display_driver_t **drivers, u32 capacity);
+int display_driver_available(display_driver_t *driver, proc_t *proc);
 
 void display_emit_event(display_t *display, const display_event_t *event);
 

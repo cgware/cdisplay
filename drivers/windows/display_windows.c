@@ -830,6 +830,13 @@ static int display_windows_init(display_t *display)
 	return 0;
 }
 
+static int display_windows_available(display_driver_t *driver, proc_t *proc)
+{
+	(void)driver;
+	(void)proc;
+	return 1;
+}
+
 static int display_windows_free(display_t *display)
 {
 	if (display == NULL) {
@@ -1207,6 +1214,7 @@ static int display_windows_window_hide(window_t *wnd)
 
 static display_driver_t display_windows = {
 	.name		       = "windows",
+	.available	       = display_windows_available,
 	.init		       = display_windows_init,
 	.free		       = display_windows_free,
 	.poll_events	       = display_windows_poll_events,

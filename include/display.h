@@ -177,6 +177,7 @@ typedef enum display_native_type_e {
 	DISPLAY_NATIVE_NONE,
 	DISPLAY_NATIVE_X11,
 	DISPLAY_NATIVE_WINDOWS,
+	DISPLAY_NATIVE_WAYLAND,
 } display_native_type_t;
 
 typedef struct display_native_s {
