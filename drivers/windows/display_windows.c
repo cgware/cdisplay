@@ -12,9 +12,12 @@ typedef BOOL(WINAPI *destroy_window_t)(HWND);
 typedef BOOL(WINAPI *show_window_t)(HWND, int);
 typedef BOOL(WINAPI *update_window_t)(HWND);
 typedef BOOL(WINAPI *set_window_texta_t)(HWND, LPCSTR);
+typedef int(WINAPI *get_window_text_lengtha_t)(HWND);
+typedef int(WINAPI *get_window_texta_t)(HWND, LPSTR, int);
 typedef BOOL(WINAPI *set_window_pos_t)(HWND, HWND, int, int, int, int, UINT);
 typedef BOOL(WINAPI *adjust_window_rect_ex_t)(LPRECT, DWORD, BOOL, DWORD);
 typedef BOOL(WINAPI *get_window_rect_t)(HWND, LPRECT);
+typedef BOOL(WINAPI *get_client_rect_t)(HWND, LPRECT);
 typedef HMONITOR(WINAPI *monitor_from_window_t)(HWND, DWORD);
 typedef BOOL(WINAPI *get_monitor_infoa_t)(HMONITOR, LPMONITORINFO);
 typedef BOOL(WINAPI *screen_to_client_t)(HWND, LPPOINT);
@@ -56,9 +59,12 @@ typedef struct display_windows_s {
 	show_window_t ShowWindow;
 	update_window_t UpdateWindow;
 	set_window_texta_t SetWindowTextA;
+	get_window_text_lengtha_t GetWindowTextLengthA;
+	get_window_texta_t GetWindowTextA;
 	set_window_pos_t SetWindowPos;
 	adjust_window_rect_ex_t AdjustWindowRectEx;
 	get_window_rect_t GetWindowRect;
+	get_client_rect_t GetClientRect;
 	monitor_from_window_t MonitorFromWindow;
 	get_monitor_infoa_t GetMonitorInfoA;
 	screen_to_client_t ScreenToClient;
@@ -175,9 +181,12 @@ static int display_windows_load_user32(display_windows_t *dwindows)
 	    display_windows_load_proc(dwindows, (void **)&dwindows->ShowWindow, STRV("ShowWindow")) ||
 	    display_windows_load_proc(dwindows, (void **)&dwindows->UpdateWindow, STRV("UpdateWindow")) ||
 	    display_windows_load_proc(dwindows, (void **)&dwindows->SetWindowTextA, STRV("SetWindowTextA")) ||
+	    display_windows_load_proc(dwindows, (void **)&dwindows->GetWindowTextLengthA, STRV("GetWindowTextLengthA")) ||
+	    display_windows_load_proc(dwindows, (void **)&dwindows->GetWindowTextA, STRV("GetWindowTextA")) ||
 	    display_windows_load_proc(dwindows, (void **)&dwindows->SetWindowPos, STRV("SetWindowPos")) ||
 	    display_windows_load_proc(dwindows, (void **)&dwindows->AdjustWindowRectEx, STRV("AdjustWindowRectEx")) ||
 	    display_windows_load_proc(dwindows, (void **)&dwindows->GetWindowRect, STRV("GetWindowRect")) ||
+	    display_windows_load_proc(dwindows, (void **)&dwindows->GetClientRect, STRV("GetClientRect")) ||
 	    display_windows_load_proc(dwindows, (void **)&dwindows->MonitorFromWindow, STRV("MonitorFromWindow")) ||
 	    display_windows_load_proc(dwindows, (void **)&dwindows->GetMonitorInfoA, STRV("GetMonitorInfoA")) ||
 	    display_windows_load_proc(dwindows, (void **)&dwindows->ScreenToClient, STRV("ScreenToClient")) ||
@@ -1059,6 +1068,28 @@ static int display_windows_window_set_title(window_t *wnd, strv_t title)
 	return ret;
 }
 
+static int display_windows_window_get_title(window_t *wnd, char *title, size_t size)
+{
+	if (wnd == NULL || wnd->display == NULL || wnd->display->data == NULL || wnd->data == NULL || title == NULL || size == 0 ||
+	    size > INT_MAX) {
+		return 1;
+	}
+
+	display_windows_t *dwindows = wnd->display->data;
+	window_windows_t *wwindows  = wnd->data;
+	int len			    = dwindows->GetWindowTextLengthA(wwindows->handle);
+	if (len < 0 || (size_t)len >= size) {
+		return 1;
+	}
+
+	int copied = dwindows->GetWindowTextA(wwindows->handle, title, (int)size);
+	if (copied < 0) {
+		return 1;
+	}
+	title[copied] = 0;
+	return 0;
+}
+
 static int display_windows_window_set_position(window_t *wnd, u16 x, u16 y)
 {
 	if (wnd == NULL || wnd->display == NULL || wnd->display->data == NULL || wnd->data == NULL) {
@@ -1069,6 +1100,25 @@ static int display_windows_window_set_position(window_t *wnd, u16 x, u16 y)
 	window_windows_t *wwindows  = wnd->data;
 
 	return dwindows->SetWindowPos(wwindows->handle, NULL, x, y, 0, 0, SWP_NOZORDER | SWP_NOSIZE) ? 0 : 1;
+}
+
+static int display_windows_window_get_position(window_t *wnd, u16 *x, u16 *y)
+{
+	if (wnd == NULL || wnd->display == NULL || wnd->display->data == NULL || wnd->data == NULL || x == NULL || y == NULL) {
+		return 1;
+	}
+
+	display_windows_t *dwindows = wnd->display->data;
+	window_windows_t *wwindows  = wnd->data;
+	RECT rect		    = {0};
+	if (!dwindows->GetWindowRect(wwindows->handle, &rect) || rect.left < 0 || rect.top < 0 || rect.left > UINT16_MAX ||
+	    rect.top > UINT16_MAX) {
+		return 1;
+	}
+
+	*x = (u16)rect.left;
+	*y = (u16)rect.top;
+	return 0;
 }
 
 static int display_windows_window_set_size(window_t *wnd, u16 width, u16 height)
@@ -1089,6 +1139,25 @@ static int display_windows_window_set_size(window_t *wnd, u16 width, u16 height)
 		       wwindows->handle, NULL, 0, 0, rect.right - rect.left, rect.bottom - rect.top, SWP_NOZORDER | SWP_NOMOVE)
 		       ? 0
 		       : 1;
+}
+
+static int display_windows_window_get_size(window_t *wnd, u16 *width, u16 *height)
+{
+	if (wnd == NULL || wnd->display == NULL || wnd->display->data == NULL || wnd->data == NULL || width == NULL || height == NULL) {
+		return 1;
+	}
+
+	display_windows_t *dwindows = wnd->display->data;
+	window_windows_t *wwindows  = wnd->data;
+	RECT rect		    = {0};
+	if (!dwindows->GetClientRect(wwindows->handle, &rect) || rect.right < rect.left || rect.bottom < rect.top ||
+	    rect.right - rect.left > UINT16_MAX || rect.bottom - rect.top > UINT16_MAX) {
+		return 1;
+	}
+
+	*width	= (u16)(rect.right - rect.left);
+	*height = (u16)(rect.bottom - rect.top);
+	return 0;
 }
 
 static int display_windows_window_set_borderless(window_t *wnd, int borderless)
@@ -1124,6 +1193,19 @@ static int display_windows_window_set_borderless(window_t *wnd, int borderless)
 		return 1;
 	}
 
+	return 0;
+}
+
+static int display_windows_window_get_borderless(window_t *wnd, int *borderless)
+{
+	if (wnd == NULL || wnd->display == NULL || wnd->display->data == NULL || wnd->data == NULL || borderless == NULL) {
+		return 1;
+	}
+
+	display_windows_t *dwindows = wnd->display->data;
+	window_windows_t *wwindows  = wnd->data;
+	LONG_PTR style		    = dwindows->GetWindowLongPtrA(wwindows->handle, GWL_STYLE);
+	*borderless		    = ((DWORD)style & DISPLAY_WINDOWS_STYLE_BORDERLESS) == DISPLAY_WINDOWS_STYLE_BORDERLESS;
 	return 0;
 }
 
@@ -1181,6 +1263,17 @@ static int display_windows_window_set_fullscreen(window_t *wnd, int fullscreen)
 	return 0;
 }
 
+static int display_windows_window_get_fullscreen(window_t *wnd, int *fullscreen)
+{
+	if (wnd == NULL || wnd->data == NULL || fullscreen == NULL) {
+		return 1;
+	}
+
+	window_windows_t *wwindows = wnd->data;
+	*fullscreen		   = wwindows->fullscreen;
+	return 0;
+}
+
 static int display_windows_window_show(window_t *wnd)
 {
 	if (wnd == NULL || wnd->display == NULL || wnd->display->data == NULL || wnd->data == NULL) {
@@ -1225,10 +1318,15 @@ static display_driver_t display_windows = {
 	.window_id	       = display_windows_window_id,
 	.window_native	       = display_windows_window_native,
 	.window_set_title      = display_windows_window_set_title,
+	.window_get_title      = display_windows_window_get_title,
 	.window_set_position   = display_windows_window_set_position,
+	.window_get_position   = display_windows_window_get_position,
 	.window_set_size       = display_windows_window_set_size,
+	.window_get_size       = display_windows_window_get_size,
 	.window_set_borderless = display_windows_window_set_borderless,
+	.window_get_borderless = display_windows_window_get_borderless,
 	.window_set_fullscreen = display_windows_window_set_fullscreen,
+	.window_get_fullscreen = display_windows_window_get_fullscreen,
 	.window_show	       = display_windows_window_show,
 	.window_hide	       = display_windows_window_hide,
 };

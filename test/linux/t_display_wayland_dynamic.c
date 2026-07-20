@@ -1337,6 +1337,66 @@ TEST(display_wayland_dynamic_window_set_title_returns_flush_failure)
 	END;
 }
 
+TEST(display_wayland_dynamic_window_get_title_returns_title)
+{
+	START;
+
+	t_wayland_reset();
+	fs_t fs		  = {0};
+	proc_t proc	  = {0};
+	sock_t ss	  = {0};
+	display_t display = {0};
+	window_t window	  = {0};
+	char title[16]	  = {0};
+	t_wayland_env_init(&fs, &proc, &ss);
+	t_wayland_open(&display, &window, &fs, &proc, &ss);
+	window_set_title(&window, STRV("hello"));
+
+	window_get_title(&window, title, sizeof(title));
+
+	EXPECT_STR(title, "hello");
+
+	window_free(&window);
+	display_free(&display);
+	t_wayland_env_free(&fs, &proc, &ss);
+	END;
+}
+
+TEST(display_wayland_dynamic_window_get_title_rejects_small_buffer)
+{
+	START;
+
+	t_wayland_reset();
+	fs_t fs		  = {0};
+	proc_t proc	  = {0};
+	sock_t ss	  = {0};
+	display_t display = {0};
+	window_t window	  = {0};
+	char title[4]	  = {0};
+	t_wayland_env_init(&fs, &proc, &ss);
+	t_wayland_open(&display, &window, &fs, &proc, &ss);
+	window_set_title(&window, STRV("hello"));
+
+	EXPECT_EQ(window_get_title(&window, title, sizeof(title)), 1);
+
+	window_free(&window);
+	display_free(&display);
+	t_wayland_env_free(&fs, &proc, &ss);
+	END;
+}
+
+TEST(display_wayland_dynamic_window_get_title_rejects_invalid_window)
+{
+	START;
+
+	T_WAYLAND_DRV();
+	char title[16] = {0};
+
+	EXPECT_EQ(drv->window_get_title(NULL, title, sizeof(title)), 1);
+
+	END;
+}
+
 TEST(display_wayland_dynamic_window_show_commits_surface)
 {
 	START;
@@ -1606,6 +1666,43 @@ TEST(display_wayland_dynamic_window_set_fullscreen_sends_unset)
 	window_free(&window);
 	display_free(&display);
 	t_wayland_env_free(&fs, &proc, &ss);
+	END;
+}
+
+TEST(display_wayland_dynamic_window_get_fullscreen_returns_fullscreen)
+{
+	START;
+
+	t_wayland_reset();
+	fs_t fs		  = {0};
+	proc_t proc	  = {0};
+	sock_t ss	  = {0};
+	display_t display = {0};
+	window_t window	  = {0};
+	int fullscreen	  = 0;
+	t_wayland_env_init(&fs, &proc, &ss);
+	t_wayland_open(&display, &window, &fs, &proc, &ss);
+	window_set_fullscreen(&window, 1);
+
+	window_get_fullscreen(&window, &fullscreen);
+
+	EXPECT_EQ(fullscreen, 1);
+
+	window_free(&window);
+	display_free(&display);
+	t_wayland_env_free(&fs, &proc, &ss);
+	END;
+}
+
+TEST(display_wayland_dynamic_window_get_fullscreen_rejects_invalid_window)
+{
+	START;
+
+	T_WAYLAND_DRV();
+	int fullscreen = 0;
+
+	EXPECT_EQ(drv->window_get_fullscreen(NULL, &fullscreen), 1);
+
 	END;
 }
 
@@ -1880,6 +1977,9 @@ STEST(display_wayland_dynamic)
 	RUN(display_wayland_dynamic_window_set_title_rejects_invalid_arguments);
 	RUN(display_wayland_dynamic_window_set_title_rejects_long_title);
 	RUN(display_wayland_dynamic_window_set_title_returns_flush_failure);
+	RUN(display_wayland_dynamic_window_get_title_returns_title);
+	RUN(display_wayland_dynamic_window_get_title_rejects_small_buffer);
+	RUN(display_wayland_dynamic_window_get_title_rejects_invalid_window);
 	RUN(display_wayland_dynamic_window_show_commits_surface);
 	RUN(display_wayland_dynamic_window_show_recreates_role);
 	RUN(display_wayland_dynamic_window_show_returns_flush_failure);
@@ -1893,6 +1993,8 @@ STEST(display_wayland_dynamic)
 	RUN(display_wayland_dynamic_window_set_fullscreen_rejects_missing_toplevel);
 	RUN(display_wayland_dynamic_window_set_fullscreen_rejects_invalid_window);
 	RUN(display_wayland_dynamic_window_set_fullscreen_returns_flush_failure);
+	RUN(display_wayland_dynamic_window_get_fullscreen_returns_fullscreen);
+	RUN(display_wayland_dynamic_window_get_fullscreen_rejects_invalid_window);
 	RUN(display_wayland_dynamic_poll_events_dispatches_pending);
 	RUN(display_wayland_dynamic_wait_events_dispatches);
 	RUN(display_wayland_dynamic_ping_sends_pong);

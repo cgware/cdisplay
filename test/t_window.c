@@ -6,19 +6,29 @@
 static int t_window_init_calls;
 static int t_window_free_calls;
 static int t_window_set_title_calls;
+static int t_window_get_title_calls;
 static int t_window_set_position_calls;
+static int t_window_get_position_calls;
 static int t_window_set_size_calls;
+static int t_window_get_size_calls;
 static int t_window_set_borderless_calls;
+static int t_window_get_borderless_calls;
 static int t_window_set_fullscreen_calls;
+static int t_window_get_fullscreen_calls;
 static int t_window_show_calls;
 static int t_window_hide_calls;
 static int t_window_native_calls;
 static int t_window_init_ret;
 static int t_window_set_title_ret;
+static int t_window_get_title_ret;
 static int t_window_set_position_ret;
+static int t_window_get_position_ret;
 static int t_window_set_size_ret;
+static int t_window_get_size_ret;
 static int t_window_set_borderless_ret;
+static int t_window_get_borderless_ret;
 static int t_window_set_fullscreen_ret;
+static int t_window_get_fullscreen_ret;
 static int t_window_show_ret;
 static int t_window_hide_ret;
 static int t_window_native_ret;
@@ -100,6 +110,20 @@ static int t_window_driver_set_title(window_t *window, strv_t title)
 	return t_window_set_title_ret;
 }
 
+static int t_window_driver_get_title(window_t *window, char *title, size_t size)
+{
+	(void)window;
+	t_window_get_title_calls++;
+	if (title != NULL && size > 0) {
+		size_t len = t_window_title.len < size - 1 ? t_window_title.len : size - 1;
+		for (size_t i = 0; i < len; i++) {
+			title[i] = t_window_title.data[i];
+		}
+		title[len] = 0;
+	}
+	return t_window_get_title_ret;
+}
+
 static int t_window_driver_set_position(window_t *window, u16 x, u16 y)
 {
 	(void)window;
@@ -107,6 +131,19 @@ static int t_window_driver_set_position(window_t *window, u16 x, u16 y)
 	t_window_x = x;
 	t_window_y = y;
 	return t_window_set_position_ret;
+}
+
+static int t_window_driver_get_position(window_t *window, u16 *x, u16 *y)
+{
+	(void)window;
+	t_window_get_position_calls++;
+	if (x != NULL) {
+		*x = t_window_x;
+	}
+	if (y != NULL) {
+		*y = t_window_y;
+	}
+	return t_window_get_position_ret;
 }
 
 static int t_window_driver_set_size(window_t *window, u16 width, u16 height)
@@ -118,6 +155,19 @@ static int t_window_driver_set_size(window_t *window, u16 width, u16 height)
 	return t_window_set_size_ret;
 }
 
+static int t_window_driver_get_size(window_t *window, u16 *width, u16 *height)
+{
+	(void)window;
+	t_window_get_size_calls++;
+	if (width != NULL) {
+		*width = t_window_width;
+	}
+	if (height != NULL) {
+		*height = t_window_height;
+	}
+	return t_window_get_size_ret;
+}
+
 static int t_window_driver_set_borderless(window_t *window, int borderless)
 {
 	(void)window;
@@ -126,12 +176,32 @@ static int t_window_driver_set_borderless(window_t *window, int borderless)
 	return t_window_set_borderless_ret;
 }
 
+static int t_window_driver_get_borderless(window_t *window, int *borderless)
+{
+	(void)window;
+	t_window_get_borderless_calls++;
+	if (borderless != NULL) {
+		*borderless = t_window_borderless;
+	}
+	return t_window_get_borderless_ret;
+}
+
 static int t_window_driver_set_fullscreen(window_t *window, int fullscreen)
 {
 	(void)window;
 	t_window_set_fullscreen_calls++;
 	t_window_fullscreen = fullscreen;
 	return t_window_set_fullscreen_ret;
+}
+
+static int t_window_driver_get_fullscreen(window_t *window, int *fullscreen)
+{
+	(void)window;
+	t_window_get_fullscreen_calls++;
+	if (fullscreen != NULL) {
+		*fullscreen = t_window_fullscreen;
+	}
+	return t_window_get_fullscreen_ret;
 }
 
 static int t_window_driver_show(window_t *window)
@@ -159,10 +229,15 @@ static display_driver_t t_window_driver = {
 	.window_id	       = t_window_driver_id,
 	.window_native	       = t_window_driver_native,
 	.window_set_title      = t_window_driver_set_title,
+	.window_get_title      = t_window_driver_get_title,
 	.window_set_position   = t_window_driver_set_position,
+	.window_get_position   = t_window_driver_get_position,
 	.window_set_size       = t_window_driver_set_size,
+	.window_get_size       = t_window_driver_get_size,
 	.window_set_borderless = t_window_driver_set_borderless,
+	.window_get_borderless = t_window_driver_get_borderless,
 	.window_set_fullscreen = t_window_driver_set_fullscreen,
+	.window_get_fullscreen = t_window_driver_get_fullscreen,
 	.window_show	       = t_window_driver_show,
 	.window_hide	       = t_window_driver_hide,
 };
@@ -172,19 +247,29 @@ static void t_window_reset(void)
 	t_window_init_calls	      = 0;
 	t_window_free_calls	      = 0;
 	t_window_set_title_calls      = 0;
+	t_window_get_title_calls      = 0;
 	t_window_set_position_calls   = 0;
+	t_window_get_position_calls   = 0;
 	t_window_set_size_calls	      = 0;
+	t_window_get_size_calls	      = 0;
 	t_window_set_borderless_calls = 0;
+	t_window_get_borderless_calls = 0;
 	t_window_set_fullscreen_calls = 0;
+	t_window_get_fullscreen_calls = 0;
 	t_window_show_calls	      = 0;
 	t_window_hide_calls	      = 0;
 	t_window_native_calls	      = 0;
 	t_window_init_ret	      = 0;
 	t_window_set_title_ret	      = 0;
+	t_window_get_title_ret	      = 0;
 	t_window_set_position_ret     = 0;
+	t_window_get_position_ret     = 0;
 	t_window_set_size_ret	      = 0;
+	t_window_get_size_ret	      = 0;
 	t_window_set_borderless_ret   = 0;
+	t_window_get_borderless_ret   = 0;
 	t_window_set_fullscreen_ret   = 0;
+	t_window_get_fullscreen_ret   = 0;
 	t_window_show_ret	      = 0;
 	t_window_hide_ret	      = 0;
 	t_window_native_ret	      = 0;
@@ -627,6 +712,114 @@ TEST(window_set_title_returns_driver_result)
 	END;
 }
 
+TEST(window_get_title_null_window)
+{
+	START;
+
+	char title[8] = {0};
+
+	EXPECT_EQ(window_get_title(NULL, title, sizeof(title)), 1);
+
+	END;
+}
+
+TEST(window_get_title_null_title)
+{
+	START;
+
+	display_t display = {
+		.drv = &t_window_driver,
+	};
+	window_t window = {
+		.display = &display,
+	};
+
+	EXPECT_EQ(window_get_title(&window, NULL, 8), 1);
+
+	END;
+}
+
+TEST(window_get_title_zero_size)
+{
+	START;
+
+	display_t display = {
+		.drv = &t_window_driver,
+	};
+	window_t window = {
+		.display = &display,
+	};
+	char title[8] = {0};
+
+	EXPECT_EQ(window_get_title(&window, title, 0), 1);
+
+	END;
+}
+
+TEST(window_get_title_calls_driver)
+{
+	START;
+
+	t_window_reset();
+	t_window_title	  = STRV("title");
+	display_t display = {
+		.drv = &t_window_driver,
+	};
+	window_t window = {
+		.display = &display,
+		.data	 = (void *)0x5678,
+	};
+	char title[8] = {0};
+
+	window_get_title(&window, title, sizeof(title));
+
+	EXPECT_EQ(t_window_get_title_calls, 1);
+
+	END;
+}
+
+TEST(window_get_title_sets_title)
+{
+	START;
+
+	t_window_reset();
+	t_window_title	  = STRV("title");
+	display_t display = {
+		.drv = &t_window_driver,
+	};
+	window_t window = {
+		.display = &display,
+		.data	 = (void *)0x5678,
+	};
+	char title[8] = {0};
+
+	window_get_title(&window, title, sizeof(title));
+
+	EXPECT_EQ(title[0], 't');
+
+	END;
+}
+
+TEST(window_get_title_returns_driver_result)
+{
+	START;
+
+	t_window_reset();
+	t_window_get_title_ret = 1;
+	display_t display      = {
+		.drv = &t_window_driver,
+	};
+	window_t window = {
+		.display = &display,
+		.data	 = (void *)0x5678,
+	};
+	char title[8] = {0};
+
+	EXPECT_EQ(window_get_title(&window, title, sizeof(title)), 1);
+
+	END;
+}
+
 TEST(window_set_position_calls_driver)
 {
 	START;
@@ -673,6 +866,141 @@ TEST(window_set_position_returns_driver_result)
 	};
 
 	EXPECT_EQ(window_set_position(&window, 11, 22), 1);
+
+	END;
+}
+
+TEST(window_get_position_null_window)
+{
+	START;
+
+	u16 x = 0;
+	u16 y = 0;
+
+	EXPECT_EQ(window_get_position(NULL, &x, &y), 1);
+
+	END;
+}
+
+TEST(window_get_position_null_x)
+{
+	START;
+
+	display_t display = {
+		.drv = &t_window_driver,
+	};
+	window_t window = {
+		.display = &display,
+	};
+	u16 y = 0;
+
+	EXPECT_EQ(window_get_position(&window, NULL, &y), 1);
+
+	END;
+}
+
+TEST(window_get_position_null_y)
+{
+	START;
+
+	display_t display = {
+		.drv = &t_window_driver,
+	};
+	window_t window = {
+		.display = &display,
+	};
+	u16 x = 0;
+
+	EXPECT_EQ(window_get_position(&window, &x, NULL), 1);
+
+	END;
+}
+
+TEST(window_get_position_calls_driver)
+{
+	START;
+
+	t_window_reset();
+	display_t display = {
+		.drv = &t_window_driver,
+	};
+	window_t window = {
+		.display = &display,
+		.data	 = (void *)0x5678,
+	};
+	u16 x = 0;
+	u16 y = 0;
+
+	window_get_position(&window, &x, &y);
+
+	EXPECT_EQ(t_window_get_position_calls, 1);
+
+	END;
+}
+
+TEST(window_get_position_sets_x)
+{
+	START;
+
+	t_window_reset();
+	t_window_x	  = 11;
+	display_t display = {
+		.drv = &t_window_driver,
+	};
+	window_t window = {
+		.display = &display,
+		.data	 = (void *)0x5678,
+	};
+	u16 x = 0;
+	u16 y = 0;
+
+	window_get_position(&window, &x, &y);
+
+	EXPECT_EQ(x, 11);
+
+	END;
+}
+
+TEST(window_get_position_sets_y)
+{
+	START;
+
+	t_window_reset();
+	t_window_y	  = 22;
+	display_t display = {
+		.drv = &t_window_driver,
+	};
+	window_t window = {
+		.display = &display,
+		.data	 = (void *)0x5678,
+	};
+	u16 x = 0;
+	u16 y = 0;
+
+	window_get_position(&window, &x, &y);
+
+	EXPECT_EQ(y, 22);
+
+	END;
+}
+
+TEST(window_get_position_returns_driver_result)
+{
+	START;
+
+	t_window_reset();
+	t_window_get_position_ret = 1;
+	display_t display	  = {
+		.drv = &t_window_driver,
+	};
+	window_t window = {
+		.display = &display,
+		.data	 = (void *)0x5678,
+	};
+	u16 x = 0;
+	u16 y = 0;
+
+	EXPECT_EQ(window_get_position(&window, &x, &y), 1);
 
 	END;
 }
@@ -727,6 +1055,141 @@ TEST(window_set_size_returns_driver_result)
 	END;
 }
 
+TEST(window_get_size_null_window)
+{
+	START;
+
+	u16 width  = 0;
+	u16 height = 0;
+
+	EXPECT_EQ(window_get_size(NULL, &width, &height), 1);
+
+	END;
+}
+
+TEST(window_get_size_null_width)
+{
+	START;
+
+	display_t display = {
+		.drv = &t_window_driver,
+	};
+	window_t window = {
+		.display = &display,
+	};
+	u16 height = 0;
+
+	EXPECT_EQ(window_get_size(&window, NULL, &height), 1);
+
+	END;
+}
+
+TEST(window_get_size_null_height)
+{
+	START;
+
+	display_t display = {
+		.drv = &t_window_driver,
+	};
+	window_t window = {
+		.display = &display,
+	};
+	u16 width = 0;
+
+	EXPECT_EQ(window_get_size(&window, &width, NULL), 1);
+
+	END;
+}
+
+TEST(window_get_size_calls_driver)
+{
+	START;
+
+	t_window_reset();
+	display_t display = {
+		.drv = &t_window_driver,
+	};
+	window_t window = {
+		.display = &display,
+		.data	 = (void *)0x5678,
+	};
+	u16 width  = 0;
+	u16 height = 0;
+
+	window_get_size(&window, &width, &height);
+
+	EXPECT_EQ(t_window_get_size_calls, 1);
+
+	END;
+}
+
+TEST(window_get_size_sets_width)
+{
+	START;
+
+	t_window_reset();
+	t_window_width	  = 333;
+	display_t display = {
+		.drv = &t_window_driver,
+	};
+	window_t window = {
+		.display = &display,
+		.data	 = (void *)0x5678,
+	};
+	u16 width  = 0;
+	u16 height = 0;
+
+	window_get_size(&window, &width, &height);
+
+	EXPECT_EQ(width, 333);
+
+	END;
+}
+
+TEST(window_get_size_sets_height)
+{
+	START;
+
+	t_window_reset();
+	t_window_height	  = 444;
+	display_t display = {
+		.drv = &t_window_driver,
+	};
+	window_t window = {
+		.display = &display,
+		.data	 = (void *)0x5678,
+	};
+	u16 width  = 0;
+	u16 height = 0;
+
+	window_get_size(&window, &width, &height);
+
+	EXPECT_EQ(height, 444);
+
+	END;
+}
+
+TEST(window_get_size_returns_driver_result)
+{
+	START;
+
+	t_window_reset();
+	t_window_get_size_ret = 1;
+	display_t display     = {
+		.drv = &t_window_driver,
+	};
+	window_t window = {
+		.display = &display,
+		.data	 = (void *)0x5678,
+	};
+	u16 width  = 0;
+	u16 height = 0;
+
+	EXPECT_EQ(window_get_size(&window, &width, &height), 1);
+
+	END;
+}
+
 TEST(window_set_borderless_calls_driver)
 {
 	START;
@@ -776,6 +1239,96 @@ TEST(window_set_borderless_returns_driver_result)
 	END;
 }
 
+TEST(window_get_borderless_null_window)
+{
+	START;
+
+	int borderless = 0;
+
+	EXPECT_EQ(window_get_borderless(NULL, &borderless), 1);
+
+	END;
+}
+
+TEST(window_get_borderless_null_borderless)
+{
+	START;
+
+	display_t display = {
+		.drv = &t_window_driver,
+	};
+	window_t window = {
+		.display = &display,
+	};
+
+	EXPECT_EQ(window_get_borderless(&window, NULL), 1);
+
+	END;
+}
+
+TEST(window_get_borderless_calls_driver)
+{
+	START;
+
+	t_window_reset();
+	display_t display = {
+		.drv = &t_window_driver,
+	};
+	window_t window = {
+		.display = &display,
+		.data	 = (void *)0x5678,
+	};
+	int borderless = 0;
+
+	window_get_borderless(&window, &borderless);
+
+	EXPECT_EQ(t_window_get_borderless_calls, 1);
+
+	END;
+}
+
+TEST(window_get_borderless_sets_borderless)
+{
+	START;
+
+	t_window_reset();
+	t_window_borderless = 1;
+	display_t display   = {
+		.drv = &t_window_driver,
+	};
+	window_t window = {
+		.display = &display,
+		.data	 = (void *)0x5678,
+	};
+	int borderless = 0;
+
+	window_get_borderless(&window, &borderless);
+
+	EXPECT_EQ(borderless, 1);
+
+	END;
+}
+
+TEST(window_get_borderless_returns_driver_result)
+{
+	START;
+
+	t_window_reset();
+	t_window_get_borderless_ret = 1;
+	display_t display	    = {
+		.drv = &t_window_driver,
+	};
+	window_t window = {
+		.display = &display,
+		.data	 = (void *)0x5678,
+	};
+	int borderless = 0;
+
+	EXPECT_EQ(window_get_borderless(&window, &borderless), 1);
+
+	END;
+}
+
 TEST(window_set_fullscreen_calls_driver)
 {
 	START;
@@ -821,6 +1374,96 @@ TEST(window_set_fullscreen_returns_driver_result)
 	};
 
 	EXPECT_EQ(window_set_fullscreen(&window, 1), 1);
+
+	END;
+}
+
+TEST(window_get_fullscreen_null_window)
+{
+	START;
+
+	int fullscreen = 0;
+
+	EXPECT_EQ(window_get_fullscreen(NULL, &fullscreen), 1);
+
+	END;
+}
+
+TEST(window_get_fullscreen_null_fullscreen)
+{
+	START;
+
+	display_t display = {
+		.drv = &t_window_driver,
+	};
+	window_t window = {
+		.display = &display,
+	};
+
+	EXPECT_EQ(window_get_fullscreen(&window, NULL), 1);
+
+	END;
+}
+
+TEST(window_get_fullscreen_calls_driver)
+{
+	START;
+
+	t_window_reset();
+	display_t display = {
+		.drv = &t_window_driver,
+	};
+	window_t window = {
+		.display = &display,
+		.data	 = (void *)0x5678,
+	};
+	int fullscreen = 0;
+
+	window_get_fullscreen(&window, &fullscreen);
+
+	EXPECT_EQ(t_window_get_fullscreen_calls, 1);
+
+	END;
+}
+
+TEST(window_get_fullscreen_sets_fullscreen)
+{
+	START;
+
+	t_window_reset();
+	t_window_fullscreen = 1;
+	display_t display   = {
+		.drv = &t_window_driver,
+	};
+	window_t window = {
+		.display = &display,
+		.data	 = (void *)0x5678,
+	};
+	int fullscreen = 0;
+
+	window_get_fullscreen(&window, &fullscreen);
+
+	EXPECT_EQ(fullscreen, 1);
+
+	END;
+}
+
+TEST(window_get_fullscreen_returns_driver_result)
+{
+	START;
+
+	t_window_reset();
+	t_window_get_fullscreen_ret = 1;
+	display_t display	    = {
+		.drv = &t_window_driver,
+	};
+	window_t window = {
+		.display = &display,
+		.data	 = (void *)0x5678,
+	};
+	int fullscreen = 0;
+
+	EXPECT_EQ(window_get_fullscreen(&window, &fullscreen), 1);
 
 	END;
 }
@@ -950,18 +1593,48 @@ STEST(window)
 	RUN(window_set_title_null_window);
 	RUN(window_set_title_calls_driver);
 	RUN(window_set_title_returns_driver_result);
+	RUN(window_get_title_null_window);
+	RUN(window_get_title_null_title);
+	RUN(window_get_title_zero_size);
+	RUN(window_get_title_calls_driver);
+	RUN(window_get_title_sets_title);
+	RUN(window_get_title_returns_driver_result);
 	RUN(window_set_position_calls_driver);
 	RUN(window_set_position_null_window);
 	RUN(window_set_position_returns_driver_result);
+	RUN(window_get_position_null_window);
+	RUN(window_get_position_null_x);
+	RUN(window_get_position_null_y);
+	RUN(window_get_position_calls_driver);
+	RUN(window_get_position_sets_x);
+	RUN(window_get_position_sets_y);
+	RUN(window_get_position_returns_driver_result);
 	RUN(window_set_size_calls_driver);
 	RUN(window_set_size_null_window);
 	RUN(window_set_size_returns_driver_result);
+	RUN(window_get_size_null_window);
+	RUN(window_get_size_null_width);
+	RUN(window_get_size_null_height);
+	RUN(window_get_size_calls_driver);
+	RUN(window_get_size_sets_width);
+	RUN(window_get_size_sets_height);
+	RUN(window_get_size_returns_driver_result);
 	RUN(window_set_borderless_calls_driver);
 	RUN(window_set_borderless_null_window);
 	RUN(window_set_borderless_returns_driver_result);
+	RUN(window_get_borderless_null_window);
+	RUN(window_get_borderless_null_borderless);
+	RUN(window_get_borderless_calls_driver);
+	RUN(window_get_borderless_sets_borderless);
+	RUN(window_get_borderless_returns_driver_result);
 	RUN(window_set_fullscreen_calls_driver);
 	RUN(window_set_fullscreen_null_window);
 	RUN(window_set_fullscreen_returns_driver_result);
+	RUN(window_get_fullscreen_null_window);
+	RUN(window_get_fullscreen_null_fullscreen);
+	RUN(window_get_fullscreen_calls_driver);
+	RUN(window_get_fullscreen_sets_fullscreen);
+	RUN(window_get_fullscreen_returns_driver_result);
 	RUN(window_show_calls_driver);
 	RUN(window_show_null_window);
 	RUN(window_show_returns_driver_result);

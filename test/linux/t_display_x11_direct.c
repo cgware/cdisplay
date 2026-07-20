@@ -1327,6 +1327,81 @@ TEST(display_x11_direct_window_set_title_write_failure)
 	END;
 }
 
+TEST(display_x11_direct_window_get_title_returns_title)
+{
+	START;
+
+	display_driver_t *drv = t_x11_driver();
+	fs_t fs		      = {0};
+	proc_t proc	      = {0};
+	sock_t ss	      = {0};
+	display_t display     = {0};
+	window_t window	      = {0};
+	void *server	      = NULL;
+	void *peer	      = NULL;
+	char title[16]	      = {0};
+
+	t_x11_open_window(drv, &fs, &proc, &ss, &display, &window, &server, &peer);
+	t_x11_drain_open_window_requests(&ss, peer);
+	window_set_title(&window, STRV("Test"));
+	sock_read_all(&ss, peer, (u8[28]){0}, 28);
+	sock_read_all(&ss, peer, (u8[28]){0}, 28);
+	window_get_title(&window, title, sizeof(title));
+
+	EXPECT_STR(title, "Test");
+
+	window_free(&window);
+	display_free(&display);
+	sock_close(&ss, peer);
+	sock_close(&ss, server);
+	t_x11_env_free(&fs, &proc, &ss);
+
+	END;
+}
+
+TEST(display_x11_direct_window_get_title_rejects_small_buffer)
+{
+	START;
+
+	display_driver_t *drv = t_x11_driver();
+	fs_t fs		      = {0};
+	proc_t proc	      = {0};
+	sock_t ss	      = {0};
+	display_t display     = {0};
+	window_t window	      = {0};
+	void *server	      = NULL;
+	void *peer	      = NULL;
+	char title[4]	      = {0};
+
+	t_x11_open_window(drv, &fs, &proc, &ss, &display, &window, &server, &peer);
+	t_x11_drain_open_window_requests(&ss, peer);
+	window_set_title(&window, STRV("Test"));
+	sock_read_all(&ss, peer, (u8[28]){0}, 28);
+	sock_read_all(&ss, peer, (u8[28]){0}, 28);
+
+	EXPECT_EQ(window_get_title(&window, title, sizeof(title)), 1);
+
+	window_free(&window);
+	display_free(&display);
+	sock_close(&ss, peer);
+	sock_close(&ss, server);
+	t_x11_env_free(&fs, &proc, &ss);
+
+	END;
+}
+
+TEST(display_x11_direct_window_get_title_rejects_null_window)
+{
+	START;
+
+	display_driver_t *drv = t_x11_driver();
+	char title[16]	      = {0};
+
+	EXPECT_EQ(drv->window_get_title(NULL, title, sizeof(title)), 1);
+
+	END;
+}
+
 TEST(display_x11_direct_window_geometry_writes_requests)
 {
 	START;
@@ -1374,6 +1449,160 @@ TEST(display_x11_direct_window_geometry_writes_requests)
 	sock_close(&ss, peer);
 	sock_close(&ss, server);
 	t_x11_env_free(&fs, &proc, &ss);
+
+	END;
+}
+
+TEST(display_x11_direct_window_get_position_returns_x)
+{
+	START;
+
+	display_driver_t *drv = t_x11_driver();
+	fs_t fs		      = {0};
+	proc_t proc	      = {0};
+	sock_t ss	      = {0};
+	display_t display     = {0};
+	window_t window	      = {0};
+	void *server	      = NULL;
+	void *peer	      = NULL;
+	u16 x		      = 0;
+	u16 y		      = 0;
+
+	t_x11_open_window(drv, &fs, &proc, &ss, &display, &window, &server, &peer);
+	t_x11_drain_open_window_requests(&ss, peer);
+	window_set_position(&window, 11, 22);
+	sock_read_all(&ss, peer, (u8[20]){0}, 20);
+	window_get_position(&window, &x, &y);
+
+	EXPECT_EQ(x, 11);
+
+	window_free(&window);
+	display_free(&display);
+	sock_close(&ss, peer);
+	sock_close(&ss, server);
+	t_x11_env_free(&fs, &proc, &ss);
+
+	END;
+}
+
+TEST(display_x11_direct_window_get_position_returns_y)
+{
+	START;
+
+	display_driver_t *drv = t_x11_driver();
+	fs_t fs		      = {0};
+	proc_t proc	      = {0};
+	sock_t ss	      = {0};
+	display_t display     = {0};
+	window_t window	      = {0};
+	void *server	      = NULL;
+	void *peer	      = NULL;
+	u16 x		      = 0;
+	u16 y		      = 0;
+
+	t_x11_open_window(drv, &fs, &proc, &ss, &display, &window, &server, &peer);
+	t_x11_drain_open_window_requests(&ss, peer);
+	window_set_position(&window, 11, 22);
+	sock_read_all(&ss, peer, (u8[20]){0}, 20);
+	window_get_position(&window, &x, &y);
+
+	EXPECT_EQ(y, 22);
+
+	window_free(&window);
+	display_free(&display);
+	sock_close(&ss, peer);
+	sock_close(&ss, server);
+	t_x11_env_free(&fs, &proc, &ss);
+
+	END;
+}
+
+TEST(display_x11_direct_window_get_position_rejects_null_window)
+{
+	START;
+
+	display_driver_t *drv = t_x11_driver();
+	u16 x		      = 0;
+	u16 y		      = 0;
+
+	EXPECT_EQ(drv->window_get_position(NULL, &x, &y), 1);
+
+	END;
+}
+
+TEST(display_x11_direct_window_get_size_returns_width)
+{
+	START;
+
+	display_driver_t *drv = t_x11_driver();
+	fs_t fs		      = {0};
+	proc_t proc	      = {0};
+	sock_t ss	      = {0};
+	display_t display     = {0};
+	window_t window	      = {0};
+	void *server	      = NULL;
+	void *peer	      = NULL;
+	u16 width	      = 0;
+	u16 height	      = 0;
+
+	t_x11_open_window(drv, &fs, &proc, &ss, &display, &window, &server, &peer);
+	t_x11_drain_open_window_requests(&ss, peer);
+	window_set_size(&window, 333, 444);
+	sock_read_all(&ss, peer, (u8[20]){0}, 20);
+	window_get_size(&window, &width, &height);
+
+	EXPECT_EQ(width, 333);
+
+	window_free(&window);
+	display_free(&display);
+	sock_close(&ss, peer);
+	sock_close(&ss, server);
+	t_x11_env_free(&fs, &proc, &ss);
+
+	END;
+}
+
+TEST(display_x11_direct_window_get_size_returns_height)
+{
+	START;
+
+	display_driver_t *drv = t_x11_driver();
+	fs_t fs		      = {0};
+	proc_t proc	      = {0};
+	sock_t ss	      = {0};
+	display_t display     = {0};
+	window_t window	      = {0};
+	void *server	      = NULL;
+	void *peer	      = NULL;
+	u16 width	      = 0;
+	u16 height	      = 0;
+
+	t_x11_open_window(drv, &fs, &proc, &ss, &display, &window, &server, &peer);
+	t_x11_drain_open_window_requests(&ss, peer);
+	window_set_size(&window, 333, 444);
+	sock_read_all(&ss, peer, (u8[20]){0}, 20);
+	window_get_size(&window, &width, &height);
+
+	EXPECT_EQ(height, 444);
+
+	window_free(&window);
+	display_free(&display);
+	sock_close(&ss, peer);
+	sock_close(&ss, server);
+	t_x11_env_free(&fs, &proc, &ss);
+
+	END;
+}
+
+TEST(display_x11_direct_window_get_size_rejects_null_window)
+{
+	START;
+
+	display_driver_t *drv = t_x11_driver();
+	u16 width	      = 0;
+	u16 height	      = 0;
+
+	EXPECT_EQ(drv->window_get_size(NULL, &width, &height), 1);
 
 	END;
 }
@@ -1506,6 +1735,49 @@ TEST(display_x11_direct_window_set_bordered_writes_request)
 	END;
 }
 
+TEST(display_x11_direct_window_get_borderless_returns_borderless)
+{
+	START;
+
+	display_driver_t *drv = t_x11_driver();
+	fs_t fs		      = {0};
+	proc_t proc	      = {0};
+	sock_t ss	      = {0};
+	display_t display     = {0};
+	window_t window	      = {0};
+	void *server	      = NULL;
+	void *peer	      = NULL;
+	int borderless	      = 0;
+
+	t_x11_open_window(drv, &fs, &proc, &ss, &display, &window, &server, &peer);
+	t_x11_drain_open_window_requests(&ss, peer);
+	window_set_borderless(&window, 1);
+	sock_read_all(&ss, peer, (u8[44]){0}, 44);
+	window_get_borderless(&window, &borderless);
+
+	EXPECT_EQ(borderless, 1);
+
+	window_free(&window);
+	display_free(&display);
+	sock_close(&ss, peer);
+	sock_close(&ss, server);
+	t_x11_env_free(&fs, &proc, &ss);
+
+	END;
+}
+
+TEST(display_x11_direct_window_get_borderless_rejects_null_window)
+{
+	START;
+
+	display_driver_t *drv = t_x11_driver();
+	int borderless	      = 0;
+
+	EXPECT_EQ(drv->window_get_borderless(NULL, &borderless), 1);
+
+	END;
+}
+
 TEST(display_x11_direct_window_set_fullscreen_null_data)
 {
 	START;
@@ -1559,6 +1831,49 @@ TEST(display_x11_direct_window_set_fullscreen_unmapped_writes_property)
 	sock_close(&ss, peer);
 	sock_close(&ss, server);
 	t_x11_env_free(&fs, &proc, &ss);
+
+	END;
+}
+
+TEST(display_x11_direct_window_get_fullscreen_returns_fullscreen)
+{
+	START;
+
+	display_driver_t *drv = t_x11_driver();
+	fs_t fs		      = {0};
+	proc_t proc	      = {0};
+	sock_t ss	      = {0};
+	display_t display     = {0};
+	window_t window	      = {0};
+	void *server	      = NULL;
+	void *peer	      = NULL;
+	int fullscreen	      = 0;
+
+	t_x11_open_window(drv, &fs, &proc, &ss, &display, &window, &server, &peer);
+	t_x11_drain_open_window_requests(&ss, peer);
+	window_set_fullscreen(&window, 1);
+	sock_read_all(&ss, peer, (u8[28]){0}, 28);
+	window_get_fullscreen(&window, &fullscreen);
+
+	EXPECT_EQ(fullscreen, 1);
+
+	window_free(&window);
+	display_free(&display);
+	sock_close(&ss, peer);
+	sock_close(&ss, server);
+	t_x11_env_free(&fs, &proc, &ss);
+
+	END;
+}
+
+TEST(display_x11_direct_window_get_fullscreen_rejects_null_window)
+{
+	START;
+
+	display_driver_t *drv = t_x11_driver();
+	int fullscreen	      = 0;
+
+	EXPECT_EQ(drv->window_get_fullscreen(NULL, &fullscreen), 1);
 
 	END;
 }
@@ -1745,6 +2060,64 @@ TEST(display_x11_direct_window_set_position_write_failure)
 
 	log_set_quiet(0, 1);
 	EXPECT_EQ(window_set_position(&window, 11, 22), 1);
+	window_free(&window);
+	log_set_quiet(0, 0);
+
+	display_free(&display);
+	sock_close(&ss, server);
+	t_x11_env_free(&fs, &proc, &ss);
+
+	END;
+}
+
+TEST(display_x11_direct_window_set_size_write_failure)
+{
+	START;
+
+	display_driver_t *drv = t_x11_driver();
+	fs_t fs		      = {0};
+	proc_t proc	      = {0};
+	sock_t ss	      = {0};
+	display_t display     = {0};
+	window_t window	      = {0};
+	void *server	      = NULL;
+	void *peer	      = NULL;
+
+	t_x11_open_window(drv, &fs, &proc, &ss, &display, &window, &server, &peer);
+	t_x11_drain_open_window_requests(&ss, peer);
+	sock_close(&ss, peer);
+
+	log_set_quiet(0, 1);
+	EXPECT_EQ(window_set_size(&window, 333, 444), 1);
+	window_free(&window);
+	log_set_quiet(0, 0);
+
+	display_free(&display);
+	sock_close(&ss, server);
+	t_x11_env_free(&fs, &proc, &ss);
+
+	END;
+}
+
+TEST(display_x11_direct_window_set_borderless_write_failure)
+{
+	START;
+
+	display_driver_t *drv = t_x11_driver();
+	fs_t fs		      = {0};
+	proc_t proc	      = {0};
+	sock_t ss	      = {0};
+	display_t display     = {0};
+	window_t window	      = {0};
+	void *server	      = NULL;
+	void *peer	      = NULL;
+
+	t_x11_open_window(drv, &fs, &proc, &ss, &display, &window, &server, &peer);
+	t_x11_drain_open_window_requests(&ss, peer);
+	sock_close(&ss, peer);
+
+	log_set_quiet(0, 1);
+	EXPECT_EQ(window_set_borderless(&window, 1), 1);
 	window_free(&window);
 	log_set_quiet(0, 0);
 
@@ -4781,19 +5154,34 @@ STEST(display_x11_direct)
 	RUN(display_x11_direct_window_set_title_too_long);
 	RUN(display_x11_direct_window_set_title_alloc_failure);
 	RUN(display_x11_direct_window_set_title_write_failure);
+	RUN(display_x11_direct_window_get_title_returns_title);
+	RUN(display_x11_direct_window_get_title_rejects_small_buffer);
+	RUN(display_x11_direct_window_get_title_rejects_null_window);
 	RUN(display_x11_direct_window_geometry_writes_requests);
+	RUN(display_x11_direct_window_get_position_returns_x);
+	RUN(display_x11_direct_window_get_position_returns_y);
+	RUN(display_x11_direct_window_get_position_rejects_null_window);
+	RUN(display_x11_direct_window_get_size_returns_width);
+	RUN(display_x11_direct_window_get_size_returns_height);
+	RUN(display_x11_direct_window_get_size_rejects_null_window);
 	RUN(display_x11_direct_window_set_position_null_data);
 	RUN(display_x11_direct_window_set_size_null_data);
 	RUN(display_x11_direct_window_set_borderless_null_data);
 	RUN(display_x11_direct_window_set_borderless_writes_request);
 	RUN(display_x11_direct_window_set_bordered_writes_request);
+	RUN(display_x11_direct_window_get_borderless_returns_borderless);
+	RUN(display_x11_direct_window_get_borderless_rejects_null_window);
 	RUN(display_x11_direct_window_set_fullscreen_null_data);
 	RUN(display_x11_direct_window_set_fullscreen_unmapped_writes_property);
+	RUN(display_x11_direct_window_get_fullscreen_returns_fullscreen);
+	RUN(display_x11_direct_window_get_fullscreen_rejects_null_window);
 	RUN(display_x11_direct_window_set_windowed_unmapped_writes_empty_property);
 	RUN(display_x11_direct_window_set_fullscreen_mapped_writes_client_message);
 	RUN(display_x11_direct_window_set_windowed_mapped_writes_client_message);
 	RUN(display_x11_direct_window_set_fullscreen_mapped_write_failure);
 	RUN(display_x11_direct_window_set_position_write_failure);
+	RUN(display_x11_direct_window_set_size_write_failure);
+	RUN(display_x11_direct_window_set_borderless_write_failure);
 	RUN(display_x11_direct_window_visibility_writes_requests);
 	RUN(display_x11_direct_window_show_null_data);
 	RUN(display_x11_direct_window_hide_null_data);

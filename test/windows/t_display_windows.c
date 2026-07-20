@@ -15,6 +15,7 @@ typedef struct t_windows_state_s {
 	LONG_PTR userdata;
 	LONG_PTR style;
 	RECT rect;
+	RECT client;
 	RECT monitor;
 	MSG messages[16];
 	size_t message_count;
@@ -26,9 +27,12 @@ typedef struct t_windows_state_s {
 	int show_window_calls;
 	int update_window_calls;
 	int set_window_text_calls;
+	int get_window_text_length_calls;
+	int get_window_text_calls;
 	int set_window_pos_calls;
 	int adjust_window_rect_calls;
 	int get_window_rect_calls;
+	int get_client_rect_calls;
 	int monitor_from_window_calls;
 	int get_monitor_info_calls;
 	int screen_to_client_calls;
@@ -62,6 +66,7 @@ static void t_windows_reset(void)
 		.hwnd	 = (HWND)0x1234,
 		.style	 = WS_OVERLAPPEDWINDOW,
 		.rect	 = {11, 22, 333, 444},
+		.client	 = {0, 0, 640, 480},
 		.monitor = {0, 0, 1920, 1080},
 	};
 	t_windows_event_calls = 0;
@@ -154,6 +159,35 @@ static BOOL WINAPI t_SetWindowTextA(HWND hwnd, LPCSTR title)
 	return TRUE;
 }
 
+static int WINAPI t_GetWindowTextLengthA(HWND hwnd)
+{
+	(void)hwnd;
+	t_windows.get_window_text_length_calls++;
+
+	int len = 0;
+	while (t_windows.title[len] != 0) {
+		len++;
+	}
+	return len;
+}
+
+static int WINAPI t_GetWindowTextA(HWND hwnd, LPSTR title, int size)
+{
+	(void)hwnd;
+	t_windows.get_window_text_calls++;
+
+	int i = 0;
+	if (size <= 0) {
+		return 0;
+	}
+	while (i + 1 < size && t_windows.title[i] != 0) {
+		title[i] = t_windows.title[i];
+		i++;
+	}
+	title[i] = 0;
+	return i;
+}
+
 static BOOL WINAPI t_SetWindowPos(HWND hwnd, HWND after, int x, int y, int width, int height, UINT flags)
 {
 	(void)hwnd;
@@ -183,6 +217,14 @@ static BOOL WINAPI t_GetWindowRect(HWND hwnd, LPRECT rect)
 	(void)hwnd;
 	t_windows.get_window_rect_calls++;
 	*rect = t_windows.rect;
+	return TRUE;
+}
+
+static BOOL WINAPI t_GetClientRect(HWND hwnd, LPRECT rect)
+{
+	(void)hwnd;
+	t_windows.get_client_rect_calls++;
+	*rect = t_windows.client;
 	return TRUE;
 }
 
@@ -306,9 +348,12 @@ static void t_windows_set_symbols(proc_t *proc)
 	proc_setdlsym(proc, STRV("user32.dll"), STRV("ShowWindow"), t_ShowWindow);
 	proc_setdlsym(proc, STRV("user32.dll"), STRV("UpdateWindow"), t_UpdateWindow);
 	proc_setdlsym(proc, STRV("user32.dll"), STRV("SetWindowTextA"), t_SetWindowTextA);
+	proc_setdlsym(proc, STRV("user32.dll"), STRV("GetWindowTextLengthA"), t_GetWindowTextLengthA);
+	proc_setdlsym(proc, STRV("user32.dll"), STRV("GetWindowTextA"), t_GetWindowTextA);
 	proc_setdlsym(proc, STRV("user32.dll"), STRV("SetWindowPos"), t_SetWindowPos);
 	proc_setdlsym(proc, STRV("user32.dll"), STRV("AdjustWindowRectEx"), t_AdjustWindowRectEx);
 	proc_setdlsym(proc, STRV("user32.dll"), STRV("GetWindowRect"), t_GetWindowRect);
+	proc_setdlsym(proc, STRV("user32.dll"), STRV("GetClientRect"), t_GetClientRect);
 	proc_setdlsym(proc, STRV("user32.dll"), STRV("MonitorFromWindow"), t_MonitorFromWindow);
 	proc_setdlsym(proc, STRV("user32.dll"), STRV("GetMonitorInfoA"), t_GetMonitorInfoA);
 	proc_setdlsym(proc, STRV("user32.dll"), STRV("ScreenToClient"), t_ScreenToClient);
@@ -514,6 +559,34 @@ TEST(display_windows_window_set_title_copies_counted_string)
 	END;
 }
 
+TEST(display_windows_window_get_title_returns_title)
+{
+	START;
+
+	t_windows_reset();
+	fs_t fs	    = {0};
+	proc_t proc = {0};
+	sock_t ss   = {0};
+	t_windows_env_init(&fs, &proc, &ss);
+	display_t display = {0};
+	window_t window	  = {0};
+	char title[64]	  = {0};
+
+	c_sprintf(t_windows.title, sizeof(t_windows.title), 0, "%s", "title");
+
+	EXPECT_EQ(t_windows_open(&display, &window, &fs, &proc, &ss), 0);
+	EXPECT_EQ(window_get_title(&window, title, sizeof(title)), 0);
+	EXPECT_EQ(t_windows.get_window_text_length_calls, 1);
+	EXPECT_EQ(t_windows.get_window_text_calls, 1);
+	EXPECT_STR(title, "title");
+
+	window_free(&window);
+	display_free(&display);
+	t_windows_env_free(&fs, &proc, &ss);
+
+	END;
+}
+
 TEST(display_windows_window_set_position_moves_window)
 {
 	START;
@@ -531,6 +604,60 @@ TEST(display_windows_window_set_position_moves_window)
 	EXPECT_EQ(t_windows.pos_x, 33);
 	EXPECT_EQ(t_windows.pos_y, 44);
 	EXPECT_EQ(t_windows.pos_flags, SWP_NOZORDER | SWP_NOSIZE);
+
+	window_free(&window);
+	display_free(&display);
+	t_windows_env_free(&fs, &proc, &ss);
+
+	END;
+}
+
+TEST(display_windows_window_get_position_returns_x)
+{
+	START;
+
+	t_windows_reset();
+	fs_t fs	    = {0};
+	proc_t proc = {0};
+	sock_t ss   = {0};
+	t_windows_env_init(&fs, &proc, &ss);
+	display_t display = {0};
+	window_t window	  = {0};
+	u16 x		  = 0;
+	u16 y		  = 0;
+
+	t_windows.rect.left = 33;
+
+	EXPECT_EQ(t_windows_open(&display, &window, &fs, &proc, &ss), 0);
+	EXPECT_EQ(window_get_position(&window, &x, &y), 0);
+	EXPECT_EQ(x, 33);
+
+	window_free(&window);
+	display_free(&display);
+	t_windows_env_free(&fs, &proc, &ss);
+
+	END;
+}
+
+TEST(display_windows_window_get_position_returns_y)
+{
+	START;
+
+	t_windows_reset();
+	fs_t fs	    = {0};
+	proc_t proc = {0};
+	sock_t ss   = {0};
+	t_windows_env_init(&fs, &proc, &ss);
+	display_t display = {0};
+	window_t window	  = {0};
+	u16 x		  = 0;
+	u16 y		  = 0;
+
+	t_windows.rect.top = 44;
+
+	EXPECT_EQ(t_windows_open(&display, &window, &fs, &proc, &ss), 0);
+	EXPECT_EQ(window_get_position(&window, &x, &y), 0);
+	EXPECT_EQ(y, 44);
 
 	window_free(&window);
 	display_free(&display);
@@ -564,6 +691,60 @@ TEST(display_windows_window_set_size_resizes_window)
 	END;
 }
 
+TEST(display_windows_window_get_size_returns_width)
+{
+	START;
+
+	t_windows_reset();
+	fs_t fs	    = {0};
+	proc_t proc = {0};
+	sock_t ss   = {0};
+	t_windows_env_init(&fs, &proc, &ss);
+	display_t display = {0};
+	window_t window	  = {0};
+	u16 width	  = 0;
+	u16 height	  = 0;
+
+	t_windows.client.right = 800;
+
+	EXPECT_EQ(t_windows_open(&display, &window, &fs, &proc, &ss), 0);
+	EXPECT_EQ(window_get_size(&window, &width, &height), 0);
+	EXPECT_EQ(width, 800);
+
+	window_free(&window);
+	display_free(&display);
+	t_windows_env_free(&fs, &proc, &ss);
+
+	END;
+}
+
+TEST(display_windows_window_get_size_returns_height)
+{
+	START;
+
+	t_windows_reset();
+	fs_t fs	    = {0};
+	proc_t proc = {0};
+	sock_t ss   = {0};
+	t_windows_env_init(&fs, &proc, &ss);
+	display_t display = {0};
+	window_t window	  = {0};
+	u16 width	  = 0;
+	u16 height	  = 0;
+
+	t_windows.client.bottom = 600;
+
+	EXPECT_EQ(t_windows_open(&display, &window, &fs, &proc, &ss), 0);
+	EXPECT_EQ(window_get_size(&window, &width, &height), 0);
+	EXPECT_EQ(height, 600);
+
+	window_free(&window);
+	display_free(&display);
+	t_windows_env_free(&fs, &proc, &ss);
+
+	END;
+}
+
 TEST(display_windows_window_set_borderless_sets_popup_style)
 {
 	START;
@@ -580,6 +761,31 @@ TEST(display_windows_window_set_borderless_sets_popup_style)
 	EXPECT_EQ(window_set_borderless(&window, 1), 0);
 	EXPECT_EQ(t_windows.style, WS_POPUP);
 	EXPECT_EQ(t_windows.pos_flags, SWP_FRAMECHANGED | SWP_NOACTIVATE | SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER);
+
+	window_free(&window);
+	display_free(&display);
+	t_windows_env_free(&fs, &proc, &ss);
+
+	END;
+}
+
+TEST(display_windows_window_get_borderless_returns_borderless)
+{
+	START;
+
+	t_windows_reset();
+	fs_t fs	    = {0};
+	proc_t proc = {0};
+	sock_t ss   = {0};
+	t_windows_env_init(&fs, &proc, &ss);
+	display_t display = {0};
+	window_t window	  = {0};
+	int borderless	  = 0;
+
+	EXPECT_EQ(t_windows_open(&display, &window, &fs, &proc, &ss), 0);
+	t_windows.style = WS_POPUP;
+	EXPECT_EQ(window_get_borderless(&window, &borderless), 0);
+	EXPECT_EQ(borderless, 1);
 
 	window_free(&window);
 	display_free(&display);
@@ -609,6 +815,31 @@ TEST(display_windows_window_set_fullscreen_uses_monitor)
 	EXPECT_EQ(t_windows.pos_width, 1920);
 	EXPECT_EQ(t_windows.pos_height, 1080);
 	EXPECT_EQ(t_windows.pos_flags, SWP_SHOWWINDOW | SWP_FRAMECHANGED);
+
+	window_free(&window);
+	display_free(&display);
+	t_windows_env_free(&fs, &proc, &ss);
+
+	END;
+}
+
+TEST(display_windows_window_get_fullscreen_returns_fullscreen)
+{
+	START;
+
+	t_windows_reset();
+	fs_t fs	    = {0};
+	proc_t proc = {0};
+	sock_t ss   = {0};
+	t_windows_env_init(&fs, &proc, &ss);
+	display_t display = {0};
+	window_t window	  = {0};
+	int fullscreen	  = 0;
+
+	EXPECT_EQ(t_windows_open(&display, &window, &fs, &proc, &ss), 0);
+	EXPECT_EQ(window_set_fullscreen(&window, 1), 0);
+	EXPECT_EQ(window_get_fullscreen(&window, &fullscreen), 0);
+	EXPECT_EQ(fullscreen, 1);
 
 	window_free(&window);
 	display_free(&display);
@@ -942,10 +1173,17 @@ STEST(display_windows)
 	RUN(display_windows_window_init_creates_window);
 	RUN(display_windows_window_free_destroys_window);
 	RUN(display_windows_window_set_title_copies_counted_string);
+	RUN(display_windows_window_get_title_returns_title);
 	RUN(display_windows_window_set_position_moves_window);
+	RUN(display_windows_window_get_position_returns_x);
+	RUN(display_windows_window_get_position_returns_y);
 	RUN(display_windows_window_set_size_resizes_window);
+	RUN(display_windows_window_get_size_returns_width);
+	RUN(display_windows_window_get_size_returns_height);
 	RUN(display_windows_window_set_borderless_sets_popup_style);
+	RUN(display_windows_window_get_borderless_returns_borderless);
 	RUN(display_windows_window_set_fullscreen_uses_monitor);
+	RUN(display_windows_window_get_fullscreen_returns_fullscreen);
 	RUN(display_windows_window_show_calls_user32);
 	RUN(display_windows_poll_event_returns_key);
 	RUN(display_windows_poll_event_returns_mouse_move);

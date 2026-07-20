@@ -205,6 +205,7 @@ typedef struct x11_s {
 	int (*UnmapWindow)(Display *, Window);
 	int (*MoveWindow)(Display *, Window, int, int);
 	int (*ResizeWindow)(Display *, Window, unsigned int, unsigned int);
+	Status (*FetchName)(Display *, Window, char **);
 	int (*Pending)(Display *);
 	int (*NextEvent)(Display *, XEvent *);
 	int (*Flush)(Display *);
@@ -215,6 +216,8 @@ typedef struct x11_s {
 	XModifierKeymap *(*GetModifierMapping)(Display *);
 	int (*FreeModifiermap)(XModifierKeymap *);
 	int (*GetWindowAttributes)(Display *, Window, XWindowAttributes *);
+	int (*GetWindowProperty)(Display *, Window, Atom, long, long, Bool, Atom, Atom *, int *, unsigned long *, unsigned long *,
+				 unsigned char **);
 	XVisualInfo *(*GetVisualInfo)(Display *, long, XVisualInfo *, int *);
 	XID (*AllocID)(Display *);
 	int (*QueryExtension)(Display *, const char *, int *, int *, int *);
@@ -306,6 +309,7 @@ enum {
 enum {
 	XA_ATOM	  = 4,
 	XA_STRING = 31,
+	X_SUCCESS = 0,
 };
 
 enum {
@@ -461,6 +465,7 @@ static int load_x11(display_x11_dynamic_t *dx11)
 	LOAD_X11(dx11, UnmapWindow);
 	LOAD_X11(dx11, MoveWindow);
 	LOAD_X11(dx11, ResizeWindow);
+	LOAD_X11(dx11, FetchName);
 	LOAD_X11(dx11, Pending);
 	LOAD_X11(dx11, NextEvent);
 	LOAD_X11(dx11, Flush);
@@ -471,6 +476,7 @@ static int load_x11(display_x11_dynamic_t *dx11)
 	LOAD_X11(dx11, GetModifierMapping);
 	LOAD_X11(dx11, FreeModifiermap);
 	LOAD_X11(dx11, GetWindowAttributes);
+	LOAD_X11(dx11, GetWindowProperty);
 	LOAD_X11(dx11, GetVisualInfo);
 	if (load_symbol(dx11, (void **)&dx11->x11.AllocID, STRV("_XAllocID"))) {
 		return 1;
@@ -1322,6 +1328,33 @@ static int display_x11_dynamic_window_set_title(window_t *wnd, strv_t title)
 	       set_property_text(wnd, dx11->net_wm_name, dx11->utf8_string, title);
 }
 
+static int display_x11_dynamic_window_get_title(window_t *wnd, char *title, size_t size)
+{
+	if (wnd == NULL || wnd->display == NULL || wnd->display->data == NULL || wnd->data == NULL || title == NULL || size == 0) {
+		return 1;
+	}
+
+	display_x11_dynamic_t *dx11 = wnd->display->data;
+	window_x11_dynamic_t *wx11  = wnd->data;
+	char *name		    = NULL;
+	if (dx11->x11.FetchName(dx11->display, wx11->id, &name) == 0 || name == NULL) {
+		return 1;
+	}
+
+	size_t len = 0;
+	while (name[len] != 0) {
+		len++;
+	}
+	if (len >= size) {
+		dx11->x11.Free(name);
+		return 1;
+	}
+
+	mem_copy(title, size, name, len + 1);
+	dx11->x11.Free(name);
+	return 0;
+}
+
 static int display_x11_dynamic_window_set_position(window_t *wnd, u16 x, u16 y)
 {
 	if (wnd == NULL || wnd->display == NULL || wnd->display->data == NULL || wnd->data == NULL) {
@@ -1331,6 +1364,25 @@ static int display_x11_dynamic_window_set_position(window_t *wnd, u16 x, u16 y)
 	display_x11_dynamic_t *dx11 = wnd->display->data;
 	window_x11_dynamic_t *wx11  = wnd->data;
 	return dx11->x11.MoveWindow(dx11->display, wx11->id, x, y) == 0 || dx11->x11.Flush(dx11->display) == 0;
+}
+
+static int display_x11_dynamic_window_get_position(window_t *wnd, u16 *x, u16 *y)
+{
+	if (wnd == NULL || wnd->display == NULL || wnd->display->data == NULL || wnd->data == NULL || x == NULL || y == NULL) {
+		return 1;
+	}
+
+	display_x11_dynamic_t *dx11 = wnd->display->data;
+	window_x11_dynamic_t *wx11  = wnd->data;
+	XWindowAttributes attrs	    = {0};
+	if (dx11->x11.GetWindowAttributes(dx11->display, wx11->id, &attrs) == 0 || attrs.x < 0 || attrs.y < 0 || attrs.x > UINT16_MAX ||
+	    attrs.y > UINT16_MAX) {
+		return 1;
+	}
+
+	*x = (u16)attrs.x;
+	*y = (u16)attrs.y;
+	return 0;
 }
 
 static int display_x11_dynamic_window_set_size(window_t *wnd, u16 width, u16 height)
@@ -1344,6 +1396,25 @@ static int display_x11_dynamic_window_set_size(window_t *wnd, u16 width, u16 hei
 	return dx11->x11.ResizeWindow(dx11->display, wx11->id, width, height) == 0 || dx11->x11.Flush(dx11->display) == 0;
 }
 
+static int display_x11_dynamic_window_get_size(window_t *wnd, u16 *width, u16 *height)
+{
+	if (wnd == NULL || wnd->display == NULL || wnd->display->data == NULL || wnd->data == NULL || width == NULL || height == NULL) {
+		return 1;
+	}
+
+	display_x11_dynamic_t *dx11 = wnd->display->data;
+	window_x11_dynamic_t *wx11  = wnd->data;
+	XWindowAttributes attrs	    = {0};
+	if (dx11->x11.GetWindowAttributes(dx11->display, wx11->id, &attrs) == 0 || attrs.width < 0 || attrs.height < 0 ||
+	    attrs.width > UINT16_MAX || attrs.height > UINT16_MAX) {
+		return 1;
+	}
+
+	*width	= (u16)attrs.width;
+	*height = (u16)attrs.height;
+	return 0;
+}
+
 static int display_x11_dynamic_window_set_borderless(window_t *wnd, int borderless)
 {
 	if (wnd == NULL || wnd->display == NULL || wnd->display->data == NULL || wnd->data == NULL) {
@@ -1353,6 +1424,44 @@ static int display_x11_dynamic_window_set_borderless(window_t *wnd, int borderle
 	return set_borderless(wnd, borderless);
 }
 
+static int display_x11_dynamic_window_get_borderless(window_t *wnd, int *borderless)
+{
+	if (wnd == NULL || wnd->display == NULL || wnd->display->data == NULL || wnd->data == NULL || borderless == NULL) {
+		return 1;
+	}
+
+	display_x11_dynamic_t *dx11 = wnd->display->data;
+	window_x11_dynamic_t *wx11  = wnd->data;
+	Atom actual_type	    = 0;
+	int actual_format	    = 0;
+	unsigned long items	    = 0;
+	unsigned long after	    = 0;
+	unsigned char *data	    = NULL;
+	if (dx11->x11.GetWindowProperty(dx11->display,
+					wx11->id,
+					dx11->motif_wm_hints,
+					0,
+					MOTIF_WM_HINTS_FIELD_COUNT,
+					X_FALSE,
+					dx11->motif_wm_hints,
+					&actual_type,
+					&actual_format,
+					&items,
+					&after,
+					&data) != X_SUCCESS ||
+	    actual_type != dx11->motif_wm_hints || actual_format != 32 || items < MOTIF_WM_HINTS_FIELD_COUNT || data == NULL) {
+		if (data != NULL) {
+			dx11->x11.Free(data);
+		}
+		return 1;
+	}
+
+	long *hints = (long *)data;
+	*borderless = (hints[0] & MOTIF_WM_HINTS_DECORATIONS_FLAG) != 0 && hints[2] == 0;
+	dx11->x11.Free(data);
+	return after == 0 ? 0 : 1;
+}
+
 static int display_x11_dynamic_window_set_fullscreen(window_t *wnd, int fullscreen)
 {
 	if (wnd == NULL || wnd->display == NULL || wnd->display->data == NULL || wnd->data == NULL) {
@@ -1360,6 +1469,52 @@ static int display_x11_dynamic_window_set_fullscreen(window_t *wnd, int fullscre
 	}
 
 	return set_fullscreen(wnd, fullscreen);
+}
+
+static int display_x11_dynamic_window_get_fullscreen(window_t *wnd, int *fullscreen)
+{
+	if (wnd == NULL || wnd->display == NULL || wnd->display->data == NULL || wnd->data == NULL || fullscreen == NULL) {
+		return 1;
+	}
+
+	display_x11_dynamic_t *dx11 = wnd->display->data;
+	window_x11_dynamic_t *wx11  = wnd->data;
+	Atom actual_type	    = 0;
+	int actual_format	    = 0;
+	unsigned long items	    = 0;
+	unsigned long after	    = 0;
+	unsigned char *data	    = NULL;
+	if (dx11->x11.GetWindowProperty(dx11->display,
+					wx11->id,
+					dx11->net_wm_state,
+					0,
+					32,
+					X_FALSE,
+					XA_ATOM,
+					&actual_type,
+					&actual_format,
+					&items,
+					&after,
+					&data) != X_SUCCESS ||
+	    actual_type != XA_ATOM || actual_format != 32) {
+		if (data != NULL) {
+			dx11->x11.Free(data);
+		}
+		return 1;
+	}
+
+	Atom *states = (Atom *)data;
+	*fullscreen  = 0;
+	for (unsigned long i = 0; i < items; i++) {
+		if (states[i] == dx11->net_wm_state_fullscreen) {
+			*fullscreen = 1;
+			break;
+		}
+	}
+	if (data != NULL) {
+		dx11->x11.Free(data);
+	}
+	return after == 0 ? 0 : 1;
 }
 
 static int display_x11_dynamic_window_show(window_t *wnd)
@@ -1463,10 +1618,15 @@ static display_driver_t display_x11_dynamic = {
 	.window_id	       = display_x11_dynamic_window_id,
 	.window_native	       = display_x11_dynamic_window_native,
 	.window_set_title      = display_x11_dynamic_window_set_title,
+	.window_get_title      = display_x11_dynamic_window_get_title,
 	.window_set_position   = display_x11_dynamic_window_set_position,
+	.window_get_position   = display_x11_dynamic_window_get_position,
 	.window_set_size       = display_x11_dynamic_window_set_size,
+	.window_get_size       = display_x11_dynamic_window_get_size,
 	.window_set_borderless = display_x11_dynamic_window_set_borderless,
+	.window_get_borderless = display_x11_dynamic_window_get_borderless,
 	.window_set_fullscreen = display_x11_dynamic_window_set_fullscreen,
+	.window_get_fullscreen = display_x11_dynamic_window_get_fullscreen,
 	.window_show	       = display_x11_dynamic_window_show,
 	.window_hide	       = display_x11_dynamic_window_hide,
 	.ext_init	       = display_x11_dynamic_ext_init,

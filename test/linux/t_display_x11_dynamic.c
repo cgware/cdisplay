@@ -94,6 +94,32 @@ typedef struct t_x11_configure_event_s {
 	int override_redirect;
 } t_x11_configure_event_t;
 
+typedef struct t_x11_window_attributes_s {
+	int x;
+	int y;
+	int width;
+	int height;
+	int border_width;
+	int depth;
+	void *visual;
+	t_x11_window_t root;
+	int class;
+	int bit_gravity;
+	int win_gravity;
+	int backing_store;
+	unsigned long backing_planes;
+	unsigned long backing_pixel;
+	int save_under;
+	unsigned long colormap;
+	int map_installed;
+	int map_state;
+	long all_event_masks;
+	long your_event_mask;
+	long do_not_propagate_mask;
+	int override_redirect;
+	void *screen;
+} t_x11_window_attributes_t;
+
 typedef union t_x11_client_message_data_u {
 	char b[20];
 	short s[10];
@@ -156,6 +182,9 @@ typedef struct t_x11_state_s {
 	int unmap_window_calls;
 	int move_window_calls;
 	int resize_window_calls;
+	int fetch_name_calls;
+	int get_window_attributes_calls;
+	int get_window_property_calls;
 	int query_extension_calls;
 	int alloc_id_calls;
 	int get_visual_info_calls;
@@ -187,6 +216,16 @@ typedef struct t_x11_state_s {
 	int unmap_window_result;
 	int move_window_result;
 	int resize_window_result;
+	int fetch_name_result;
+	char fetch_name[256];
+	int get_window_attributes_result;
+	t_x11_window_attributes_t window_attributes;
+	int get_window_property_result;
+	t_x11_atom_t get_window_property_type;
+	int get_window_property_format;
+	unsigned long get_window_property_items;
+	unsigned long get_window_property_after;
+	unsigned char *get_window_property_data;
 	int flush_result;
 	int query_extension_result;
 	unsigned long alloc_id_result;
@@ -203,29 +242,39 @@ static t_x11_state_t t_x11;
 static void t_x11_reset(void)
 {
 	t_x11 = (t_x11_state_t){
-		.display_result		 = (void *)0x11u,
-		.min_keycode		 = 8,
-		.max_keycode		 = 8,
-		.keysyms_per_keycode	 = 1,
-		.lookup_keysym		 = 'a',
-		.keysyms		 = {'a'},
-		.modifiers		 = {.max_keypermod = 0, .modifiermap = t_x11.modifiermap},
-		.visual			 = {.visualid = 0x21u},
-		.visual_info		 = {.visual = &t_x11.visual, .visualid = 0x21u, .depth = 24},
-		.visual_info_result	 = NULL,
-		.create_colormap_result	 = 0x55u,
-		.free_colormap_result	 = 1,
-		.create_window_result	 = 0x44u,
-		.set_wm_protocols_result = 1,
-		.change_property_result	 = 1,
-		.send_event_result	 = 1,
-		.map_window_result	 = 1,
-		.unmap_window_result	 = 1,
-		.move_window_result	 = 1,
-		.resize_window_result	 = 1,
-		.flush_result		 = 1,
-		.query_extension_result	 = 1,
-		.alloc_id_result	 = 0x66u,
+		.display_result		      = (void *)0x11u,
+		.min_keycode		      = 8,
+		.max_keycode		      = 8,
+		.keysyms_per_keycode	      = 1,
+		.lookup_keysym		      = 'a',
+		.keysyms		      = {'a'},
+		.modifiers		      = {.max_keypermod = 0, .modifiermap = t_x11.modifiermap},
+		.visual			      = {.visualid = 0x21u},
+		.visual_info		      = {.visual = &t_x11.visual, .visualid = 0x21u, .depth = 24},
+		.visual_info_result	      = NULL,
+		.create_colormap_result	      = 0x55u,
+		.free_colormap_result	      = 1,
+		.create_window_result	      = 0x44u,
+		.set_wm_protocols_result      = 1,
+		.change_property_result	      = 1,
+		.send_event_result	      = 1,
+		.map_window_result	      = 1,
+		.unmap_window_result	      = 1,
+		.move_window_result	      = 1,
+		.resize_window_result	      = 1,
+		.fetch_name_result	      = 1,
+		.fetch_name		      = "test",
+		.get_window_attributes_result = 1,
+		.window_attributes	      = {.x = 11, .y = 12, .width = 13, .height = 14},
+		.get_window_property_result   = 0,
+		.get_window_property_type     = 0,
+		.get_window_property_format   = 0,
+		.get_window_property_items    = 0,
+		.get_window_property_after    = 0,
+		.get_window_property_data     = NULL,
+		.flush_result		      = 1,
+		.query_extension_result	      = 1,
+		.alloc_id_result	      = 0x66u,
 	};
 }
 
@@ -421,6 +470,18 @@ static int t_XResizeWindow(void *display, t_x11_window_t window, unsigned int wi
 	return t_x11.resize_window_result;
 }
 
+static int t_XFetchName(void *display, t_x11_window_t window, char **name)
+{
+	(void)display;
+	(void)window;
+	t_x11.fetch_name_calls++;
+	if (t_x11.fetch_name_result == 0) {
+		return 0;
+	}
+	*name = t_x11.fetch_name;
+	return t_x11.fetch_name_result;
+}
+
 static int t_XPending(void *display)
 {
 	(void)display;
@@ -497,8 +558,41 @@ static int t_XGetWindowAttributes(void *display, t_x11_window_t window, void *at
 {
 	(void)display;
 	(void)window;
-	(void)attrs;
-	return 1;
+	t_x11.get_window_attributes_calls++;
+	if (attrs != NULL) {
+		*(t_x11_window_attributes_t *)attrs = t_x11.window_attributes;
+	}
+	return t_x11.get_window_attributes_result;
+}
+
+static int t_XGetWindowProperty(void *display, t_x11_window_t window, t_x11_atom_t property, long offset, long length, int del,
+				t_x11_atom_t request_type, t_x11_atom_t *actual_type, int *actual_format, unsigned long *items,
+				unsigned long *after, unsigned char **data)
+{
+	(void)display;
+	(void)window;
+	(void)property;
+	(void)offset;
+	(void)length;
+	(void)del;
+	(void)request_type;
+	t_x11.get_window_property_calls++;
+	if (actual_type != NULL) {
+		*actual_type = t_x11.get_window_property_type;
+	}
+	if (actual_format != NULL) {
+		*actual_format = t_x11.get_window_property_format;
+	}
+	if (items != NULL) {
+		*items = t_x11.get_window_property_items;
+	}
+	if (after != NULL) {
+		*after = t_x11.get_window_property_after;
+	}
+	if (data != NULL) {
+		*data = t_x11.get_window_property_data;
+	}
+	return t_x11.get_window_property_result;
 }
 
 static void *t_XGetVisualInfo(void *display, long mask, void *template, int *count)
@@ -559,6 +653,7 @@ static void t_x11_dynamic_set_symbols(proc_t *proc, int include_alloc_id, int in
 	T_X11_SET(UnmapWindow);
 	T_X11_SET(MoveWindow);
 	T_X11_SET(ResizeWindow);
+	T_X11_SET(FetchName);
 	T_X11_SET(Pending);
 	T_X11_SET(NextEvent);
 	T_X11_SET(Flush);
@@ -569,6 +664,7 @@ static void t_x11_dynamic_set_symbols(proc_t *proc, int include_alloc_id, int in
 	T_X11_SET(GetModifierMapping);
 	T_X11_SET(FreeModifiermap);
 	T_X11_SET(GetWindowAttributes);
+	T_X11_SET(GetWindowProperty);
 	T_X11_SET(GetVisualInfo);
 	if (include_alloc_id) {
 		proc_setdlsym(proc, STRV("libX11.so.6"), STRV("_XAllocID"), t_x11_symbol((t_x11_symbol_t)t_XAllocID));
@@ -1827,6 +1923,87 @@ TEST(display_x11_dynamic_window_set_title_change_failure)
 	END;
 }
 
+TEST(display_x11_dynamic_window_get_title_returns_title)
+{
+	START;
+
+	t_x11_reset();
+	fs_t fs		  = {0};
+	proc_t proc	  = {0};
+	sock_t ss	  = {0};
+	display_t display = {0};
+	window_t window	  = {0};
+	char title[16]	  = {0};
+	t_x11_dynamic_env_init(&fs, &proc, &ss);
+	t_x11_open(&display, &window, &fs, &proc, &ss);
+
+	window_get_title(&window, title, sizeof(title));
+
+	EXPECT_STR(title, "test");
+
+	window_free(&window);
+	display_free(&display);
+	t_x11_dynamic_env_free(&fs, &proc, &ss);
+	END;
+}
+
+TEST(display_x11_dynamic_window_get_title_rejects_small_buffer)
+{
+	START;
+
+	t_x11_reset();
+	fs_t fs		  = {0};
+	proc_t proc	  = {0};
+	sock_t ss	  = {0};
+	display_t display = {0};
+	window_t window	  = {0};
+	char title[4]	  = {0};
+	t_x11_dynamic_env_init(&fs, &proc, &ss);
+	t_x11_open(&display, &window, &fs, &proc, &ss);
+
+	EXPECT_EQ(window_get_title(&window, title, sizeof(title)), 1);
+
+	window_free(&window);
+	display_free(&display);
+	t_x11_dynamic_env_free(&fs, &proc, &ss);
+	END;
+}
+
+TEST(display_x11_dynamic_window_get_title_rejects_fetch_failure)
+{
+	START;
+
+	t_x11_reset();
+	t_x11.fetch_name_result = 0;
+	fs_t fs			= {0};
+	proc_t proc		= {0};
+	sock_t ss		= {0};
+	display_t display	= {0};
+	window_t window		= {0};
+	char title[16]		= {0};
+	t_x11_dynamic_env_init(&fs, &proc, &ss);
+	t_x11_open(&display, &window, &fs, &proc, &ss);
+
+	EXPECT_EQ(window_get_title(&window, title, sizeof(title)), 1);
+
+	window_free(&window);
+	display_free(&display);
+	t_x11_dynamic_env_free(&fs, &proc, &ss);
+	END;
+}
+
+TEST(display_x11_dynamic_window_get_title_rejects_null_window)
+{
+	START;
+
+	T_X11_DYNAMIC_DRV();
+	char title[16] = {0};
+
+	EXPECT_EQ(drv->window_get_title(NULL, title, sizeof(title)), 1);
+
+	END;
+}
+
 TEST(display_x11_dynamic_window_geometry)
 {
 	START;
@@ -1848,6 +2025,176 @@ TEST(display_x11_dynamic_window_geometry)
 	window_free(&window);
 	display_free(&display);
 	t_x11_dynamic_env_free(&fs, &proc, &ss);
+	END;
+}
+
+TEST(display_x11_dynamic_window_get_position_returns_x)
+{
+	START;
+
+	t_x11_reset();
+	fs_t fs		  = {0};
+	proc_t proc	  = {0};
+	sock_t ss	  = {0};
+	display_t display = {0};
+	window_t window	  = {0};
+	u16 x		  = 0;
+	u16 y		  = 0;
+	t_x11_dynamic_env_init(&fs, &proc, &ss);
+	t_x11_open(&display, &window, &fs, &proc, &ss);
+	window_get_position(&window, &x, &y);
+
+	EXPECT_EQ(x, 11);
+
+	window_free(&window);
+	display_free(&display);
+	t_x11_dynamic_env_free(&fs, &proc, &ss);
+	END;
+}
+
+TEST(display_x11_dynamic_window_get_position_returns_y)
+{
+	START;
+
+	t_x11_reset();
+	fs_t fs		  = {0};
+	proc_t proc	  = {0};
+	sock_t ss	  = {0};
+	display_t display = {0};
+	window_t window	  = {0};
+	u16 x		  = 0;
+	u16 y		  = 0;
+	t_x11_dynamic_env_init(&fs, &proc, &ss);
+	t_x11_open(&display, &window, &fs, &proc, &ss);
+	window_get_position(&window, &x, &y);
+
+	EXPECT_EQ(y, 12);
+
+	window_free(&window);
+	display_free(&display);
+	t_x11_dynamic_env_free(&fs, &proc, &ss);
+	END;
+}
+
+TEST(display_x11_dynamic_window_get_position_rejects_attribute_failure)
+{
+	START;
+
+	t_x11_reset();
+	t_x11.get_window_attributes_result = 0;
+	fs_t fs				   = {0};
+	proc_t proc			   = {0};
+	sock_t ss			   = {0};
+	display_t display		   = {0};
+	window_t window			   = {0};
+	u16 x				   = 0;
+	u16 y				   = 0;
+	t_x11_dynamic_env_init(&fs, &proc, &ss);
+	t_x11_open(&display, &window, &fs, &proc, &ss);
+
+	EXPECT_EQ(window_get_position(&window, &x, &y), 1);
+
+	window_free(&window);
+	display_free(&display);
+	t_x11_dynamic_env_free(&fs, &proc, &ss);
+	END;
+}
+
+TEST(display_x11_dynamic_window_get_position_rejects_null_window)
+{
+	START;
+
+	T_X11_DYNAMIC_DRV();
+	u16 x = 0;
+	u16 y = 0;
+
+	EXPECT_EQ(drv->window_get_position(NULL, &x, &y), 1);
+
+	END;
+}
+
+TEST(display_x11_dynamic_window_get_size_returns_width)
+{
+	START;
+
+	t_x11_reset();
+	fs_t fs		  = {0};
+	proc_t proc	  = {0};
+	sock_t ss	  = {0};
+	display_t display = {0};
+	window_t window	  = {0};
+	u16 width	  = 0;
+	u16 height	  = 0;
+	t_x11_dynamic_env_init(&fs, &proc, &ss);
+	t_x11_open(&display, &window, &fs, &proc, &ss);
+	window_get_size(&window, &width, &height);
+
+	EXPECT_EQ(width, 13);
+
+	window_free(&window);
+	display_free(&display);
+	t_x11_dynamic_env_free(&fs, &proc, &ss);
+	END;
+}
+
+TEST(display_x11_dynamic_window_get_size_returns_height)
+{
+	START;
+
+	t_x11_reset();
+	fs_t fs		  = {0};
+	proc_t proc	  = {0};
+	sock_t ss	  = {0};
+	display_t display = {0};
+	window_t window	  = {0};
+	u16 width	  = 0;
+	u16 height	  = 0;
+	t_x11_dynamic_env_init(&fs, &proc, &ss);
+	t_x11_open(&display, &window, &fs, &proc, &ss);
+	window_get_size(&window, &width, &height);
+
+	EXPECT_EQ(height, 14);
+
+	window_free(&window);
+	display_free(&display);
+	t_x11_dynamic_env_free(&fs, &proc, &ss);
+	END;
+}
+
+TEST(display_x11_dynamic_window_get_size_rejects_attribute_failure)
+{
+	START;
+
+	t_x11_reset();
+	t_x11.get_window_attributes_result = 0;
+	fs_t fs				   = {0};
+	proc_t proc			   = {0};
+	sock_t ss			   = {0};
+	display_t display		   = {0};
+	window_t window			   = {0};
+	u16 width			   = 0;
+	u16 height			   = 0;
+	t_x11_dynamic_env_init(&fs, &proc, &ss);
+	t_x11_open(&display, &window, &fs, &proc, &ss);
+
+	EXPECT_EQ(window_get_size(&window, &width, &height), 1);
+
+	window_free(&window);
+	display_free(&display);
+	t_x11_dynamic_env_free(&fs, &proc, &ss);
+	END;
+}
+
+TEST(display_x11_dynamic_window_get_size_rejects_null_window)
+{
+	START;
+
+	T_X11_DYNAMIC_DRV();
+	u16 width  = 0;
+	u16 height = 0;
+
+	EXPECT_EQ(drv->window_get_size(NULL, &width, &height), 1);
+
 	END;
 }
 
@@ -1873,6 +2220,71 @@ TEST(display_x11_dynamic_window_set_borderless)
 	END;
 }
 
+TEST(display_x11_dynamic_window_get_borderless_returns_borderless)
+{
+	START;
+
+	t_x11_reset();
+	long hints[]	  = {2, 0, 0, 0, 0};
+	fs_t fs		  = {0};
+	proc_t proc	  = {0};
+	sock_t ss	  = {0};
+	display_t display = {0};
+	window_t window	  = {0};
+	int borderless	  = 0;
+	t_x11_dynamic_env_init(&fs, &proc, &ss);
+	t_x11_open(&display, &window, &fs, &proc, &ss);
+	t_x11.get_window_property_type	 = 106;
+	t_x11.get_window_property_format = 32;
+	t_x11.get_window_property_items	 = 5;
+	t_x11.get_window_property_data	 = (unsigned char *)hints;
+	window_get_borderless(&window, &borderless);
+
+	EXPECT_EQ(borderless, 1);
+
+	window_free(&window);
+	display_free(&display);
+	t_x11_dynamic_env_free(&fs, &proc, &ss);
+	END;
+}
+
+TEST(display_x11_dynamic_window_get_borderless_rejects_property_failure)
+{
+	START;
+
+	t_x11_reset();
+	long hints[]	  = {0};
+	fs_t fs		  = {0};
+	proc_t proc	  = {0};
+	sock_t ss	  = {0};
+	display_t display = {0};
+	window_t window	  = {0};
+	int borderless	  = 0;
+	t_x11_dynamic_env_init(&fs, &proc, &ss);
+	t_x11_open(&display, &window, &fs, &proc, &ss);
+	t_x11.get_window_property_result = 1;
+	t_x11.get_window_property_data	 = (unsigned char *)hints;
+
+	EXPECT_EQ(window_get_borderless(&window, &borderless), 1);
+
+	window_free(&window);
+	display_free(&display);
+	t_x11_dynamic_env_free(&fs, &proc, &ss);
+	END;
+}
+
+TEST(display_x11_dynamic_window_get_borderless_rejects_null_window)
+{
+	START;
+
+	T_X11_DYNAMIC_DRV();
+	int borderless = 0;
+
+	EXPECT_EQ(drv->window_get_borderless(NULL, &borderless), 1);
+
+	END;
+}
+
 TEST(display_x11_dynamic_window_set_borderless_property_failure)
 {
 	START;
@@ -1892,6 +2304,71 @@ TEST(display_x11_dynamic_window_set_borderless_property_failure)
 	window_free(&window);
 	display_free(&display);
 	t_x11_dynamic_env_free(&fs, &proc, &ss);
+	END;
+}
+
+TEST(display_x11_dynamic_window_get_fullscreen_returns_fullscreen)
+{
+	START;
+
+	t_x11_reset();
+	t_x11_atom_t states[] = {108};
+	fs_t fs		      = {0};
+	proc_t proc	      = {0};
+	sock_t ss	      = {0};
+	display_t display     = {0};
+	window_t window	      = {0};
+	int fullscreen	      = 0;
+	t_x11_dynamic_env_init(&fs, &proc, &ss);
+	t_x11_open(&display, &window, &fs, &proc, &ss);
+	t_x11.get_window_property_type	 = 4;
+	t_x11.get_window_property_format = 32;
+	t_x11.get_window_property_items	 = 1;
+	t_x11.get_window_property_data	 = (unsigned char *)states;
+	window_get_fullscreen(&window, &fullscreen);
+
+	EXPECT_EQ(fullscreen, 1);
+
+	window_free(&window);
+	display_free(&display);
+	t_x11_dynamic_env_free(&fs, &proc, &ss);
+	END;
+}
+
+TEST(display_x11_dynamic_window_get_fullscreen_rejects_property_failure)
+{
+	START;
+
+	t_x11_reset();
+	t_x11_atom_t states[] = {0};
+	fs_t fs		      = {0};
+	proc_t proc	      = {0};
+	sock_t ss	      = {0};
+	display_t display     = {0};
+	window_t window	      = {0};
+	int fullscreen	      = 0;
+	t_x11_dynamic_env_init(&fs, &proc, &ss);
+	t_x11_open(&display, &window, &fs, &proc, &ss);
+	t_x11.get_window_property_result = 1;
+	t_x11.get_window_property_data	 = (unsigned char *)states;
+
+	EXPECT_EQ(window_get_fullscreen(&window, &fullscreen), 1);
+
+	window_free(&window);
+	display_free(&display);
+	t_x11_dynamic_env_free(&fs, &proc, &ss);
+	END;
+}
+
+TEST(display_x11_dynamic_window_get_fullscreen_rejects_null_window)
+{
+	START;
+
+	T_X11_DYNAMIC_DRV();
+	int fullscreen = 0;
+
+	EXPECT_EQ(drv->window_get_fullscreen(NULL, &fullscreen), 1);
+
 	END;
 }
 
@@ -2561,9 +3038,27 @@ STEST(display_x11_dynamic)
 	RUN(display_x11_dynamic_window_set_title_invalid_text);
 	RUN(display_x11_dynamic_window_set_title_too_long);
 	RUN(display_x11_dynamic_window_set_title_change_failure);
+	RUN(display_x11_dynamic_window_get_title_returns_title);
+	RUN(display_x11_dynamic_window_get_title_rejects_small_buffer);
+	RUN(display_x11_dynamic_window_get_title_rejects_fetch_failure);
+	RUN(display_x11_dynamic_window_get_title_rejects_null_window);
 	RUN(display_x11_dynamic_window_geometry);
+	RUN(display_x11_dynamic_window_get_position_returns_x);
+	RUN(display_x11_dynamic_window_get_position_returns_y);
+	RUN(display_x11_dynamic_window_get_position_rejects_attribute_failure);
+	RUN(display_x11_dynamic_window_get_position_rejects_null_window);
+	RUN(display_x11_dynamic_window_get_size_returns_width);
+	RUN(display_x11_dynamic_window_get_size_returns_height);
+	RUN(display_x11_dynamic_window_get_size_rejects_attribute_failure);
+	RUN(display_x11_dynamic_window_get_size_rejects_null_window);
 	RUN(display_x11_dynamic_window_set_borderless);
+	RUN(display_x11_dynamic_window_get_borderless_returns_borderless);
+	RUN(display_x11_dynamic_window_get_borderless_rejects_property_failure);
+	RUN(display_x11_dynamic_window_get_borderless_rejects_null_window);
 	RUN(display_x11_dynamic_window_set_borderless_property_failure);
+	RUN(display_x11_dynamic_window_get_fullscreen_returns_fullscreen);
+	RUN(display_x11_dynamic_window_get_fullscreen_rejects_property_failure);
+	RUN(display_x11_dynamic_window_get_fullscreen_rejects_null_window);
 	RUN(display_x11_dynamic_window_set_fullscreen_unmapped);
 	RUN(display_x11_dynamic_window_set_fullscreen_mapped);
 	RUN(display_x11_dynamic_window_set_fullscreen_send_failure);

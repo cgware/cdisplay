@@ -80,10 +80,12 @@ typedef struct window_wayland_dynamic_s {
 	wl_surface *surface;
 	xdg_surface *xdg_surface;
 	xdg_toplevel *xdg_toplevel;
+	char title[256];
 	u16 width;
 	u16 height;
 	u16 pending_width;
 	u16 pending_height;
+	int fullscreen;
 	int mapped;
 } window_wayland_dynamic_t;
 
@@ -858,7 +860,34 @@ static int display_wayland_dynamic_window_set_title(window_t *wnd, strv_t title)
 	mem_copy(buf, sizeof(buf), title.data, title.len);
 
 	dwl->wl.proxy_marshal((wl_proxy *)wwayland->xdg_toplevel, XDG_TOPLEVEL_SET_TITLE, buf);
-	return dwl->wl.display_flush(dwl->display) < 0;
+	if (dwl->wl.display_flush(dwl->display) < 0) {
+		return 1;
+	}
+
+	if (title.len > 0) {
+		mem_copy(wwayland->title, sizeof(wwayland->title), title.data, title.len);
+	}
+	wwayland->title[title.len] = 0;
+	return 0;
+}
+
+static int display_wayland_dynamic_window_get_title(window_t *wnd, char *title, size_t size)
+{
+	if (wnd == NULL || wnd->data == NULL || title == NULL || size == 0) {
+		return 1;
+	}
+
+	window_wayland_dynamic_t *wwayland = wnd->data;
+	size_t len			   = 0;
+	while (len < sizeof(wwayland->title) && wwayland->title[len] != 0) {
+		len++;
+	}
+	if (len >= size) {
+		return 1;
+	}
+
+	mem_copy(title, size, wwayland->title, len + 1);
+	return 0;
 }
 
 static int display_wayland_dynamic_window_set_fullscreen(window_t *wnd, int fullscreen)
@@ -878,7 +907,23 @@ static int display_wayland_dynamic_window_set_fullscreen(window_t *wnd, int full
 	} else {
 		dwl->wl.proxy_marshal((wl_proxy *)wwayland->xdg_toplevel, XDG_TOPLEVEL_UNSET_FULLSCREEN);
 	}
-	return dwl->wl.display_flush(dwl->display) < 0;
+	if (dwl->wl.display_flush(dwl->display) < 0) {
+		return 1;
+	}
+
+	wwayland->fullscreen = fullscreen != 0;
+	return 0;
+}
+
+static int display_wayland_dynamic_window_get_fullscreen(window_t *wnd, int *fullscreen)
+{
+	if (wnd == NULL || wnd->data == NULL || fullscreen == NULL) {
+		return 1;
+	}
+
+	window_wayland_dynamic_t *wwayland = wnd->data;
+	*fullscreen			   = wwayland->fullscreen;
+	return 0;
 }
 
 static int display_wayland_dynamic_window_show(window_t *wnd)
@@ -934,7 +979,9 @@ static display_driver_t display_wayland_dynamic = {
 	.window_id	       = display_wayland_dynamic_window_id,
 	.window_native	       = display_wayland_dynamic_window_native,
 	.window_set_title      = display_wayland_dynamic_window_set_title,
+	.window_get_title      = display_wayland_dynamic_window_get_title,
 	.window_set_fullscreen = display_wayland_dynamic_window_set_fullscreen,
+	.window_get_fullscreen = display_wayland_dynamic_window_get_fullscreen,
 	.window_show	       = display_wayland_dynamic_window_show,
 	.window_hide	       = display_wayland_dynamic_window_hide,
 };

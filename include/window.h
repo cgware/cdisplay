@@ -34,10 +34,15 @@ void window_free(window_t *wnd);
 u32 window_id(window_t *wnd);
 int window_native(window_t *wnd, window_native_t *native);
 int window_set_title(window_t *wnd, strv_t title);
+int window_get_title(window_t *wnd, char *title, size_t size);
 int window_set_position(window_t *wnd, u16 x, u16 y);
+int window_get_position(window_t *wnd, u16 *x, u16 *y);
 int window_set_size(window_t *wnd, u16 width, u16 height);
+int window_get_size(window_t *wnd, u16 *width, u16 *height);
 int window_set_borderless(window_t *wnd, int borderless);
+int window_get_borderless(window_t *wnd, int *borderless);
 int window_set_fullscreen(window_t *wnd, int fullscreen);
+int window_get_fullscreen(window_t *wnd, int *fullscreen);
 int window_show(window_t *wnd);
 int window_hide(window_t *wnd);
 

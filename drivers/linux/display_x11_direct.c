@@ -41,6 +41,13 @@ typedef struct display_x11_direct_s {
 typedef struct window_x11_s {
 	u32 id;
 	u32 colormap;
+	char title[256];
+	u16 x;
+	u16 y;
+	u16 width;
+	u16 height;
+	int borderless;
+	int fullscreen;
 	int mapped;
 } window_x11_t;
 
@@ -1135,15 +1142,6 @@ static int init_atoms(display_t *display)
 
 static int set_property_text(window_t *wnd, u32 property, u32 type, strv_t text)
 {
-	if (text.data == NULL && text.len > 0) {
-		return 1;
-	}
-
-	if (text.len > X_CHANGE_PROPERTY_MAX_DATA_SIZE) {
-		log_error("cdisplay", "display_x11_direct", NULL, "property text is too long");
-		return 1;
-	}
-
 	size_t data_size    = text.len;
 	size_t request_size = X_CHANGE_PROPERTY_HEADER_SIZE + data_size + pad4(data_size);
 
@@ -2017,6 +2015,11 @@ static int display_x11_direct_window_init(window_t *wnd, const window_config_t *
 		return 1;
 	}
 	mem_set(wnd->data, 0, sizeof(window_x11_t));
+	window_x11_t *wx11 = wnd->data;
+	wx11->x		   = config->x;
+	wx11->y		   = config->y;
+	wx11->width	   = config->width;
+	wx11->height	   = config->height;
 
 	if (create_window(wnd, config)) {
 		free_colormap(wnd);
@@ -2073,7 +2076,7 @@ static int display_x11_direct_window_native(window_t *wnd, window_native_t *nati
 
 static int display_x11_direct_window_set_title(window_t *wnd, strv_t title)
 {
-	if (wnd == NULL || wnd->data == NULL) {
+	if (wnd == NULL || wnd->data == NULL || title.len >= sizeof(((window_x11_t *)0)->title) || (title.data == NULL && title.len > 0)) {
 		return 1;
 	}
 
@@ -2083,6 +2086,30 @@ static int display_x11_direct_window_set_title(window_t *wnd, strv_t title)
 		return 1;
 	}
 
+	window_x11_t *wx11 = wnd->data;
+	if (title.len > 0) {
+		mem_copy(wx11->title, sizeof(wx11->title), title.data, title.len);
+	}
+	wx11->title[title.len] = 0;
+	return 0;
+}
+
+static int display_x11_direct_window_get_title(window_t *wnd, char *title, size_t size)
+{
+	if (wnd == NULL || wnd->data == NULL || title == NULL || size == 0) {
+		return 1;
+	}
+
+	window_x11_t *wx11 = wnd->data;
+	size_t len	   = 0;
+	while (len < sizeof(wx11->title) && wx11->title[len] != 0) {
+		len++;
+	}
+	if (len >= size) {
+		return 1;
+	}
+
+	mem_copy(title, size, wx11->title, len + 1);
 	return 0;
 }
 
@@ -2094,7 +2121,26 @@ static int display_x11_direct_window_set_position(window_t *wnd, u16 x, u16 y)
 
 	u32 values[] = {x, y};
 
-	return configure_window(wnd, X_CONFIG_WINDOW_X | X_CONFIG_WINDOW_Y, values, 2);
+	if (configure_window(wnd, X_CONFIG_WINDOW_X | X_CONFIG_WINDOW_Y, values, 2)) {
+		return 1;
+	}
+
+	window_x11_t *wx11 = wnd->data;
+	wx11->x		   = x;
+	wx11->y		   = y;
+	return 0;
+}
+
+static int display_x11_direct_window_get_position(window_t *wnd, u16 *x, u16 *y)
+{
+	if (wnd == NULL || wnd->data == NULL || x == NULL || y == NULL) {
+		return 1;
+	}
+
+	window_x11_t *wx11 = wnd->data;
+	*x		   = wx11->x;
+	*y		   = wx11->y;
+	return 0;
 }
 
 static int display_x11_direct_window_set_size(window_t *wnd, u16 width, u16 height)
@@ -2105,7 +2151,26 @@ static int display_x11_direct_window_set_size(window_t *wnd, u16 width, u16 heig
 
 	u32 values[] = {width, height};
 
-	return configure_window(wnd, X_CONFIG_WINDOW_WIDTH | X_CONFIG_WINDOW_HEIGHT, values, 2);
+	if (configure_window(wnd, X_CONFIG_WINDOW_WIDTH | X_CONFIG_WINDOW_HEIGHT, values, 2)) {
+		return 1;
+	}
+
+	window_x11_t *wx11 = wnd->data;
+	wx11->width	   = width;
+	wx11->height	   = height;
+	return 0;
+}
+
+static int display_x11_direct_window_get_size(window_t *wnd, u16 *width, u16 *height)
+{
+	if (wnd == NULL || wnd->data == NULL || width == NULL || height == NULL) {
+		return 1;
+	}
+
+	window_x11_t *wx11 = wnd->data;
+	*width		   = wx11->width;
+	*height		   = wx11->height;
+	return 0;
 }
 
 static int display_x11_direct_window_set_borderless(window_t *wnd, int borderless)
@@ -2114,7 +2179,24 @@ static int display_x11_direct_window_set_borderless(window_t *wnd, int borderles
 		return 1;
 	}
 
-	return set_borderless(wnd, borderless);
+	if (set_borderless(wnd, borderless)) {
+		return 1;
+	}
+
+	window_x11_t *wx11 = wnd->data;
+	wx11->borderless   = borderless != 0;
+	return 0;
+}
+
+static int display_x11_direct_window_get_borderless(window_t *wnd, int *borderless)
+{
+	if (wnd == NULL || wnd->data == NULL || borderless == NULL) {
+		return 1;
+	}
+
+	window_x11_t *wx11 = wnd->data;
+	*borderless	   = wx11->borderless;
+	return 0;
 }
 
 static int display_x11_direct_window_set_fullscreen(window_t *wnd, int fullscreen)
@@ -2123,7 +2205,24 @@ static int display_x11_direct_window_set_fullscreen(window_t *wnd, int fullscree
 		return 1;
 	}
 
-	return set_fullscreen(wnd, fullscreen);
+	if (set_fullscreen(wnd, fullscreen)) {
+		return 1;
+	}
+
+	window_x11_t *wx11 = wnd->data;
+	wx11->fullscreen   = fullscreen != 0;
+	return 0;
+}
+
+static int display_x11_direct_window_get_fullscreen(window_t *wnd, int *fullscreen)
+{
+	if (wnd == NULL || wnd->data == NULL || fullscreen == NULL) {
+		return 1;
+	}
+
+	window_x11_t *wx11 = wnd->data;
+	*fullscreen	   = wx11->fullscreen;
+	return 0;
 }
 
 static int display_x11_direct_window_show(window_t *wnd)
@@ -2168,10 +2267,15 @@ static display_driver_t display_x11_direct = {
 	.window_id	       = display_x11_direct_window_id,
 	.window_native	       = display_x11_direct_window_native,
 	.window_set_title      = display_x11_direct_window_set_title,
+	.window_get_title      = display_x11_direct_window_get_title,
 	.window_set_position   = display_x11_direct_window_set_position,
+	.window_get_position   = display_x11_direct_window_get_position,
 	.window_set_size       = display_x11_direct_window_set_size,
+	.window_get_size       = display_x11_direct_window_get_size,
 	.window_set_borderless = display_x11_direct_window_set_borderless,
+	.window_get_borderless = display_x11_direct_window_get_borderless,
 	.window_set_fullscreen = display_x11_direct_window_set_fullscreen,
+	.window_get_fullscreen = display_x11_direct_window_get_fullscreen,
 	.window_show	       = display_x11_direct_window_show,
 	.window_hide	       = display_x11_direct_window_hide,
 	.ext_init	       = display_x11_direct_ext_init,

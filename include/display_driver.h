@@ -21,10 +21,15 @@ typedef struct display_driver_s {
 	u32 (*window_id)(window_t *window);
 	int (*window_native)(window_t *window, window_native_t *native);
 	int (*window_set_title)(window_t *window, strv_t title);
+	int (*window_get_title)(window_t *window, char *title, size_t size);
 	int (*window_set_position)(window_t *window, u16 x, u16 y);
+	int (*window_get_position)(window_t *window, u16 *x, u16 *y);
 	int (*window_set_size)(window_t *window, u16 width, u16 height);
+	int (*window_get_size)(window_t *window, u16 *width, u16 *height);
 	int (*window_set_borderless)(window_t *window, int borderless);
+	int (*window_get_borderless)(window_t *window, int *borderless);
 	int (*window_set_fullscreen)(window_t *window, int fullscreen);
+	int (*window_get_fullscreen)(window_t *window, int *fullscreen);
 	int (*window_show)(window_t *window);
 	int (*window_hide)(window_t *window);
 	int (*ext_init)(display_ext_t *ext, strv_t name);

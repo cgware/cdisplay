@@ -436,7 +436,7 @@ TEST(display_poll_events_returns_driver_result)
 	t_display_reset();
 	t_display_poll_events_ret = 1;
 	display_t display	  = {
-			.drv = &t_display_driver,
+		.drv = &t_display_driver,
 	};
 
 	EXPECT_EQ(display_poll_events(&display), 1);
@@ -489,7 +489,7 @@ TEST(display_wait_events_returns_driver_result)
 	t_display_reset();
 	t_display_wait_events_ret = 1;
 	display_t display	  = {
-			.drv = &t_display_driver,
+		.drv = &t_display_driver,
 	};
 
 	EXPECT_EQ(display_wait_events(&display), 1);
