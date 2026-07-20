@@ -83,6 +83,37 @@ static display_driver_t *t_x11_driver(void)
 	return display_driver_find(STRV("X11-direct"));
 }
 
+TEST(display_x11_direct_available_rejects_missing_display)
+{
+	START;
+
+	proc_t proc = {0};
+	proc_init(&proc, 256, 1, ALLOC_STD);
+	display_driver_t *drv = t_x11_driver();
+	EXPECT_NOT_NULL(drv);
+
+	EXPECT_EQ(display_driver_available(drv, &proc), 0);
+
+	proc_free(&proc);
+	END;
+}
+
+TEST(display_x11_direct_available_accepts_display)
+{
+	START;
+
+	proc_t proc = {0};
+	proc_init(&proc, 256, 1, ALLOC_STD);
+	proc_setenv(&proc, STRV("DISPLAY"), STRV(":0"), 1);
+	display_driver_t *drv = t_x11_driver();
+	EXPECT_NOT_NULL(drv);
+
+	EXPECT_EQ(display_driver_available(drv, &proc), 1);
+
+	proc_free(&proc);
+	END;
+}
+
 static int t_x11_event_calls;
 static display_event_t t_x11_event;
 
@@ -4727,6 +4758,8 @@ STEST(display_x11_direct)
 	SSTART;
 
 	RUN(display_x11_direct_driver_is_registered);
+	RUN(display_x11_direct_available_rejects_missing_display);
+	RUN(display_x11_direct_available_accepts_display);
 	RUN(display_x11_direct_init_null_display);
 	RUN(display_x11_direct_init_alloc_failure);
 	RUN(display_x11_direct_free_null_display);

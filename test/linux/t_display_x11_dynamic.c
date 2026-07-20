@@ -754,6 +754,35 @@ TEST(display_x11_dynamic_driver_has_visual_depth)
 	END;
 }
 
+TEST(display_x11_dynamic_available_rejects_missing_display)
+{
+	START;
+
+	proc_t proc = {0};
+	proc_init(&proc, 256, 1, ALLOC_STD);
+	T_X11_DYNAMIC_DRV();
+
+	EXPECT_EQ(display_driver_available(drv, &proc), 0);
+
+	proc_free(&proc);
+	END;
+}
+
+TEST(display_x11_dynamic_available_accepts_display)
+{
+	START;
+
+	proc_t proc = {0};
+	proc_init(&proc, 256, 1, ALLOC_STD);
+	proc_setenv(&proc, STRV("DISPLAY"), STRV(":0"), 1);
+	T_X11_DYNAMIC_DRV();
+
+	EXPECT_EQ(display_driver_available(drv, &proc), 1);
+
+	proc_free(&proc);
+	END;
+}
+
 TEST(display_x11_dynamic_init_null_display)
 {
 	START;
@@ -2472,6 +2501,8 @@ STEST(display_x11_dynamic)
 	RUN(display_x11_dynamic_driver_has_ext_init);
 	RUN(display_x11_dynamic_driver_has_alloc_id);
 	RUN(display_x11_dynamic_driver_has_visual_depth);
+	RUN(display_x11_dynamic_available_rejects_missing_display);
+	RUN(display_x11_dynamic_available_accepts_display);
 	RUN(display_x11_dynamic_init_null_display);
 	RUN(display_x11_dynamic_init_null_alloc);
 	RUN(display_x11_dynamic_init_uses_virtual_proc);
