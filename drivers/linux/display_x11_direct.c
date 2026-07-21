@@ -22,6 +22,8 @@ typedef struct display_x11_direct_s {
 	u32 black_pixel;
 	visual_x11_t *visuals;
 	size_t visual_count;
+	display_monitor_t *monitors;
+	size_t monitor_count;
 	buf_t request;
 	u32 wm_protocols;
 	u32 wm_delete_window;
@@ -132,6 +134,10 @@ enum {
 };
 
 enum {
+	X_RANDR_GET_MONITORS = 42,
+};
+
+enum {
 	X11_PROTOCOL_MAJOR = 11,
 	X11_PROTOCOL_MINOR = 0,
 	X11_REPLY_SUCCESS  = 1,
@@ -147,6 +153,10 @@ enum {
 	X11_SETUP_MAX_KEYCODE_OFFSET	  = 27,
 	X11_SETUP_SCREEN_LIST_OFFSET	  = 32,
 	X11_SCREEN_DEFAULT_COLORMAP_SIZE  = 4,
+	X11_SCREEN_WIDTH_OFFSET		  = 20,
+	X11_SCREEN_HEIGHT_OFFSET	  = 22,
+	X11_SCREEN_PHYSICAL_WIDTH_OFFSET  = 24,
+	X11_SCREEN_PHYSICAL_HEIGHT_OFFSET = 26,
 	X11_SCREEN_DEPTH_COUNT_OFFSET	  = 39,
 	X11_SCREEN_DEPTHS_OFFSET	  = 40,
 	X11_DEPTH_SIZE			  = 8,
@@ -200,6 +210,13 @@ static size_t pad4(size_t length)
 	return (X11_PAD_SIZE - (length & (X11_PAD_SIZE - 1))) & (X11_PAD_SIZE - 1);
 }
 
+static s32 x11_s16(u16 value)
+{
+	return value <= (u16)S16_MAX ? (s32)value : (s32)value - 0x10000;
+}
+
+static void get_atom_name(display_t *display, u32 atom, char *name, size_t name_size);
+
 static int read_visuals(display_t *display, const buf_t *setup, size_t screen_offset)
 {
 	display_x11_direct_t *dx11 = display->data;
@@ -247,6 +264,60 @@ static int read_visuals(display_t *display, const buf_t *setup, size_t screen_of
 			index++;
 			off += X11_VISUAL_SIZE - sizeof(u32);
 		}
+	}
+
+	return 0;
+}
+
+static size_t screen_size(const buf_t *setup, size_t screen_offset)
+{
+	size_t off     = screen_offset + X11_SCREEN_DEPTH_COUNT_OFFSET;
+	u8 depth_count = ((const u8 *)setup->data)[off];
+
+	off = screen_offset + X11_SCREEN_DEPTHS_OFFSET;
+	for (u8 i = 0; i < depth_count; ++i) {
+		u16 visual_count;
+		size_t depth_offset = off;
+		off += 2;
+		(void)buf_read_u16le(setup, &off, &visual_count);
+		off = depth_offset + 8 + (size_t)visual_count * 24;
+	}
+
+	return off - screen_offset;
+}
+
+static int read_screens(display_t *display, const buf_t *setup, size_t screen_offset, u8 screen_count)
+{
+	display_x11_direct_t *dx11 = display->data;
+
+	dx11->monitors = alloc_alloc(&display->alloc, (size_t)screen_count * sizeof(*dx11->monitors));
+	if (dx11->monitors == NULL) {
+		return 1;
+	}
+	dx11->monitor_count = screen_count;
+
+	for (u8 i = 0; i < screen_count; ++i) {
+		size_t off = screen_offset;
+		u32 root   = 0;
+		(void)buf_read_u32le(setup, &off, &root);
+		dx11->monitors[i].id	  = i;
+		dx11->monitors[i].primary = i == 0;
+		dx11->monitors[i].native  = (void *)(uintptr_t)root;
+		off			  = screen_offset + X11_SCREEN_WIDTH_OFFSET;
+		u16 width		  = 0;
+		u16 height		  = 0;
+		u16 physical_width	  = 0;
+		u16 physical_height	  = 0;
+		(void)buf_read_u16le(setup, &off, &width);
+		(void)buf_read_u16le(setup, &off, &height);
+		(void)buf_read_u16le(setup, &off, &physical_width);
+		(void)buf_read_u16le(setup, &off, &physical_height);
+		dx11->monitors[i].width		  = width;
+		dx11->monitors[i].height	  = height;
+		dx11->monitors[i].physical_width  = physical_width;
+		dx11->monitors[i].physical_height = physical_height;
+
+		screen_offset += screen_size(setup, screen_offset);
 	}
 
 	return 0;
@@ -516,6 +587,15 @@ static int open_display(display_t *d)
 		sock_close(d->ss, dx11->sock);
 		return 1;
 	}
+	if (read_screens(d, &b, screen_offset, screen_count)) {
+		log_error("cdisplay", "display_x11_direct", NULL, "invalid X11 screen list");
+		alloc_free(&d->alloc, dx11->monitors, dx11->monitor_count * sizeof(*dx11->monitors));
+		dx11->monitors	    = NULL;
+		dx11->monitor_count = 0;
+		buf_free(&b);
+		sock_close(d->ss, dx11->sock);
+		return 1;
+	}
 
 	buf_free(&b);
 
@@ -551,8 +631,10 @@ enum {
 };
 
 enum {
-	XA_ATOM	  = 4,
-	XA_STRING = 31,
+	XA_ATOM		   = 4,
+	XA_WM_NORMAL_HINTS = 40,
+	XA_WM_SIZE_HINTS   = 41,
+	XA_STRING	   = 31,
 };
 
 enum {
@@ -625,6 +707,21 @@ enum {
 };
 
 enum {
+	X_GET_ATOM_NAME		 = 17,
+	X_GET_ATOM_NAME_SIZE	 = 8,
+	X_GET_ATOM_NAME_WORDS	 = X_GET_ATOM_NAME_SIZE / X11_PAD_SIZE,
+	X_GET_ATOM_NAME_LENGTH	 = 8,
+	X_GET_ATOM_NAME_MAX_SIZE = 128,
+};
+
+enum {
+	X_RANDR_GET_MONITORS_REQUEST_SIZE = 8,
+	X_RANDR_GET_MONITORS_REPLY_COUNT  = 12,
+	X_RANDR_GET_MONITORS_INFO_SIZE	  = 24,
+	X_RANDR_GET_MONITORS_OUTPUT_SIZE  = 4,
+};
+
+enum {
 	X_CHANGE_PROPERTY_HEADER_SIZE	= 24,
 	X_CHANGE_PROPERTY_MAX_DATA_SIZE = X11_PAD_SIZE * 0xffff - X_CHANGE_PROPERTY_HEADER_SIZE,
 	X_CHANGE_PROPERTY_ITEM_COUNT	= 1,
@@ -639,6 +736,14 @@ enum {
 	MOTIF_WM_HINTS_FIELD_COUNT	= 5,
 	MOTIF_WM_HINTS_DECORATIONS_FLAG = 1u << 1,
 	MOTIF_WM_DECOR_ALL		= 1,
+};
+
+enum {
+	X_SIZE_HINT_US_POSITION = 1 << 0,
+	X_SIZE_HINT_US_SIZE	= 1 << 1,
+	X_SIZE_HINT_P_POSITION	= 1 << 2,
+	X_SIZE_HINT_P_SIZE	= 1 << 3,
+	X_SIZE_HINT_FIELD_COUNT = 18,
 };
 
 enum {
@@ -907,7 +1012,7 @@ static void write_change_property_text_request(buf_t *request, window_x11_t *wx1
 	request_pad4(request, text.len);
 }
 
-static int display_x11_direct_ext_init(display_ext_t *ext, strv_t name)
+static int query_extension(display_ext_t *ext, strv_t name, int log_unavailable)
 {
 	if (ext == NULL || ext->display == NULL || name.len > UINT16_MAX) {
 		return 1;
@@ -927,7 +1032,9 @@ static int display_x11_direct_ext_init(display_ext_t *ext, strv_t name)
 	display_x11_direct_t *dx11 = ext->display->data;
 	int ret = sock_write_all(ext->display->ss, dx11->sock, request->data, request->used) || read_reply(ext->display, reply);
 	if (ret || reply[8] == 0) {
-		log_error("cdisplay", "display_x11_direct", NULL, "display ext is unavailable: %.*s", name.len, name.data);
+		if (log_unavailable) {
+			log_error("cdisplay", "display_x11_direct", NULL, "display ext is unavailable: %.*s", name.len, name.data);
+		}
 		return 1;
 	}
 
@@ -935,6 +1042,11 @@ static int display_x11_direct_ext_init(display_ext_t *ext, strv_t name)
 	ext->first_event = reply[10];
 	ext->first_error = reply[11];
 	return 0;
+}
+
+static int display_x11_direct_ext_init(display_ext_t *ext, strv_t name)
+{
+	return query_extension(ext, name, 1);
 }
 
 static int display_x11_direct_ext_send(display_ext_t *ext, u8 opcode, const void *data, size_t size)
@@ -1010,6 +1122,92 @@ static int display_x11_direct_visual_depth(display_t *display, u32 visual, u8 *d
 		log_error("cdisplay", "display_x11_direct", NULL, "unknown X11 visual: %u", visual);
 		return 1;
 	}
+	return 0;
+}
+
+static int display_x11_direct_randr_monitors(display_t *display, arr_t *monitors)
+{
+	display_ext_t randr = {.display = display};
+	if (query_extension(&randr, STRV("RANDR"), 0)) {
+		return 2;
+	}
+
+	display_x11_direct_t *dx11		      = display->data;
+	u8 request[X_RANDR_GET_MONITORS_REQUEST_SIZE] = {0};
+	size_t off				      = 0;
+	cbuf_write_u32le(request, &off, dx11->root);
+	cbuf_write_u8le(request, &off, 1);
+	cbuf_write_u8le(request, &off, 0);
+	cbuf_write_u16le(request, &off, 0);
+
+	display_ext_reply_t reply = {0};
+	if (display_ext_call(&randr, X_RANDR_GET_MONITORS, request, sizeof(request), &reply)) {
+		return 2;
+	}
+
+	u32 count = 0;
+	cbuf_get_u32le(reply.header, X_RANDR_GET_MONITORS_REPLY_COUNT, &count);
+	if (arr_resize(monitors, count)) {
+		display_ext_reply_free(&reply);
+		return 1;
+	}
+	monitors->cnt = count;
+
+	off = 0;
+	for (u32 i = 0; i < count; ++i) {
+		if (off + X_RANDR_GET_MONITORS_INFO_SIZE > reply.size) {
+			display_ext_reply_free(&reply);
+			return 1;
+		}
+
+		u32 atom	    = 0;
+		u8 primary	    = 0;
+		u8 automatic	    = 0;
+		u16 output_count    = 0;
+		u16 x		    = 0;
+		u16 y		    = 0;
+		u16 width	    = 0;
+		u16 height	    = 0;
+		u32 physical_width  = 0;
+		u32 physical_height = 0;
+		cbuf_read_u32le(reply.data, &off, &atom);
+		cbuf_read_u8le(reply.data, &off, &primary);
+		cbuf_read_u8le(reply.data, &off, &automatic);
+		cbuf_read_u16le(reply.data, &off, &output_count);
+		cbuf_read_u16le(reply.data, &off, &x);
+		cbuf_read_u16le(reply.data, &off, &y);
+		cbuf_read_u16le(reply.data, &off, &width);
+		cbuf_read_u16le(reply.data, &off, &height);
+		cbuf_read_u32le(reply.data, &off, &physical_width);
+		cbuf_read_u32le(reply.data, &off, &physical_height);
+
+		size_t output_size = (size_t)output_count * X_RANDR_GET_MONITORS_OUTPUT_SIZE;
+		if (off + output_size > reply.size) {
+			display_ext_reply_free(&reply);
+			return 1;
+		}
+
+		display_monitor_t *monitor = arr_get(monitors, i);
+		mem_set(monitor, 0, sizeof(*monitor));
+		monitor->id		 = i;
+		monitor->x		 = x11_s16(x);
+		monitor->y		 = x11_s16(y);
+		monitor->width		 = width;
+		monitor->height		 = height;
+		monitor->physical_width	 = physical_width;
+		monitor->physical_height = physical_height;
+		monitor->primary	 = primary != 0;
+		(void)automatic;
+		if (output_count > 0) {
+			u32 output = 0;
+			cbuf_get_u32le(reply.data, off, &output);
+			monitor->native = (void *)(uintptr_t)output;
+		}
+		off += output_size;
+		get_atom_name(display, atom, monitor->name, sizeof(monitor->name));
+	}
+
+	display_ext_reply_free(&reply);
 	return 0;
 }
 
@@ -1184,6 +1382,60 @@ static int intern_atom(display_t *display, strv_t name, u32 *atom)
 	return 0;
 }
 
+static void get_atom_name(display_t *display, u32 atom, char *name, size_t name_size)
+{
+	if (name == NULL || name_size == 0 || atom == 0) {
+		return;
+	}
+
+	u8 request[X_GET_ATOM_NAME_SIZE] = {0};
+	u8 reply[X11_REPLY_SIZE]	 = {0};
+	size_t off			 = 0;
+
+	cbuf_write_u8le(request, &off, X_GET_ATOM_NAME);
+	cbuf_write_u8le(request, &off, 0);
+	cbuf_write_u16le(request, &off, X_GET_ATOM_NAME_WORDS);
+	cbuf_write_u32le(request, &off, atom);
+
+	display_x11_direct_t *dx11 = display->data;
+	if (sock_write_all(display->ss, dx11->sock, request, sizeof(request)) || read_reply(display, reply)) {
+		return;
+	}
+
+	u32 words  = 0;
+	u16 length = 0;
+	cbuf_get_u32le(reply, 4, &words);
+	cbuf_get_u16le(reply, X_GET_ATOM_NAME_LENGTH, &length);
+	size_t data_size = (size_t)words * X11_PAD_SIZE;
+	if (data_size == 0 || length == 0) {
+		return;
+	}
+
+	u8 data[X_GET_ATOM_NAME_MAX_SIZE] = {0};
+	size_t read_size		  = data_size > sizeof(data) ? sizeof(data) : data_size;
+	if (sock_read_all(display->ss, dx11->sock, data, read_size)) {
+		return;
+	}
+	for (size_t remaining = data_size - read_size; remaining > 0;) {
+		u8 discard[64];
+		size_t chunk = remaining < sizeof(discard) ? remaining : sizeof(discard);
+		if (sock_read_all(display->ss, dx11->sock, discard, chunk)) {
+			return;
+		}
+		remaining -= chunk;
+	}
+
+	size_t copy_size = length;
+	if (copy_size >= name_size) {
+		copy_size = name_size - 1;
+	}
+	if (copy_size > read_size) {
+		copy_size = read_size;
+	}
+	mem_copy(name, name_size, data, copy_size);
+	name[copy_size] = 0;
+}
+
 static int init_atoms(display_t *display)
 {
 	display_x11_direct_t *dx11 = display->data;
@@ -1232,7 +1484,7 @@ static int set_property_u32(window_t *wnd, u32 property, u32 type, const u32 *va
 	size_t request_size  = X_CHANGE_PROPERTY_HEADER_SIZE + data_size;
 	size_t request_words = request_size / X11_PAD_SIZE;
 
-	u8 request[X_CHANGE_PROPERTY_HEADER_SIZE + MOTIF_WM_HINTS_FIELD_COUNT * sizeof(u32)] = {0};
+	u8 request[X_CHANGE_PROPERTY_HEADER_SIZE + X_SIZE_HINT_FIELD_COUNT * sizeof(u32)] = {0};
 	mem_set(request, 0, request_size);
 
 	window_x11_t *wx11 = display_x11_direct_window_data(wnd);
@@ -1317,6 +1569,19 @@ static int send_fullscreen_message(window_t *wnd, int fullscreen)
 	}
 
 	return 0;
+}
+
+static int set_wm_normal_hints(window_t *wnd, const window_config_t *config)
+{
+	u32 hints[X_SIZE_HINT_FIELD_COUNT] = {
+		X_SIZE_HINT_US_POSITION | X_SIZE_HINT_US_SIZE | X_SIZE_HINT_P_POSITION | X_SIZE_HINT_P_SIZE,
+		config->x,
+		config->y,
+		config->width,
+		config->height,
+	};
+
+	return set_property_u32(wnd, XA_WM_NORMAL_HINTS, XA_WM_SIZE_HINTS, hints, X_SIZE_HINT_FIELD_COUNT);
 }
 
 static int set_fullscreen(window_t *wnd, int fullscreen)
@@ -2021,6 +2286,7 @@ static int display_x11_direct_init(display_t *display)
 
 	display_x11_direct_t *dx11 = display->data;
 	if (arr_init(&dx11->windows, 8, sizeof(window_x11_slot_t), display->alloc) == NULL || open_display(display)) {
+		alloc_free(&display->alloc, dx11->monitors, dx11->monitor_count * sizeof(*dx11->monitors));
 		alloc_free(&display->alloc, dx11->visuals, dx11->visual_count * sizeof(*dx11->visuals));
 		buf_free(&dx11->request);
 		arr_free(&dx11->windows);
@@ -2031,6 +2297,7 @@ static int display_x11_direct_init(display_t *display)
 
 	if (init_keys(display) || init_modifiers(display) || init_atoms(display)) {
 		sock_close(display->ss, dx11->sock);
+		alloc_free(&display->alloc, dx11->monitors, dx11->monitor_count * sizeof(*dx11->monitors));
 		alloc_free(&display->alloc, dx11->visuals, dx11->visual_count * sizeof(*dx11->visuals));
 		buf_free(&dx11->request);
 		arr_free(&dx11->windows);
@@ -2058,11 +2325,37 @@ static int display_x11_direct_free(display_t *display)
 
 	log_info("cdisplay", "display_x11_direct", NULL, "Freeing X11...");
 	sock_close(display->ss, dx11->sock);
+	alloc_free(&display->alloc, dx11->monitors, dx11->monitor_count * sizeof(*dx11->monitors));
 	alloc_free(&display->alloc, dx11->visuals, dx11->visual_count * sizeof(*dx11->visuals));
 	buf_free(&dx11->request);
 	arr_free(&dx11->windows);
 
 	alloc_free(&display->alloc, display->data, sizeof(display_x11_direct_t));
+
+	return 0;
+}
+
+static int display_x11_direct_monitors(display_t *display, arr_t *monitors)
+{
+	if (display == NULL || display->data == NULL || monitors == NULL) {
+		return 1;
+	}
+
+	display_x11_direct_t *dx11 = display->data;
+	int randr		   = display_x11_direct_randr_monitors(display, monitors);
+	if (randr != 2) {
+		return randr;
+	}
+
+	if (arr_resize(monitors, (u32)dx11->monitor_count)) {
+		return 1;
+	}
+	monitors->cnt = (u32)dx11->monitor_count;
+
+	for (u32 i = 0; i < dx11->monitor_count; ++i) {
+		display_monitor_t *monitor = arr_get(monitors, i);
+		*monitor		   = dx11->monitors[i];
+	}
 
 	return 0;
 }
@@ -2088,7 +2381,7 @@ static int display_x11_direct_window_init(window_t *wnd, const window_config_t *
 		return 1;
 	}
 
-	if (set_wm_protocols(wnd)) {
+	if (set_wm_normal_hints(wnd, config) || set_wm_protocols(wnd)) {
 		destroy_window(wnd);
 		free_colormap(wnd);
 		display_x11_direct_window_release(wnd);
@@ -2322,6 +2615,7 @@ static display_driver_t display_x11_direct = {
 	.free		       = display_x11_direct_free,
 	.poll_events	       = display_x11_direct_poll_events,
 	.wait_events	       = display_x11_direct_wait_events,
+	.monitors	       = display_x11_direct_monitors,
 	.window_init	       = display_x11_direct_window_init,
 	.window_free	       = display_x11_direct_window_free,
 	.window_id	       = display_x11_direct_window_id,

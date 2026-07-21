@@ -241,7 +241,63 @@ static BOOL WINAPI t_GetMonitorInfoA(HMONITOR monitor, LPMONITORINFO info)
 	(void)monitor;
 	t_windows.get_monitor_info_calls++;
 	info->rcMonitor = t_windows.monitor;
+	if (info->cbSize >= sizeof(MONITORINFOEXA)) {
+		MONITORINFOEXA *ex = (MONITORINFOEXA *)info;
+		c_sprintf(ex->szDevice, sizeof(ex->szDevice), 0, "\\\\.\\DISPLAY1");
+	}
 	return TRUE;
+}
+
+static BOOL WINAPI t_EnumDisplayMonitors(HDC dc, LPCRECT clip, MONITORENUMPROC cb, LPARAM param)
+{
+	(void)dc;
+	(void)clip;
+	if (cb == NULL) {
+		return FALSE;
+	}
+
+	RECT rect = t_windows.monitor;
+	return cb((HMONITOR)0x5678, NULL, &rect, param);
+}
+
+static BOOL WINAPI t_EnumDisplaySettingsA(LPCSTR device, DWORD mode, DEVMODEA *devmode)
+{
+	(void)device;
+	(void)mode;
+	if (devmode == NULL) {
+		return FALSE;
+	}
+
+	devmode->dmDisplayFrequency = 60;
+	return TRUE;
+}
+
+static HDC WINAPI t_CreateDCA(LPCSTR driver, LPCSTR device, LPCSTR output, const DEVMODEA *init)
+{
+	(void)driver;
+	(void)device;
+	(void)output;
+	(void)init;
+	return (HDC)0x2468;
+}
+
+static BOOL WINAPI t_DeleteDC(HDC dc)
+{
+	(void)dc;
+	return TRUE;
+}
+
+static int WINAPI t_GetDeviceCaps(HDC dc, int index)
+{
+	(void)dc;
+	switch (index) {
+	case HORZSIZE:
+		return 600;
+	case VERTSIZE:
+		return 340;
+	default:
+		return 0;
+	}
 }
 
 static BOOL WINAPI t_ScreenToClient(HWND hwnd, LPPOINT point)
@@ -356,6 +412,8 @@ static void t_windows_set_symbols(proc_t *proc)
 	proc_setdlsym(proc, STRV("user32.dll"), STRV("GetClientRect"), t_GetClientRect);
 	proc_setdlsym(proc, STRV("user32.dll"), STRV("MonitorFromWindow"), t_MonitorFromWindow);
 	proc_setdlsym(proc, STRV("user32.dll"), STRV("GetMonitorInfoA"), t_GetMonitorInfoA);
+	proc_setdlsym(proc, STRV("user32.dll"), STRV("EnumDisplayMonitors"), t_EnumDisplayMonitors);
+	proc_setdlsym(proc, STRV("user32.dll"), STRV("EnumDisplaySettingsA"), t_EnumDisplaySettingsA);
 	proc_setdlsym(proc, STRV("user32.dll"), STRV("ScreenToClient"), t_ScreenToClient);
 	proc_setdlsym(proc, STRV("user32.dll"), STRV("PeekMessageA"), t_PeekMessageA);
 	proc_setdlsym(proc, STRV("user32.dll"), STRV("GetMessageA"), t_GetMessageA);
@@ -364,6 +422,9 @@ static void t_windows_set_symbols(proc_t *proc)
 	proc_setdlsym(proc, STRV("user32.dll"), STRV("DefWindowProcA"), t_DefWindowProcA);
 	proc_setdlsym(proc, STRV("user32.dll"), STRV("GetWindowLongPtrA"), t_GetWindowLongPtrA);
 	proc_setdlsym(proc, STRV("user32.dll"), STRV("SetWindowLongPtrA"), t_SetWindowLongPtrA);
+	proc_setdlsym(proc, STRV("gdi32.dll"), STRV("CreateDCA"), t_CreateDCA);
+	proc_setdlsym(proc, STRV("gdi32.dll"), STRV("DeleteDC"), t_DeleteDC);
+	proc_setdlsym(proc, STRV("gdi32.dll"), STRV("GetDeviceCaps"), t_GetDeviceCaps);
 }
 
 static void t_windows_env_init(fs_t *fs, proc_t *proc, sock_t *ss)

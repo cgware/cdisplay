@@ -4,6 +4,7 @@
 
 STEST(display);
 STEST(display_ext);
+STEST(monitor);
 STEST(display_none);
 STEST(display_windows);
 STEST(display_x11_direct);
@@ -16,6 +17,7 @@ TEST(cdisplay)
 	SSTART;
 	RUN(display);
 	RUN(display_ext);
+	RUN(monitor);
 	RUN(display_none);
 	RUN(display_windows);
 	RUN(display_x11_direct);

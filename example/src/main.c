@@ -3,7 +3,7 @@
 #include "fs.h"
 #include "log.h"
 #include "mem.h"
-#include "platform.h"
+#include "monitor.h"
 #include "print.h"
 #include "proc.h"
 #include "sock.h"
@@ -134,6 +134,45 @@ static void cleanup_example_display(example_display_t *example)
 	example->initialized = 0;
 }
 
+static int window_position(u16 *position, s32 origin, u32 offset)
+{
+	s64 value = (s64)origin + offset;
+	if (position == NULL || value < U16_MIN || value > U16_MAX) {
+		return 1;
+	}
+
+	*position = (u16)value;
+	return 0;
+}
+
+static int print_monitors(display_t *display, const char *driver_name, display_monitor_t *show_monitor, int *has_monitor)
+{
+	arr_t monitors = {0};
+	if (has_monitor != NULL) {
+		*has_monitor = 0;
+	}
+	if (arr_init(&monitors, 1, sizeof(display_monitor_t), ALLOC_STD) == NULL) {
+		return 1;
+	}
+	if (display_monitors(display, &monitors)) {
+		arr_free(&monitors);
+		return 1;
+	}
+
+	dputf(DST_STD(), "%s monitors:\n", driver_name);
+	for (u32 i = 0; i < monitors.cnt; i++) {
+		monitor_print(arr_get(&monitors, i), DST_STD());
+	}
+	if (monitors.cnt > 0 && show_monitor != NULL && has_monitor != NULL) {
+		display_monitor_t *monitor = arr_get(&monitors, 2 > monitors.cnt ? 0 : 2);
+		*show_monitor		   = *monitor;
+		*has_monitor		   = 1;
+	}
+
+	arr_free(&monitors);
+	return 0;
+}
+
 static int open_display_driver(example_display_t *example, display_driver_t *drv, fs_t *fs, proc_t *proc, sock_t *ss, u32 index)
 {
 	if (example == NULL) {
@@ -151,13 +190,29 @@ static int open_display_driver(example_display_t *example, display_driver_t *drv
 		cleanup_example_display(example);
 		return -1;
 	}
-	example->initialized = 1;
+	example->initialized	       = 1;
+	display_monitor_t show_monitor = {0};
+	int has_monitor		       = 0;
+	if (print_monitors(&example->display, drv->name, &show_monitor, &has_monitor)) {
+		log_error("cdisplay_example", "init", NULL, "failed to list monitors for display driver: %s", drv->name);
+		cleanup_example_display(example);
+		return -1;
+	}
 
 	for (size_t i = 0; i < EXAMPLE_WINDOWS; i++) {
-		u16 position	       = (u16)(100 + (index * EXAMPLE_WINDOWS + (u32)i) * 40);
+		u32 offset = 100 + (index * EXAMPLE_WINDOWS + (u32)i) * 40;
+		u16 x	   = 0;
+		u16 y	   = 0;
+		if (window_position(&x, has_monitor ? show_monitor.x : 0, offset) ||
+		    window_position(&y, has_monitor ? show_monitor.y : 0, offset)) {
+			log_error("cdisplay_example", "init", NULL, "failed to place window for display driver: %s", drv->name);
+			cleanup_example_display(example);
+			return -1;
+		}
+
 		window_config_t config = {
-			.x	= position,
-			.y	= position,
+			.x	= x,
+			.y	= y,
 			.width	= 640,
 			.height = 480,
 		};
@@ -214,7 +269,7 @@ static int poll_display_drivers(example_display_t *examples, u32 count)
 	return open;
 }
 
-int main()
+int main(void)
 {
 	mem_stats_t mem_stats = {0};
 	mem_stats_set(&mem_stats);

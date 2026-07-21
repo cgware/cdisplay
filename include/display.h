@@ -2,6 +2,7 @@
 #define DISPLAY_H
 
 #include "fs.h"
+#include "monitor.h"
 #include "proc.h"
 #include "sock.h"
 
@@ -170,7 +171,6 @@ typedef struct display_event_s {
 	display_modifier_t modifiers;
 } display_event_t;
 
-typedef struct display_s display_t;
 typedef void (*display_event_cb_t)(display_t *display, const display_event_t *event, void *user);
 
 typedef enum display_native_type_e {

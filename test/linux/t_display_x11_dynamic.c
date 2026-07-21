@@ -168,6 +168,20 @@ typedef struct t_x11_modifier_keymap_s {
 	t_x11_keycode_t *modifiermap;
 } t_x11_modifier_keymap_t;
 
+typedef struct t_x11_monitor_info_s {
+	t_x11_atom_t name;
+	int primary;
+	int automatic;
+	int noutput;
+	int x;
+	int y;
+	int width;
+	int height;
+	int mwidth;
+	int mheight;
+	unsigned long *outputs;
+} t_x11_monitor_info_t;
+
 typedef struct t_x11_state_s {
 	int open_display_calls;
 	int close_display_calls;
@@ -176,6 +190,7 @@ typedef struct t_x11_state_s {
 	int create_colormap_calls;
 	int free_colormap_calls;
 	int change_property_calls;
+	int normal_hints_calls;
 	int send_event_calls;
 	int set_wm_protocols_calls;
 	int map_window_calls;
@@ -189,6 +204,7 @@ typedef struct t_x11_state_s {
 	int alloc_id_calls;
 	int get_visual_info_calls;
 	unsigned long create_window_value_mask;
+	long normal_hints[18];
 	const char *display_name;
 	void *display_result;
 	int min_keycode;
@@ -206,6 +222,16 @@ typedef struct t_x11_state_s {
 	t_visual_info_t visual_info;
 	t_visual_info_t *visual_info_result;
 	int visual_info_count;
+	int screen_count;
+	int display_width[4];
+	int display_height[4];
+	int display_width_mm[4];
+	int display_height_mm[4];
+	char atom_name[128];
+	t_x11_monitor_info_t xrandr_monitors[4];
+	unsigned long xrandr_outputs[4];
+	int xrandr_monitor_count;
+	int xrandr_free_calls;
 	unsigned long create_colormap_result;
 	int free_colormap_result;
 	t_x11_window_t create_window_result;
@@ -253,6 +279,12 @@ static void t_x11_reset(void)
 		.visual_info		      = {.visual = &t_x11.visual, .visualid = 0x21u, .depth = 24},
 		.visual_info_result	      = NULL,
 		.create_colormap_result	      = 0x55u,
+		.screen_count		      = 1,
+		.display_width		      = {800},
+		.display_height		      = {600},
+		.display_width_mm	      = {300},
+		.display_height_mm	      = {200},
+		.atom_name		      = "monitor",
 		.free_colormap_result	      = 1,
 		.create_window_result	      = 0x44u,
 		.set_wm_protocols_result      = 1,
@@ -316,8 +348,43 @@ static int t_XDefaultScreen(void *display)
 static t_x11_window_t t_XRootWindow(void *display, int screen)
 {
 	(void)display;
-	(void)screen;
-	return 0x22u;
+	return (t_x11_window_t)(0x22u + (unsigned int)screen);
+}
+
+static int t_XScreenCount(void *display)
+{
+	(void)display;
+	return t_x11.screen_count;
+}
+
+static int t_XDisplayWidth(void *display, int screen)
+{
+	(void)display;
+	return t_x11.display_width[screen];
+}
+
+static int t_XDisplayHeight(void *display, int screen)
+{
+	(void)display;
+	return t_x11.display_height[screen];
+}
+
+static int t_XDisplayWidthMM(void *display, int screen)
+{
+	(void)display;
+	return t_x11.display_width_mm[screen];
+}
+
+static int t_XDisplayHeightMM(void *display, int screen)
+{
+	(void)display;
+	return t_x11.display_height_mm[screen];
+}
+
+static char *t_XGetAtomName(void *display, t_x11_atom_t atom)
+{
+	(void)display;
+	return atom == 0 ? NULL : t_x11.atom_name;
 }
 
 static unsigned long t_XWhitePixel(void *display, int screen)
@@ -403,13 +470,16 @@ static int t_XChangeProperty(void *display, t_x11_window_t window, t_x11_atom_t 
 {
 	(void)display;
 	(void)window;
-	(void)property;
-	(void)type;
 	(void)format;
 	(void)mode;
-	(void)data;
-	(void)count;
 	t_x11.change_property_calls++;
+	if (property == 40 && type == 41 && data != NULL && count <= 18) {
+		const long *hints = (const long *)data;
+		t_x11.normal_hints_calls++;
+		for (int i = 0; i < count; i++) {
+			t_x11.normal_hints[i] = hints[i];
+		}
+	}
 	return t_x11.change_property_result;
 }
 
@@ -630,6 +700,21 @@ static int t_XFree(void *data)
 	return 1;
 }
 
+static t_x11_monitor_info_t *t_XRRGetMonitors(void *display, t_x11_window_t window, int get_active, int *count)
+{
+	(void)display;
+	(void)window;
+	(void)get_active;
+	*count = t_x11.xrandr_monitor_count;
+	return t_x11.xrandr_monitors;
+}
+
+static void t_XRRFreeMonitors(t_x11_monitor_info_t *monitors)
+{
+	(void)monitors;
+	t_x11.xrandr_free_calls++;
+}
+
 static void t_x11_dynamic_set_symbols(proc_t *proc, int include_alloc_id, int include_free)
 {
 #define T_X11_SET(_name) proc_setdlsym(proc, STRV("libX11.so.6"), STRV("X" #_name), t_x11_symbol((t_x11_symbol_t)t_X##_name))
@@ -675,6 +760,35 @@ static void t_x11_dynamic_set_symbols(proc_t *proc, int include_alloc_id, int in
 	}
 
 #undef T_X11_SET
+}
+
+static void t_x11_dynamic_set_monitor_symbols(proc_t *proc)
+{
+#define T_X11_SET(_name) proc_setdlsym(proc, STRV("libX11.so.6"), STRV("X" #_name), t_x11_symbol((t_x11_symbol_t)t_X##_name))
+
+	T_X11_SET(ScreenCount);
+	T_X11_SET(DisplayWidth);
+	T_X11_SET(DisplayHeight);
+	T_X11_SET(DisplayWidthMM);
+	T_X11_SET(DisplayHeightMM);
+
+#undef T_X11_SET
+}
+
+static void t_x11_dynamic_set_monitor_name_symbol(proc_t *proc)
+{
+	proc_setdlsym(proc, STRV("libX11.so.6"), STRV("XGetAtomName"), t_x11_symbol((t_x11_symbol_t)t_XGetAtomName));
+}
+
+static void t_x11_dynamic_set_xrandr_symbols(proc_t *proc)
+{
+	proc_setdlsym(proc, STRV("libXrandr.so.2"), STRV("XRRGetMonitors"), t_x11_symbol((t_x11_symbol_t)t_XRRGetMonitors));
+	proc_setdlsym(proc, STRV("libXrandr.so.2"), STRV("XRRFreeMonitors"), t_x11_symbol((t_x11_symbol_t)t_XRRFreeMonitors));
+}
+
+static void t_x11_dynamic_set_incomplete_xrandr_symbols(proc_t *proc)
+{
+	proc_setdlsym(proc, STRV("libXrandr.so.2"), STRV("XRRGetMonitors"), t_x11_symbol((t_x11_symbol_t)t_XRRGetMonitors));
 }
 
 static void t_x11_dynamic_env_init(fs_t *fs, proc_t *proc, sock_t *ss)
@@ -1001,6 +1115,267 @@ TEST(display_x11_dynamic_free_null_display)
 
 	T_X11_DYNAMIC_DRV();
 	EXPECT_EQ(drv->free(NULL), 1);
+
+	END;
+}
+
+TEST(display_x11_dynamic_monitors_rejects_null_display)
+{
+	START;
+
+	T_X11_DYNAMIC_DRV();
+	arr_t monitors = {0};
+
+	EXPECT_EQ(drv->monitors(NULL, &monitors), 1);
+
+	END;
+}
+
+TEST(display_x11_dynamic_monitors_returns_screen_metrics)
+{
+	START;
+
+	T_X11_DYNAMIC_DRV();
+	fs_t fs		  = {0};
+	proc_t proc	  = {0};
+	sock_t ss	  = {0};
+	display_t display = {0};
+	arr_t monitors;
+
+	t_x11_reset();
+	t_x11.screen_count	   = 2;
+	t_x11.display_width[0]	   = 1024;
+	t_x11.display_height[0]	   = 768;
+	t_x11.display_width_mm[0]  = 310;
+	t_x11.display_height_mm[0] = 220;
+	t_x11.display_width[1]	   = 1920;
+	t_x11.display_height[1]	   = 1080;
+	t_x11.display_width_mm[1]  = 600;
+	t_x11.display_height_mm[1] = 340;
+	t_x11_dynamic_env_init(&fs, &proc, &ss);
+	t_x11_dynamic_set_monitor_symbols(&proc);
+	EXPECT_NOT_NULL(arr_init(&monitors, 0, sizeof(display_monitor_t), ALLOC_STD));
+
+	EXPECT_EQ(t_x11_open(&display, NULL, &fs, &proc, &ss), 0);
+	EXPECT_EQ(drv->monitors(&display, &monitors), 0);
+	EXPECT_EQ(monitors.cnt, 2);
+
+	display_monitor_t *monitor = arr_get(&monitors, 1);
+	EXPECT_NOT_NULL(monitor);
+	EXPECT_EQ(monitor->id, 1);
+	EXPECT_EQ(monitor->width, 1920);
+	EXPECT_EQ(monitor->height, 1080);
+	EXPECT_EQ(monitor->physical_width, 600);
+	EXPECT_EQ(monitor->physical_height, 340);
+	EXPECT_EQ(monitor->primary, 0);
+	EXPECT_PTR(monitor->native, (void *)(uintptr_t)0x23u);
+
+	arr_free(&monitors);
+	display_free(&display);
+	t_x11_dynamic_env_free(&fs, &proc, &ss);
+
+	END;
+}
+
+TEST(display_x11_dynamic_monitors_returns_xrandr_metrics)
+{
+	START;
+
+	T_X11_DYNAMIC_DRV();
+	fs_t fs		  = {0};
+	proc_t proc	  = {0};
+	sock_t ss	  = {0};
+	display_t display = {0};
+	arr_t monitors;
+
+	t_x11_reset();
+	t_x11.xrandr_outputs[0]	   = 0x77u;
+	t_x11.xrandr_monitor_count = 1;
+	t_x11.xrandr_monitors[0]   = (t_x11_monitor_info_t){
+		.name	 = 1,
+		.primary = 1,
+		.noutput = 1,
+		.x	 = 10,
+		.y	 = 20,
+		.width	 = 1280,
+		.height	 = 720,
+		.mwidth	 = 500,
+		.mheight = 280,
+		.outputs = t_x11.xrandr_outputs,
+	};
+	t_x11_dynamic_env_init(&fs, &proc, &ss);
+	t_x11_dynamic_set_xrandr_symbols(&proc);
+	t_x11_dynamic_set_monitor_name_symbol(&proc);
+	EXPECT_NOT_NULL(arr_init(&monitors, 0, sizeof(display_monitor_t), ALLOC_STD));
+
+	EXPECT_EQ(t_x11_open(&display, NULL, &fs, &proc, &ss), 0);
+	EXPECT_EQ(drv->monitors(&display, &monitors), 0);
+	EXPECT_EQ(monitors.cnt, 1);
+	EXPECT_EQ(t_x11.xrandr_free_calls, 1);
+
+	display_monitor_t *monitor = arr_get(&monitors, 0);
+	EXPECT_NOT_NULL(monitor);
+	EXPECT_EQ(monitor->x, 10);
+	EXPECT_EQ(monitor->y, 20);
+	EXPECT_EQ(monitor->width, 1280);
+	EXPECT_EQ(monitor->height, 720);
+	EXPECT_EQ(monitor->physical_width, 500);
+	EXPECT_EQ(monitor->physical_height, 280);
+	EXPECT_EQ(monitor->primary, 1);
+	EXPECT_PTR(monitor->native, (void *)(uintptr_t)0x77u);
+	EXPECT_STR(monitor->name, "monitor");
+
+	arr_free(&monitors);
+	display_free(&display);
+	t_x11_dynamic_env_free(&fs, &proc, &ss);
+
+	END;
+}
+
+TEST(display_x11_dynamic_monitors_returns_empty_without_screen_metrics)
+{
+	START;
+
+	T_X11_DYNAMIC_DRV();
+	fs_t fs		  = {0};
+	proc_t proc	  = {0};
+	sock_t ss	  = {0};
+	display_t display = {0};
+	arr_t monitors;
+
+	t_x11_reset();
+	t_x11_dynamic_env_init(&fs, &proc, &ss);
+	EXPECT_NOT_NULL(arr_init(&monitors, 1, sizeof(display_monitor_t), ALLOC_STD));
+	monitors.cnt = 1;
+
+	EXPECT_EQ(t_x11_open(&display, NULL, &fs, &proc, &ss), 0);
+	EXPECT_EQ(drv->monitors(&display, &monitors), 0);
+	EXPECT_EQ(monitors.cnt, 0);
+
+	arr_free(&monitors);
+	display_free(&display);
+	t_x11_dynamic_env_free(&fs, &proc, &ss);
+
+	END;
+}
+
+TEST(display_x11_dynamic_monitors_ignores_name_without_atom_symbol)
+{
+	START;
+
+	T_X11_DYNAMIC_DRV();
+	fs_t fs		  = {0};
+	proc_t proc	  = {0};
+	sock_t ss	  = {0};
+	display_t display = {0};
+	arr_t monitors;
+
+	t_x11_reset();
+	t_x11.xrandr_monitor_count = 1;
+	t_x11.xrandr_monitors[0]   = (t_x11_monitor_info_t){
+		.name = 1,
+	};
+	t_x11_dynamic_env_init(&fs, &proc, &ss);
+	t_x11_dynamic_set_xrandr_symbols(&proc);
+	EXPECT_NOT_NULL(arr_init(&monitors, 0, sizeof(display_monitor_t), ALLOC_STD));
+
+	EXPECT_EQ(t_x11_open(&display, NULL, &fs, &proc, &ss), 0);
+	EXPECT_EQ(drv->monitors(&display, &monitors), 0);
+	EXPECT_EQ(monitors.cnt, 1);
+	EXPECT_STR(((display_monitor_t *)arr_get(&monitors, 0))->name, "");
+
+	arr_free(&monitors);
+	display_free(&display);
+	t_x11_dynamic_env_free(&fs, &proc, &ss);
+
+	END;
+}
+
+TEST(display_x11_dynamic_monitors_ignores_null_atom_name)
+{
+	START;
+
+	T_X11_DYNAMIC_DRV();
+	fs_t fs		  = {0};
+	proc_t proc	  = {0};
+	sock_t ss	  = {0};
+	display_t display = {0};
+	arr_t monitors;
+
+	t_x11_reset();
+	t_x11.xrandr_monitor_count = 1;
+	t_x11.xrandr_monitors[0]   = (t_x11_monitor_info_t){
+		.name = 0,
+	};
+	t_x11_dynamic_env_init(&fs, &proc, &ss);
+	t_x11_dynamic_set_xrandr_symbols(&proc);
+	t_x11_dynamic_set_monitor_name_symbol(&proc);
+	EXPECT_NOT_NULL(arr_init(&monitors, 0, sizeof(display_monitor_t), ALLOC_STD));
+
+	EXPECT_EQ(t_x11_open(&display, NULL, &fs, &proc, &ss), 0);
+	EXPECT_EQ(drv->monitors(&display, &monitors), 0);
+	EXPECT_EQ(monitors.cnt, 1);
+	EXPECT_STR(((display_monitor_t *)arr_get(&monitors, 0))->name, "");
+
+	arr_free(&monitors);
+	display_free(&display);
+	t_x11_dynamic_env_free(&fs, &proc, &ss);
+
+	END;
+}
+
+TEST(display_x11_dynamic_monitors_frees_xrandr_on_resize_failure)
+{
+	START;
+
+	T_X11_DYNAMIC_DRV();
+	fs_t fs		  = {0};
+	proc_t proc	  = {0};
+	sock_t ss	  = {0};
+	display_t display = {0};
+	t_alloc_t state	  = {.fail_realloc = 1};
+	arr_t monitors;
+
+	t_x11_reset();
+	t_x11.xrandr_monitor_count = 1;
+	t_x11_dynamic_env_init(&fs, &proc, &ss);
+	t_x11_dynamic_set_xrandr_symbols(&proc);
+	EXPECT_NOT_NULL(arr_init(&monitors, 0, sizeof(display_monitor_t), t_alloc(&state)));
+
+	EXPECT_EQ(t_x11_open(&display, NULL, &fs, &proc, &ss), 0);
+	EXPECT_EQ(drv->monitors(&display, &monitors), 1);
+	EXPECT_EQ(t_x11.xrandr_free_calls, 1);
+
+	arr_free(&monitors);
+	display_free(&display);
+	t_x11_dynamic_env_free(&fs, &proc, &ss);
+
+	END;
+}
+
+TEST(display_x11_dynamic_monitors_returns_resize_failure)
+{
+	START;
+
+	T_X11_DYNAMIC_DRV();
+	fs_t fs		  = {0};
+	proc_t proc	  = {0};
+	sock_t ss	  = {0};
+	display_t display = {0};
+	t_alloc_t state	  = {.fail_realloc = 1};
+	arr_t monitors;
+
+	t_x11_reset();
+	t_x11_dynamic_env_init(&fs, &proc, &ss);
+	t_x11_dynamic_set_monitor_symbols(&proc);
+	EXPECT_NOT_NULL(arr_init(&monitors, 0, sizeof(display_monitor_t), t_alloc(&state)));
+
+	EXPECT_EQ(t_x11_open(&display, NULL, &fs, &proc, &ss), 0);
+	EXPECT_EQ(drv->monitors(&display, &monitors), 1);
+
+	arr_free(&monitors);
+	display_free(&display);
+	t_x11_dynamic_env_free(&fs, &proc, &ss);
 
 	END;
 }
@@ -1461,6 +1836,48 @@ TEST(display_x11_dynamic_init_atom_failure)
 	END;
 }
 
+TEST(display_x11_dynamic_init_closes_incomplete_xrandr)
+{
+	START;
+
+	t_x11_reset();
+	fs_t fs		  = {0};
+	proc_t proc	  = {0};
+	sock_t ss	  = {0};
+	display_t display = {0};
+	t_x11_dynamic_env_init(&fs, &proc, &ss);
+	t_x11_dynamic_set_incomplete_xrandr_symbols(&proc);
+	T_X11_DYNAMIC_DRV();
+
+	EXPECT_NOT_NULL(display_init(&display, drv, &fs, &proc, &ss, ALLOC_STD));
+
+	display_free(&display);
+	t_x11_dynamic_env_free(&fs, &proc, &ss);
+
+	END;
+}
+
+TEST(display_x11_dynamic_init_closes_xrandr_on_atom_failure)
+{
+	START;
+
+	t_x11_reset();
+	t_x11.intern_atom_zero_after = 1;
+	fs_t fs			     = {0};
+	proc_t proc		     = {0};
+	sock_t ss		     = {0};
+	display_t display	     = {0};
+	t_x11_dynamic_env_init(&fs, &proc, &ss);
+	t_x11_dynamic_set_xrandr_symbols(&proc);
+	T_X11_DYNAMIC_DRV();
+
+	EXPECT_NULL(display_init(&display, drv, &fs, &proc, &ss, ALLOC_STD));
+
+	t_x11_dynamic_env_free(&fs, &proc, &ss);
+
+	END;
+}
+
 TEST(display_x11_dynamic_init_maps_keysyms)
 {
 	START;
@@ -1535,6 +1952,12 @@ TEST(display_x11_dynamic_window_init_success)
 
 	EXPECT_EQ(t_x11_open(&display, &window, &fs, &proc, &ss), 0);
 	EXPECT_EQ(window_id(&window), 0x44);
+	EXPECT_EQ(t_x11.normal_hints_calls, 1);
+	EXPECT_EQ(t_x11.normal_hints[0], (1 << 0) | (1 << 1) | (1 << 2) | (1 << 3));
+	EXPECT_EQ(t_x11.normal_hints[1], 10);
+	EXPECT_EQ(t_x11.normal_hints[2], 20);
+	EXPECT_EQ(t_x11.normal_hints[3], 640);
+	EXPECT_EQ(t_x11.normal_hints[4], 480);
 
 	window_free(&window);
 	display_free(&display);
@@ -1922,7 +2345,7 @@ TEST(display_x11_dynamic_window_set_title)
 	t_x11_open(&display, &window, &fs, &proc, &ss);
 
 	EXPECT_EQ(window_set_title(&window, STRV("title")), 0);
-	EXPECT_EQ(t_x11.change_property_calls, 2);
+	EXPECT_EQ(t_x11.change_property_calls, 3);
 
 	window_free(&window);
 	display_free(&display);
@@ -1977,14 +2400,14 @@ TEST(display_x11_dynamic_window_set_title_change_failure)
 	START;
 
 	t_x11_reset();
-	t_x11.change_property_result = 0;
-	fs_t fs			     = {0};
-	proc_t proc		     = {0};
-	sock_t ss		     = {0};
-	display_t display	     = {0};
-	window_t window		     = {0};
+	fs_t fs		  = {0};
+	proc_t proc	  = {0};
+	sock_t ss	  = {0};
+	display_t display = {0};
+	window_t window	  = {0};
 	t_x11_dynamic_env_init(&fs, &proc, &ss);
 	t_x11_open(&display, &window, &fs, &proc, &ss);
+	t_x11.change_property_result = 0;
 
 	EXPECT_EQ(window_set_title(&window, STRV("title")), 1);
 
@@ -3066,9 +3489,19 @@ STEST(display_x11_dynamic)
 	RUN(display_x11_dynamic_init_keyboard_mapping_invalid);
 	RUN(display_x11_dynamic_init_modifier_mapping_missing);
 	RUN(display_x11_dynamic_init_atom_failure);
+	RUN(display_x11_dynamic_init_closes_incomplete_xrandr);
+	RUN(display_x11_dynamic_init_closes_xrandr_on_atom_failure);
 	RUN(display_x11_dynamic_init_maps_keysyms);
 	RUN(display_x11_dynamic_init_maps_modifiers);
 	RUN(display_x11_dynamic_free_null_display);
+	RUN(display_x11_dynamic_monitors_rejects_null_display);
+	RUN(display_x11_dynamic_monitors_returns_screen_metrics);
+	RUN(display_x11_dynamic_monitors_returns_xrandr_metrics);
+	RUN(display_x11_dynamic_monitors_returns_empty_without_screen_metrics);
+	RUN(display_x11_dynamic_monitors_ignores_name_without_atom_symbol);
+	RUN(display_x11_dynamic_monitors_ignores_null_atom_name);
+	RUN(display_x11_dynamic_monitors_frees_xrandr_on_resize_failure);
+	RUN(display_x11_dynamic_monitors_returns_resize_failure);
 	RUN(display_x11_dynamic_poll_events_null_display);
 	RUN(display_x11_dynamic_wait_events_null_display);
 	RUN(display_x11_dynamic_native_null_display);

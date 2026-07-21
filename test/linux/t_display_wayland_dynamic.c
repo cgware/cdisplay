@@ -12,6 +12,7 @@ typedef struct t_wl_display_s t_wl_display_t;
 typedef struct t_wl_proxy_s t_wl_proxy_t;
 typedef struct t_wl_registry_s t_wl_registry_t;
 typedef struct t_wl_compositor_s t_wl_compositor_t;
+typedef struct t_wl_output_s t_wl_output_t;
 typedef struct t_wl_surface_s t_wl_surface_t;
 typedef struct t_xdg_wm_base_s t_xdg_wm_base_t;
 typedef struct t_xdg_surface_s t_xdg_surface_t;
@@ -30,6 +31,14 @@ typedef struct t_wl_registry_listener_s {
 	void (*global)(void *data, t_wl_registry_t *registry, u32 name, const char *interface, u32 version);
 	void (*global_remove)(void *data, t_wl_registry_t *registry, u32 name);
 } t_wl_registry_listener_t;
+
+typedef struct t_wl_output_listener_s {
+	void (*geometry)(void *data, t_wl_output_t *output, s32 x, s32 y, s32 physical_width, s32 physical_height, s32 subpixel,
+			 const char *make, const char *model, s32 transform);
+	void (*mode)(void *data, t_wl_output_t *output, u32 flags, s32 width, s32 height, s32 refresh);
+	void (*done)(void *data, t_wl_output_t *output);
+	void (*scale)(void *data, t_wl_output_t *output, s32 factor);
+} t_wl_output_listener_t;
 
 typedef struct t_xdg_wm_base_listener_s {
 	void (*ping)(void *data, t_xdg_wm_base_t *xdg_wm_base, u32 serial);
@@ -81,11 +90,14 @@ typedef struct t_wayland_state_s {
 	int dispatch_pending_result;
 	int flush_result;
 	int add_listener_result;
+	int output_add_listener_result;
 	int add_listener_fail_after;
 	int constructor_null_after;
 	int roundtrip_fail_after;
 	t_wl_registry_listener_t *registry_listener;
 	void *registry_listener_data;
+	t_wl_output_listener_t *output_listener;
+	void *output_listener_data;
 	t_xdg_wm_base_listener_t *wm_base_listener;
 	void *wm_base_listener_data;
 	t_xdg_surface_listener_t *xdg_surface_listener;
@@ -110,6 +122,7 @@ static t_wayland_state_t t_wayland;
 static t_wl_display_t *t_wayland_display	= (t_wl_display_t *)0x11u;
 static t_wl_registry_t *t_wayland_registry	= (t_wl_registry_t *)0x22u;
 static t_wl_compositor_t *t_wayland_compositor	= (t_wl_compositor_t *)0x33u;
+static t_wl_output_t *t_wayland_output		= (t_wl_output_t *)0x88u;
 static t_xdg_wm_base_t *t_wayland_wm_base	= (t_xdg_wm_base_t *)0x44u;
 static t_wl_surface_t *t_wayland_surface	= (t_wl_surface_t *)0x55u;
 static t_xdg_surface_t *t_wayland_xdg_surface	= (t_xdg_surface_t *)0x66u;
@@ -131,6 +144,48 @@ static void *t_wayland_null_alloc(alloc_t *alloc, size_t size)
 	(void)alloc;
 	(void)size;
 	return NULL;
+}
+
+typedef struct t_wayland_alloc_s {
+	int fail_realloc;
+} t_wayland_alloc_t;
+
+static void *t_wayland_alloc_alloc(alloc_t *alloc, size_t size)
+{
+	(void)alloc;
+	return mem_alloc(size);
+}
+
+static int t_wayland_alloc_realloc(alloc_t *alloc, void **ptr, size_t *old_size, size_t new_size)
+{
+	t_wayland_alloc_t *state = alloc->priv;
+	if (state->fail_realloc) {
+		return 1;
+	}
+
+	void *data = mem_realloc(*ptr, new_size, *old_size);
+	if (data == NULL) {
+		return 1;
+	}
+	*ptr	  = data;
+	*old_size = new_size;
+	return 0;
+}
+
+static void t_wayland_alloc_free(alloc_t *alloc, void *ptr, size_t size)
+{
+	(void)alloc;
+	mem_free(ptr, size);
+}
+
+static alloc_t t_wayland_alloc(t_wayland_alloc_t *state)
+{
+	return (alloc_t){
+		.alloc	 = t_wayland_alloc_alloc,
+		.realloc = t_wayland_alloc_realloc,
+		.free	 = t_wayland_alloc_free,
+		.priv	 = state,
+	};
 }
 
 static void t_wayland_reset(void)
@@ -188,6 +243,9 @@ static int t_wl_display_roundtrip(t_wl_display_t *display)
 		if (t_wayland.registry_global_count > 1) {
 			t_wayland.registry_listener->global(t_wayland.registry_listener_data, t_wayland_registry, 8, "xdg_wm_base", 3);
 		}
+		for (u32 i = 2; i < t_wayland.registry_global_count; ++i) {
+			t_wayland.registry_listener->global(t_wayland.registry_listener_data, t_wayland_registry, 7 + i, "wl_output", 4);
+		}
 	}
 	return t_wayland.roundtrip_result;
 }
@@ -219,6 +277,12 @@ static int t_wl_proxy_add_listener(t_wl_proxy_t *proxy, void (**listener)(void),
 	if (proxy == (t_wl_proxy_t *)t_wayland_registry) {
 		t_wayland.registry_listener	 = (t_wl_registry_listener_t *)listener;
 		t_wayland.registry_listener_data = data;
+	} else if (proxy == (t_wl_proxy_t *)t_wayland_output) {
+		t_wayland.output_listener      = (t_wl_output_listener_t *)listener;
+		t_wayland.output_listener_data = data;
+		if (t_wayland.output_add_listener_result) {
+			return t_wayland.output_add_listener_result;
+		}
 	} else if (proxy == (t_wl_proxy_t *)t_wayland_wm_base) {
 		t_wayland.wm_base_listener	= (t_xdg_wm_base_listener_t *)listener;
 		t_wayland.wm_base_listener_data = data;
@@ -262,6 +326,9 @@ static t_wl_proxy_t *t_wl_proxy_marshal_constructor_versioned(t_wl_proxy_t *prox
 
 	if (strv_eq(strv_cstr(interface->name), STRV("wl_compositor"))) {
 		return (t_wl_proxy_t *)t_wayland_compositor;
+	}
+	if (strv_eq(strv_cstr(interface->name), STRV("wl_output"))) {
+		return (t_wl_proxy_t *)t_wayland_output;
 	}
 	if (strv_eq(strv_cstr(interface->name), STRV("xdg_wm_base"))) {
 		return (t_wl_proxy_t *)t_wayland_wm_base;
@@ -824,6 +891,195 @@ TEST(display_wayland_dynamic_free_rejects_invalid_display)
 
 	EXPECT_EQ(drv->free(NULL), 1);
 	EXPECT_EQ(drv->free(&(display_t){0}), 1);
+
+	END;
+}
+
+TEST(display_wayland_dynamic_monitors_rejects_null_display)
+{
+	START;
+
+	T_WAYLAND_DRV();
+	arr_t monitors = {0};
+
+	EXPECT_EQ(drv->monitors(NULL, &monitors), 1);
+
+	END;
+}
+
+TEST(display_wayland_dynamic_monitors_returns_outputs)
+{
+	START;
+
+	t_wayland_reset();
+	fs_t fs		  = {0};
+	proc_t proc	  = {0};
+	sock_t ss	  = {0};
+	display_t display = {0};
+	arr_t monitors;
+	t_wayland_env_init(&fs, &proc, &ss);
+	t_wayland.registry_global_count = 3;
+	T_WAYLAND_DRV();
+	EXPECT_NOT_NULL(arr_init(&monitors, 0, sizeof(display_monitor_t), ALLOC_STD));
+
+	EXPECT_NOT_NULL(display_init(&display, drv, &fs, &proc, &ss, ALLOC_STD));
+	EXPECT_NOT_NULL(t_wayland.output_listener);
+	t_wayland.output_listener->mode(t_wayland.output_listener_data, t_wayland_output, 0, 640, 480, 60000);
+	t_wayland.output_listener->geometry(t_wayland.output_listener_data, t_wayland_output, 10, 20, 600, 340, 0, "Make", "Model", 0);
+	t_wayland.output_listener->mode(t_wayland.output_listener_data, t_wayland_output, 1, 1920, 1080, 59950);
+	t_wayland.output_listener->done(t_wayland.output_listener_data, t_wayland_output);
+	t_wayland.output_listener->scale(t_wayland.output_listener_data, t_wayland_output, 2);
+	EXPECT_EQ(drv->monitors(&display, &monitors), 0);
+	EXPECT_EQ(monitors.cnt, 1);
+
+	display_monitor_t *monitor = arr_get(&monitors, 0);
+	EXPECT_NOT_NULL(monitor);
+	EXPECT_EQ(monitor->id, 0);
+	EXPECT_EQ(monitor->x, 10);
+	EXPECT_EQ(monitor->y, 20);
+	EXPECT_EQ(monitor->width, 1920);
+	EXPECT_EQ(monitor->height, 1080);
+	EXPECT_EQ(monitor->physical_width, 600);
+	EXPECT_EQ(monitor->physical_height, 340);
+	EXPECT_EQ(monitor->refresh_rate, 60);
+	EXPECT_EQ(monitor->scale, 200);
+	EXPECT_EQ(monitor->primary, 1);
+	EXPECT_PTR(monitor->native, t_wayland_output);
+	EXPECT_STR(monitor->name, "Make Model");
+
+	arr_free(&monitors);
+	display_free(&display);
+	t_wayland_env_free(&fs, &proc, &ss);
+
+	END;
+}
+
+TEST(display_wayland_dynamic_monitors_skip_removed_output)
+{
+	START;
+
+	t_wayland_reset();
+	fs_t fs		  = {0};
+	proc_t proc	  = {0};
+	sock_t ss	  = {0};
+	display_t display = {0};
+	arr_t monitors;
+	t_wayland_env_init(&fs, &proc, &ss);
+	t_wayland.registry_global_count = 3;
+	T_WAYLAND_DRV();
+	EXPECT_NOT_NULL(arr_init(&monitors, 0, sizeof(display_monitor_t), ALLOC_STD));
+
+	EXPECT_NOT_NULL(display_init(&display, drv, &fs, &proc, &ss, ALLOC_STD));
+	t_wayland.registry_listener->global_remove(t_wayland.registry_listener_data, t_wayland_registry, 9);
+	EXPECT_EQ(drv->monitors(&display, &monitors), 0);
+	EXPECT_EQ(monitors.cnt, 0);
+
+	arr_free(&monitors);
+	display_free(&display);
+	t_wayland_env_free(&fs, &proc, &ss);
+
+	END;
+}
+
+TEST(display_wayland_dynamic_init_marks_failed_output_unused)
+{
+	START;
+
+	t_wayland_reset();
+	fs_t fs		  = {0};
+	proc_t proc	  = {0};
+	sock_t ss	  = {0};
+	display_t display = {0};
+	arr_t monitors;
+	t_wayland_env_init(&fs, &proc, &ss);
+	t_wayland.registry_global_count	     = 3;
+	t_wayland.output_add_listener_result = 1;
+	T_WAYLAND_DRV();
+	EXPECT_NOT_NULL(arr_init(&monitors, 0, sizeof(display_monitor_t), ALLOC_STD));
+
+	EXPECT_NOT_NULL(display_init(&display, drv, &fs, &proc, &ss, ALLOC_STD));
+	EXPECT_EQ(drv->monitors(&display, &monitors), 0);
+	EXPECT_EQ(monitors.cnt, 0);
+
+	arr_free(&monitors);
+	display_free(&display);
+	t_wayland_env_free(&fs, &proc, &ss);
+
+	END;
+}
+
+TEST(display_wayland_dynamic_init_cleans_output_on_bind_failure)
+{
+	START;
+
+	t_wayland_reset();
+	fs_t fs		  = {0};
+	proc_t proc	  = {0};
+	sock_t ss	  = {0};
+	display_t display = {0};
+	t_wayland_env_init(&fs, &proc, &ss);
+	t_wayland.registry_global_count = 3;
+	t_wayland.roundtrip_fail_after	= 2;
+	T_WAYLAND_DRV();
+
+	EXPECT_NULL(display_init(&display, drv, &fs, &proc, &ss, ALLOC_STD));
+	EXPECT(t_wayland.destroy_calls > 0);
+
+	t_wayland_env_free(&fs, &proc, &ss);
+
+	END;
+}
+
+TEST(display_wayland_dynamic_init_ignores_output_alloc_failure)
+{
+	START;
+
+	t_wayland_reset();
+	fs_t fs			= {0};
+	proc_t proc		= {0};
+	sock_t ss		= {0};
+	t_wayland_alloc_t state = {.fail_realloc = 1};
+	display_t display	= {0};
+	arr_t monitors;
+	t_wayland_env_init(&fs, &proc, &ss);
+	t_wayland.registry_global_count = 7;
+	T_WAYLAND_DRV();
+	EXPECT_NOT_NULL(arr_init(&monitors, 0, sizeof(display_monitor_t), ALLOC_STD));
+
+	EXPECT_NOT_NULL(display_init(&display, drv, &fs, &proc, &ss, t_wayland_alloc(&state)));
+	EXPECT_EQ(drv->monitors(&display, &monitors), 0);
+	EXPECT_EQ(monitors.cnt, 4);
+
+	arr_free(&monitors);
+	display_free(&display);
+	t_wayland_env_free(&fs, &proc, &ss);
+
+	END;
+}
+
+TEST(display_wayland_dynamic_monitors_returns_resize_failure)
+{
+	START;
+
+	t_wayland_reset();
+	fs_t fs		  = {0};
+	proc_t proc	  = {0};
+	sock_t ss	  = {0};
+	display_t display = {0};
+	arr_t monitors;
+	t_wayland_env_init(&fs, &proc, &ss);
+	t_wayland.registry_global_count = 3;
+	T_WAYLAND_DRV();
+	EXPECT_NOT_NULL(arr_init(&monitors, 0, sizeof(display_monitor_t), ALLOC_STD));
+
+	EXPECT_NOT_NULL(display_init(&display, drv, &fs, &proc, &ss, ALLOC_STD));
+	mem_oom(1);
+	EXPECT_EQ(drv->monitors(&display, &monitors), 1);
+	mem_oom(0);
+
+	arr_free(&monitors);
+	display_free(&display);
+	t_wayland_env_free(&fs, &proc, &ss);
 
 	END;
 }
@@ -1951,6 +2207,13 @@ STEST(display_wayland_dynamic)
 	RUN(display_wayland_dynamic_init_rejects_binding_roundtrip_failure);
 	RUN(display_wayland_dynamic_free_disconnects_display);
 	RUN(display_wayland_dynamic_free_rejects_invalid_display);
+	RUN(display_wayland_dynamic_monitors_rejects_null_display);
+	RUN(display_wayland_dynamic_monitors_returns_outputs);
+	RUN(display_wayland_dynamic_monitors_skip_removed_output);
+	RUN(display_wayland_dynamic_init_marks_failed_output_unused);
+	RUN(display_wayland_dynamic_init_cleans_output_on_bind_failure);
+	RUN(display_wayland_dynamic_init_ignores_output_alloc_failure);
+	RUN(display_wayland_dynamic_monitors_returns_resize_failure);
 	RUN(display_wayland_dynamic_poll_events_rejects_invalid_display);
 	RUN(display_wayland_dynamic_wait_events_rejects_invalid_display);
 	RUN(display_wayland_dynamic_native_rejects_invalid_arguments);

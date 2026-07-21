@@ -115,6 +115,38 @@ TEST(display_none_wait_events_empty)
 	END;
 }
 
+TEST(display_none_monitors_rejects_null_display)
+{
+	START;
+
+	display_driver_t *drv = t_none_driver();
+	arr_t monitors	      = {0};
+
+	EXPECT_NOT_NULL(drv);
+	EXPECT_EQ(drv->monitors(NULL, &monitors), 1);
+
+	END;
+}
+
+TEST(display_none_monitors_returns_empty_array)
+{
+	START;
+
+	display_driver_t *drv = t_none_driver();
+	display_t display     = {0};
+	arr_t monitors;
+
+	EXPECT_NOT_NULL(drv);
+	EXPECT_NOT_NULL(arr_init(&monitors, 1, sizeof(display_monitor_t), ALLOC_STD));
+
+	EXPECT_EQ(drv->monitors(&display, &monitors), 0);
+	EXPECT_EQ(monitors.cnt, 0);
+
+	arr_free(&monitors);
+
+	END;
+}
+
 TEST(display_none_window_free_null_window)
 {
 	START;
@@ -653,6 +685,8 @@ STEST(display_none)
 	RUN(display_none_poll_events_null_display);
 	RUN(display_none_poll_events_empty);
 	RUN(display_none_wait_events_empty);
+	RUN(display_none_monitors_rejects_null_display);
+	RUN(display_none_monitors_returns_empty_array);
 	RUN(display_none_window_free_null_window);
 	RUN(display_none_window_id_null_window);
 	RUN(display_none_window_id);

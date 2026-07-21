@@ -44,6 +44,16 @@ static int display_none_wait_events(display_t *display)
 	return display_none_poll_events(display);
 }
 
+static int display_none_monitors(display_t *display, arr_t *monitors)
+{
+	if (display == NULL || monitors == NULL) {
+		return 1;
+	}
+
+	monitors->cnt = 0;
+	return 0;
+}
+
 static int display_none_window_init(window_t *wnd, const window_config_t *config)
 {
 	if (wnd == NULL) {
@@ -259,6 +269,7 @@ static display_driver_t display_none = {
 	.free		       = display_none_free,
 	.poll_events	       = display_none_poll_events,
 	.wait_events	       = display_none_wait_events,
+	.monitors	       = display_none_monitors,
 	.window_init	       = display_none_window_init,
 	.window_free	       = display_none_window_free,
 	.window_id	       = display_none_window_id,

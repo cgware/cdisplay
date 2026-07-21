@@ -15,6 +15,7 @@ typedef unsigned long VisualID;
 typedef unsigned long Time;
 typedef unsigned long KeySym;
 typedef unsigned char KeyCode;
+typedef XID RROutput;
 typedef int Bool;
 typedef int Status;
 
@@ -90,6 +91,20 @@ typedef struct XModifierKeymap_s {
 	int max_keypermod;
 	KeyCode *modifiermap;
 } XModifierKeymap;
+
+typedef struct XRRMonitorInfo_s {
+	Atom name;
+	Bool primary;
+	Bool automatic;
+	int noutput;
+	int x;
+	int y;
+	int width;
+	int height;
+	int mwidth;
+	int mheight;
+	RROutput *outputs;
+} XRRMonitorInfo;
 
 typedef struct XAnyEvent_s {
 	int type;
@@ -189,7 +204,12 @@ typedef struct x11_s {
 	Display *(*OpenDisplay)(const char *);
 	int (*CloseDisplay)(Display *);
 	int (*DefaultScreen)(Display *);
+	int (*ScreenCount)(Display *);
 	Window (*RootWindow)(Display *, int);
+	int (*DisplayWidth)(Display *, int);
+	int (*DisplayHeight)(Display *, int);
+	int (*DisplayWidthMM)(Display *, int);
+	int (*DisplayHeightMM)(Display *, int);
 	unsigned long (*WhitePixel)(Display *, int);
 	unsigned long (*BlackPixel)(Display *, int);
 	Visual *(*DefaultVisual)(Display *, int);
@@ -216,6 +236,7 @@ typedef struct x11_s {
 	KeySym *(*GetKeyboardMapping)(Display *, KeyCode, int, int *);
 	XModifierKeymap *(*GetModifierMapping)(Display *);
 	int (*FreeModifiermap)(XModifierKeymap *);
+	char *(*GetAtomName)(Display *, Atom);
 	int (*GetWindowAttributes)(Display *, Window, XWindowAttributes *);
 	int (*GetWindowProperty)(Display *, Window, Atom, long, long, Bool, Atom, Atom *, int *, unsigned long *, unsigned long *,
 				 unsigned char **);
@@ -225,10 +246,17 @@ typedef struct x11_s {
 	int (*Free)(void *);
 } x11_t;
 
+typedef struct xrandr_s {
+	XRRMonitorInfo *(*GetMonitors)(Display *, Window, Bool, int *);
+	void (*FreeMonitors)(XRRMonitorInfo *);
+} xrandr_t;
+
 typedef struct display_x11_dynamic_s {
 	proc_t *proc;
 	void *lib;
+	void *xrandr_lib;
 	x11_t x11;
+	xrandr_t xrandr;
 	Display *display;
 	int screen;
 	Window root;
@@ -368,9 +396,11 @@ enum {
 };
 
 enum {
-	XA_ATOM	  = 4,
-	XA_STRING = 31,
-	X_SUCCESS = 0,
+	XA_ATOM		   = 4,
+	XA_WM_NORMAL_HINTS = 40,
+	XA_WM_SIZE_HINTS   = 41,
+	XA_STRING	   = 31,
+	X_SUCCESS	   = 0,
 };
 
 enum {
@@ -386,6 +416,14 @@ enum {
 	MOTIF_WM_HINTS_FIELD_COUNT	= 5,
 	MOTIF_WM_HINTS_DECORATIONS_FLAG = 1L << 1,
 	MOTIF_WM_DECOR_ALL		= 1,
+};
+
+enum {
+	X_SIZE_HINT_US_POSITION = 1 << 0,
+	X_SIZE_HINT_US_SIZE	= 1 << 1,
+	X_SIZE_HINT_P_POSITION	= 1 << 2,
+	X_SIZE_HINT_P_SIZE	= 1 << 3,
+	X_SIZE_HINT_FIELD_COUNT = 18,
 };
 
 enum {
@@ -545,10 +583,32 @@ static int load_x11(display_x11_dynamic_t *dx11)
 	LOAD_X11(dx11, QueryExtension);
 	LOAD_X11(dx11, Free);
 
+	proc_dlsym(dx11->proc, dx11->lib, STRV("XScreenCount"), (void **)&dx11->x11.ScreenCount);
+	proc_dlsym(dx11->proc, dx11->lib, STRV("XDisplayWidth"), (void **)&dx11->x11.DisplayWidth);
+	proc_dlsym(dx11->proc, dx11->lib, STRV("XDisplayHeight"), (void **)&dx11->x11.DisplayHeight);
+	proc_dlsym(dx11->proc, dx11->lib, STRV("XDisplayWidthMM"), (void **)&dx11->x11.DisplayWidthMM);
+	proc_dlsym(dx11->proc, dx11->lib, STRV("XDisplayHeightMM"), (void **)&dx11->x11.DisplayHeightMM);
+	proc_dlsym(dx11->proc, dx11->lib, STRV("XGetAtomName"), (void **)&dx11->x11.GetAtomName);
+
 	return 0;
 }
 
 #undef LOAD_X11
+
+static void load_xrandr(display_x11_dynamic_t *dx11)
+{
+	if (proc_dlopen(dx11->proc, STRV("libXrandr.so.2"), &dx11->xrandr_lib) &&
+	    proc_dlopen(dx11->proc, STRV("libXrandr.so"), &dx11->xrandr_lib)) {
+		return;
+	}
+
+	if (proc_dlsym(dx11->proc, dx11->xrandr_lib, STRV("XRRGetMonitors"), (void **)&dx11->xrandr.GetMonitors) ||
+	    proc_dlsym(dx11->proc, dx11->xrandr_lib, STRV("XRRFreeMonitors"), (void **)&dx11->xrandr.FreeMonitors)) {
+		proc_dlclose(dx11->proc, dx11->xrandr_lib);
+		dx11->xrandr_lib = NULL;
+		dx11->xrandr	 = (xrandr_t){0};
+	}
+}
 
 static display_key_t key_from_keysym(KeySym keysym)
 {
@@ -1046,6 +1106,19 @@ static int set_property_long(window_t *wnd, Atom property, Atom type, const long
 	return dx11->x11.Flush(dx11->display) == 0 ? 1 : 0;
 }
 
+static int set_wm_normal_hints(window_t *wnd, const window_config_t *config)
+{
+	long hints[X_SIZE_HINT_FIELD_COUNT] = {
+		X_SIZE_HINT_US_POSITION | X_SIZE_HINT_US_SIZE | X_SIZE_HINT_P_POSITION | X_SIZE_HINT_P_SIZE,
+		config->x,
+		config->y,
+		config->width,
+		config->height,
+	};
+
+	return set_property_long(wnd, XA_WM_NORMAL_HINTS, XA_WM_SIZE_HINTS, hints, X_SIZE_HINT_FIELD_COUNT);
+}
+
 static int set_borderless(window_t *wnd, int borderless)
 {
 	display_x11_dynamic_t *dx11	       = wnd->display->data;
@@ -1199,10 +1272,22 @@ static int display_x11_dynamic_init(display_t *display)
 
 	display_x11_dynamic_t *dx11 = display->data;
 	dx11->proc		    = display->proc;
-	if (arr_init(&dx11->windows, 8, sizeof(window_x11_dynamic_slot_t), display->alloc) == NULL || load_x11(dx11) ||
-	    open_display(display) || init_keys(display) || init_modifiers(display) || init_atoms(display)) {
+	if (arr_init(&dx11->windows, 8, sizeof(window_x11_dynamic_slot_t), display->alloc) == NULL || load_x11(dx11)) {
+		if (dx11->lib != NULL) {
+			proc_dlclose(dx11->proc, dx11->lib);
+		}
+		arr_free(&dx11->windows);
+		alloc_free(&display->alloc, display->data, sizeof(display_x11_dynamic_t));
+		display->data = NULL;
+		return 1;
+	}
+	load_xrandr(dx11);
+	if (open_display(display) || init_keys(display) || init_modifiers(display) || init_atoms(display)) {
 		if (dx11->display != NULL) {
 			dx11->x11.CloseDisplay(dx11->display);
+		}
+		if (dx11->xrandr_lib != NULL) {
+			proc_dlclose(dx11->proc, dx11->xrandr_lib);
 		}
 		if (dx11->lib != NULL) {
 			proc_dlclose(dx11->proc, dx11->lib);
@@ -1237,6 +1322,9 @@ static int display_x11_dynamic_free(display_t *display)
 	}
 	if (dx11->lib != NULL) {
 		proc_dlclose(dx11->proc, dx11->lib);
+	}
+	if (dx11->xrandr_lib != NULL) {
+		proc_dlclose(dx11->proc, dx11->xrandr_lib);
 	}
 
 	arr_free(&dx11->windows);
@@ -1313,6 +1401,89 @@ static int display_x11_dynamic_native_free(display_t *display, void *data)
 	return dx11->x11.Free(data);
 }
 
+static void display_x11_dynamic_monitor_name(display_x11_dynamic_t *dx11, display_monitor_t *monitor, Atom atom)
+{
+	if (dx11->x11.GetAtomName == NULL) {
+		return;
+	}
+
+	char *name = atom == X_NONE ? NULL : dx11->x11.GetAtomName(dx11->display, atom);
+	size_t len = 0;
+
+	if (name == NULL) {
+		return;
+	}
+	while (len + 1 < sizeof(monitor->name) && name[len] != 0) {
+		len++;
+	}
+	if (len > 0) {
+		mem_copy(monitor->name, sizeof(monitor->name), name, len);
+	}
+	monitor->name[len] = 0;
+	dx11->x11.Free(name);
+}
+
+static int display_x11_dynamic_monitors(display_t *display, arr_t *monitors)
+{
+	if (display == NULL || display->data == NULL || monitors == NULL) {
+		return 1;
+	}
+
+	display_x11_dynamic_t *dx11 = display->data;
+	if (dx11->xrandr.GetMonitors != NULL) {
+		int count		  = 0;
+		XRRMonitorInfo *xmonitors = dx11->xrandr.GetMonitors(dx11->display, dx11->root, X_TRUE, &count);
+		if (xmonitors != NULL) {
+			if (arr_resize(monitors, count > 0 ? (u32)count : 0)) {
+				dx11->xrandr.FreeMonitors(xmonitors);
+				return 1;
+			}
+			monitors->cnt = count > 0 ? (u32)count : 0;
+			for (int i = 0; i < count; ++i) {
+				display_monitor_t *monitor = arr_get(monitors, (u32)i);
+				mem_set(monitor, 0, sizeof(*monitor));
+				monitor->id		 = (u32)i;
+				monitor->x		 = xmonitors[i].x;
+				monitor->y		 = xmonitors[i].y;
+				monitor->width		 = xmonitors[i].width > 0 ? (u32)xmonitors[i].width : 0;
+				monitor->height		 = xmonitors[i].height > 0 ? (u32)xmonitors[i].height : 0;
+				monitor->physical_width	 = xmonitors[i].mwidth > 0 ? (u32)xmonitors[i].mwidth : 0;
+				monitor->physical_height = xmonitors[i].mheight > 0 ? (u32)xmonitors[i].mheight : 0;
+				monitor->primary	 = xmonitors[i].primary != 0;
+				monitor->native		 = xmonitors[i].noutput > 0 ? (void *)(uintptr_t)xmonitors[i].outputs[0] : NULL;
+				display_x11_dynamic_monitor_name(dx11, monitor, xmonitors[i].name);
+			}
+			dx11->xrandr.FreeMonitors(xmonitors);
+			return 0;
+		}
+	}
+
+	if (dx11->x11.ScreenCount == NULL || dx11->x11.DisplayWidth == NULL || dx11->x11.DisplayHeight == NULL ||
+	    dx11->x11.DisplayWidthMM == NULL || dx11->x11.DisplayHeightMM == NULL) {
+		monitors->cnt = 0;
+		return 0;
+	}
+
+	int screens = dx11->x11.ScreenCount(dx11->display);
+	if (arr_resize(monitors, screens > 0 ? (u32)screens : 0)) {
+		return 1;
+	}
+	monitors->cnt = screens > 0 ? (u32)screens : 0;
+	for (int i = 0; i < screens; ++i) {
+		display_monitor_t *monitor = arr_get(monitors, (u32)i);
+		mem_set(monitor, 0, sizeof(*monitor));
+		monitor->id		 = (u32)i;
+		monitor->width		 = (u32)dx11->x11.DisplayWidth(dx11->display, i);
+		monitor->height		 = (u32)dx11->x11.DisplayHeight(dx11->display, i);
+		monitor->physical_width	 = (u32)dx11->x11.DisplayWidthMM(dx11->display, i);
+		monitor->physical_height = (u32)dx11->x11.DisplayHeightMM(dx11->display, i);
+		monitor->primary	 = i == dx11->screen;
+		monitor->native		 = (void *)(uintptr_t)dx11->x11.RootWindow(dx11->display, i);
+	}
+
+	return 0;
+}
+
 static int display_x11_dynamic_window_init(window_t *wnd, const window_config_t *config)
 {
 	if (wnd == NULL || wnd->display == NULL || wnd->display->data == NULL || wnd->display->alloc.alloc == NULL || config == NULL) {
@@ -1324,7 +1495,7 @@ static int display_x11_dynamic_window_init(window_t *wnd, const window_config_t 
 		return 1;
 	}
 
-	if (create_window(wnd, config) || set_wm_protocols(wnd)) {
+	if (create_window(wnd, config) || set_wm_normal_hints(wnd, config) || set_wm_protocols(wnd)) {
 		display_x11_dynamic_t *dx11 = wnd->display->data;
 		if (wx11->id != X_NONE) {
 			dx11->x11.DestroyWindow(dx11->display, wx11->id);
@@ -1674,6 +1845,7 @@ static display_driver_t display_x11_dynamic = {
 	.wait_events	       = display_x11_dynamic_wait_events,
 	.native		       = display_x11_dynamic_native,
 	.native_free	       = display_x11_dynamic_native_free,
+	.monitors	       = display_x11_dynamic_monitors,
 	.window_init	       = display_x11_dynamic_window_init,
 	.window_free	       = display_x11_dynamic_window_free,
 	.window_id	       = display_x11_dynamic_window_id,

@@ -20,6 +20,8 @@ typedef BOOL(WINAPI *get_window_rect_t)(HWND, LPRECT);
 typedef BOOL(WINAPI *get_client_rect_t)(HWND, LPRECT);
 typedef HMONITOR(WINAPI *monitor_from_window_t)(HWND, DWORD);
 typedef BOOL(WINAPI *get_monitor_infoa_t)(HMONITOR, LPMONITORINFO);
+typedef BOOL(WINAPI *enum_display_monitors_t)(HDC, LPCRECT, MONITORENUMPROC, LPARAM);
+typedef BOOL(WINAPI *enum_display_settingsa_t)(LPCSTR, DWORD, DEVMODEA *);
 typedef BOOL(WINAPI *screen_to_client_t)(HWND, LPPOINT);
 typedef BOOL(WINAPI *peek_messagea_t)(LPMSG, HWND, UINT, UINT, UINT);
 typedef BOOL(WINAPI *get_messagea_t)(LPMSG, HWND, UINT, UINT);
@@ -28,6 +30,10 @@ typedef LRESULT(WINAPI *dispatch_messagea_t)(const MSG *);
 typedef LRESULT(WINAPI *def_window_proca_t)(HWND, UINT, WPARAM, LPARAM);
 typedef LONG_PTR(WINAPI *get_window_long_ptra_t)(HWND, int);
 typedef LONG_PTR(WINAPI *set_window_long_ptra_t)(HWND, int, LONG_PTR);
+typedef HDC(WINAPI *create_dca_t)(LPCSTR, LPCSTR, LPCSTR, const DEVMODEA *);
+typedef BOOL(WINAPI *delete_dc_t)(HDC);
+typedef int(WINAPI *get_device_caps_t)(HDC, int);
+typedef HRESULT(WINAPI *get_scale_factor_for_monitor_t)(HMONITOR, int *);
 
 typedef struct display_windows_wndproc_api_s {
 	get_window_long_ptra_t GetWindowLongPtrA;
@@ -50,6 +56,8 @@ typedef struct display_windows_wndproc_api_s {
 typedef struct display_windows_s {
 	proc_t *proc;
 	void *user32;
+	void *gdi32;
+	void *shcore;
 	HINSTANCE instance;
 	ATOM window_class;
 	register_class_exa_t RegisterClassExA;
@@ -67,6 +75,8 @@ typedef struct display_windows_s {
 	get_client_rect_t GetClientRect;
 	monitor_from_window_t MonitorFromWindow;
 	get_monitor_infoa_t GetMonitorInfoA;
+	enum_display_monitors_t EnumDisplayMonitors;
+	enum_display_settingsa_t EnumDisplaySettingsA;
 	screen_to_client_t ScreenToClient;
 	peek_messagea_t PeekMessageA;
 	get_messagea_t GetMessageA;
@@ -75,6 +85,10 @@ typedef struct display_windows_s {
 	def_window_proca_t DefWindowProcA;
 	get_window_long_ptra_t GetWindowLongPtrA;
 	set_window_long_ptra_t SetWindowLongPtrA;
+	create_dca_t CreateDCA;
+	delete_dc_t DeleteDC;
+	get_device_caps_t GetDeviceCaps;
+	get_scale_factor_for_monitor_t GetScaleFactorForMonitor;
 	display_windows_wndproc_api_t wndproc_api;
 	size_t emitted;
 } display_windows_t;
@@ -167,6 +181,16 @@ static int display_windows_load_proc(display_windows_t *dwindows, void **sym, st
 	return 0;
 }
 
+static int display_windows_load_gdi_proc(display_windows_t *dwindows, void **sym, strv_t name)
+{
+	if (proc_dlsym(dwindows->proc, dwindows->gdi32, name, sym)) {
+		log_error("cdisplay", "display_windows", NULL, "failed to load gdi32 symbol: %.*s", name.len, name.data);
+		return 1;
+	}
+
+	return 0;
+}
+
 static int display_windows_load_user32(display_windows_t *dwindows)
 {
 	if (proc_dlopen(dwindows->proc, STRV("user32.dll"), &dwindows->user32)) {
@@ -189,6 +213,8 @@ static int display_windows_load_user32(display_windows_t *dwindows)
 	    display_windows_load_proc(dwindows, (void **)&dwindows->GetClientRect, STRV("GetClientRect")) ||
 	    display_windows_load_proc(dwindows, (void **)&dwindows->MonitorFromWindow, STRV("MonitorFromWindow")) ||
 	    display_windows_load_proc(dwindows, (void **)&dwindows->GetMonitorInfoA, STRV("GetMonitorInfoA")) ||
+	    display_windows_load_proc(dwindows, (void **)&dwindows->EnumDisplayMonitors, STRV("EnumDisplayMonitors")) ||
+	    display_windows_load_proc(dwindows, (void **)&dwindows->EnumDisplaySettingsA, STRV("EnumDisplaySettingsA")) ||
 	    display_windows_load_proc(dwindows, (void **)&dwindows->ScreenToClient, STRV("ScreenToClient")) ||
 	    display_windows_load_proc(dwindows, (void **)&dwindows->PeekMessageA, STRV("PeekMessageA")) ||
 	    display_windows_load_proc(dwindows, (void **)&dwindows->GetMessageA, STRV("GetMessageA")) ||
@@ -206,6 +232,35 @@ static int display_windows_load_user32(display_windows_t *dwindows)
 	dwindows->wndproc_api.DefWindowProcA	= dwindows->DefWindowProcA;
 
 	return 0;
+}
+
+static int display_windows_load_gdi32(display_windows_t *dwindows)
+{
+	if (proc_dlopen(dwindows->proc, STRV("gdi32.dll"), &dwindows->gdi32)) {
+		log_error("cdisplay", "display_windows", NULL, "failed to load gdi32.dll");
+		return 1;
+	}
+
+	if (display_windows_load_gdi_proc(dwindows, (void **)&dwindows->CreateDCA, STRV("CreateDCA")) ||
+	    display_windows_load_gdi_proc(dwindows, (void **)&dwindows->DeleteDC, STRV("DeleteDC")) ||
+	    display_windows_load_gdi_proc(dwindows, (void **)&dwindows->GetDeviceCaps, STRV("GetDeviceCaps"))) {
+		proc_dlclose(dwindows->proc, dwindows->gdi32);
+		dwindows->gdi32 = NULL;
+		return 1;
+	}
+
+	return 0;
+}
+
+static void display_windows_load_shcore(display_windows_t *dwindows)
+{
+	if (proc_dlopen(dwindows->proc, STRV("shcore.dll"), &dwindows->shcore)) {
+		return;
+	}
+	if (proc_dlsym(dwindows->proc, dwindows->shcore, STRV("GetScaleFactorForMonitor"), (void **)&dwindows->GetScaleFactorForMonitor)) {
+		proc_dlclose(dwindows->proc, dwindows->shcore);
+		dwindows->shcore = NULL;
+	}
 }
 
 static int display_windows_register_class(display_windows_t *dwindows)
@@ -817,7 +872,10 @@ static int display_windows_init(display_t *display)
 		return 1;
 	}
 
-	if (display_windows_load_user32(dwindows)) {
+	if (display_windows_load_user32(dwindows) || display_windows_load_gdi32(dwindows)) {
+		if (dwindows->gdi32 != NULL) {
+			proc_dlclose(dwindows->proc, dwindows->gdi32);
+		}
 		if (dwindows->user32 != NULL) {
 			proc_dlclose(dwindows->proc, dwindows->user32);
 		}
@@ -825,11 +883,16 @@ static int display_windows_init(display_t *display)
 		display->data = NULL;
 		return 1;
 	}
+	display_windows_load_shcore(dwindows);
 
 	s_wndproc_api = &dwindows->wndproc_api;
 
 	if (display_windows_register_class(dwindows)) {
 		s_wndproc_api = NULL;
+		if (dwindows->shcore != NULL) {
+			proc_dlclose(dwindows->proc, dwindows->shcore);
+		}
+		proc_dlclose(dwindows->proc, dwindows->gdi32);
 		proc_dlclose(dwindows->proc, dwindows->user32);
 		mem_free(display->data, sizeof(display_windows_t));
 		display->data = NULL;
@@ -859,6 +922,12 @@ static int display_windows_free(display_t *display)
 		}
 		if (s_wndproc_api == &dwindows->wndproc_api) {
 			s_wndproc_api = NULL;
+		}
+		if (dwindows->shcore != NULL) {
+			proc_dlclose(dwindows->proc, dwindows->shcore);
+		}
+		if (dwindows->gdi32 != NULL) {
+			proc_dlclose(dwindows->proc, dwindows->gdi32);
 		}
 		if (dwindows->user32 != NULL) {
 			proc_dlclose(dwindows->proc, dwindows->user32);
@@ -941,6 +1010,152 @@ static int display_windows_wait_events(display_t *display)
 	}
 
 	return 1;
+}
+
+typedef struct display_windows_monitor_enum_s {
+	display_windows_t *dwindows;
+	arr_t *monitors;
+	u32 count;
+	int failed;
+} display_windows_monitor_enum_t;
+
+static void display_windows_monitor_name(display_monitor_t *monitor, const char *name)
+{
+	size_t len = 0;
+
+	if (name == NULL) {
+		return;
+	}
+	while (len + 1 < sizeof(monitor->name) && name[len] != 0) {
+		len++;
+	}
+	if (len > 0) {
+		mem_copy(monitor->name, sizeof(monitor->name), name, len);
+	}
+	monitor->name[len] = 0;
+}
+
+static BOOL CALLBACK display_windows_monitor_enum(HMONITOR handle, HDC hdc, LPRECT rect, LPARAM param)
+{
+	(void)hdc;
+
+	display_windows_monitor_enum_t *state = (display_windows_monitor_enum_t *)param;
+	display_windows_t *dwindows	      = state->dwindows;
+
+	MONITORINFOEXA info = {0};
+	info.cbSize	    = sizeof(info);
+	if (!dwindows->GetMonitorInfoA(handle, (MONITORINFO *)&info)) {
+		return TRUE;
+	}
+
+	u32 id = state->count;
+	state->count++;
+
+	if (state->monitors == NULL) {
+		return TRUE;
+	}
+
+	if (id >= state->monitors->cnt) {
+		state->failed = 1;
+		return FALSE;
+	}
+
+	display_monitor_t *monitor = arr_get(state->monitors, id);
+	mem_set(monitor, 0, sizeof(*monitor));
+	monitor->id	 = id;
+	monitor->x	 = (s32)info.rcMonitor.left;
+	monitor->y	 = (s32)info.rcMonitor.top;
+	monitor->width	 = (u32)(info.rcMonitor.right - info.rcMonitor.left);
+	monitor->height	 = (u32)(info.rcMonitor.bottom - info.rcMonitor.top);
+	monitor->primary = (info.dwFlags & MONITORINFOF_PRIMARY) != 0;
+	monitor->native	 = handle;
+	display_windows_monitor_name(monitor, info.szDevice);
+
+	DEVMODEA mode = {0};
+	mode.dmSize   = sizeof(mode);
+	if (dwindows->EnumDisplaySettingsA(info.szDevice, ENUM_CURRENT_SETTINGS, &mode) && mode.dmDisplayFrequency != 0) {
+		monitor->refresh_rate = (u32)mode.dmDisplayFrequency;
+	}
+
+	HDC monitor_dc = dwindows->CreateDCA(info.szDevice, info.szDevice, NULL, NULL);
+	if (monitor_dc != NULL) {
+		int physical_width  = dwindows->GetDeviceCaps(monitor_dc, HORZSIZE);
+		int physical_height = dwindows->GetDeviceCaps(monitor_dc, VERTSIZE);
+		if (physical_width > 0) {
+			monitor->physical_width = (u32)physical_width;
+		}
+		if (physical_height > 0) {
+			monitor->physical_height = (u32)physical_height;
+		}
+		dwindows->DeleteDC(monitor_dc);
+	}
+
+	if (dwindows->GetScaleFactorForMonitor != NULL) {
+		int scale = 0;
+		if (SUCCEEDED(dwindows->GetScaleFactorForMonitor(handle, &scale)) && scale > 0) {
+			monitor->scale = (u32)scale;
+		}
+	}
+
+	if (rect != NULL) {
+		monitor->x	= (s32)rect->left;
+		monitor->y	= (s32)rect->top;
+		monitor->width	= (u32)(rect->right - rect->left);
+		monitor->height = (u32)(rect->bottom - rect->top);
+	}
+
+	return TRUE;
+}
+
+static u32 display_windows_monitor_count(display_t *display)
+{
+	if (display == NULL || display->data == NULL) {
+		return 0;
+	}
+
+	display_windows_t *dwindows	     = display->data;
+	display_windows_monitor_enum_t state = {
+		.dwindows = dwindows,
+	};
+	if (!dwindows->EnumDisplayMonitors(NULL, NULL, display_windows_monitor_enum, (LPARAM)&state)) {
+		return 0;
+	}
+
+	return state.count;
+}
+
+static int display_windows_monitors(display_t *display, arr_t *monitors)
+{
+	if (display == NULL || display->data == NULL || monitors == NULL) {
+		return 1;
+	}
+
+	display_windows_t *dwindows = display->data;
+	u32 count		    = display_windows_monitor_count(display);
+	if (arr_resize(monitors, count)) {
+		return 1;
+	}
+	monitors->cnt = count;
+
+	display_windows_monitor_enum_t state = {
+		.dwindows = dwindows,
+		.monitors = monitors,
+	};
+	if (!dwindows->EnumDisplayMonitors(NULL, NULL, display_windows_monitor_enum, (LPARAM)&state)) {
+		monitors->cnt = 0;
+		return 1;
+	}
+	if (state.failed) {
+		monitors->cnt = 0;
+		return 1;
+	}
+
+	if (arr_resize(monitors, state.count)) {
+		monitors->cnt = 0;
+		return 1;
+	}
+	monitors->cnt = state.count;
+	return 0;
 }
 
 static int display_windows_window_init(window_t *wnd, const window_config_t *config)
@@ -1313,6 +1528,7 @@ static display_driver_t display_windows = {
 	.poll_events	       = display_windows_poll_events,
 	.wait_events	       = display_windows_wait_events,
 	.native		       = display_windows_native,
+	.monitors	       = display_windows_monitors,
 	.window_init	       = display_windows_window_init,
 	.window_free	       = display_windows_window_free,
 	.window_id	       = display_windows_window_id,

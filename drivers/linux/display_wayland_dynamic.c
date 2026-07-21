@@ -1,5 +1,6 @@
 #include "display_driver.h"
 
+#include "arr.h"
 #include "log.h"
 #include "mem.h"
 
@@ -39,6 +40,14 @@ typedef struct xdg_wm_base_listener_s {
 	void (*ping)(void *data, xdg_wm_base *xdg_wm_base, u32 serial);
 } xdg_wm_base_listener;
 
+typedef struct wl_output_listener_s {
+	void (*geometry)(void *data, wl_output *output, s32 x, s32 y, s32 physical_width, s32 physical_height, s32 subpixel,
+			 const char *make, const char *model, s32 transform);
+	void (*mode)(void *data, wl_output *output, u32 flags, s32 width, s32 height, s32 refresh);
+	void (*done)(void *data, wl_output *output);
+	void (*scale)(void *data, wl_output *output, s32 factor);
+} wl_output_listener;
+
 typedef struct xdg_surface_listener_s {
 	void (*configure)(void *data, xdg_surface *xdg_surface, u32 serial);
 } xdg_surface_listener;
@@ -74,7 +83,16 @@ typedef struct display_wayland_dynamic_s {
 	u32 compositor_version;
 	u32 wm_base_name;
 	u32 wm_base_version;
+	arr_t outputs;
 } display_wayland_dynamic_t;
+
+typedef struct output_wayland_dynamic_s {
+	wl_output *output;
+	u32 name;
+	u32 version;
+	display_monitor_t monitor;
+	int used;
+} output_wayland_dynamic_t;
 
 typedef struct window_wayland_dynamic_s {
 	wl_surface *surface;
@@ -172,9 +190,18 @@ static const wl_interface wl_surface_interface = {
 	.methods      = wl_surface_methods,
 };
 
+static const wl_message wl_output_events[] = {
+	{"geometry", "iiiiissi", NULL},
+	{"mode", "uiii", NULL},
+	{"done", "", NULL},
+	{"scale", "i", NULL},
+};
+
 static const wl_interface wl_output_interface = {
-	.name	 = "wl_output",
-	.version = 1,
+	.name	     = "wl_output",
+	.version     = 2,
+	.event_count = sizeof(wl_output_events) / sizeof(wl_output_events[0]),
+	.events	     = wl_output_events,
 };
 
 static const wl_interface *xdg_wm_base_create_positioner_types[] = {
@@ -412,10 +439,136 @@ static int str_eq(const char *l, const char *r)
 	return l != NULL && r != NULL && strv_eq(strv_cstr(l), strv_cstr(r));
 }
 
+static void wayland_output_name(display_monitor_t *monitor, const char *make, const char *model)
+{
+	size_t len = 0;
+
+	if (make != NULL) {
+		while (len + 1 < sizeof(monitor->name) && make[len] != 0) {
+			monitor->name[len] = make[len];
+			len++;
+		}
+	}
+	if (model != NULL && model[0] != 0) {
+		if (len + 1 < sizeof(monitor->name) && len > 0) {
+			monitor->name[len++] = ' ';
+		}
+		for (size_t i = 0; len + 1 < sizeof(monitor->name) && model[i] != 0; ++i) {
+			monitor->name[len++] = model[i];
+		}
+	}
+	monitor->name[len] = 0;
+}
+
+static void wayland_output_geometry(void *data, wl_output *output, s32 x, s32 y, s32 physical_width, s32 physical_height, s32 subpixel,
+				    const char *make, const char *model, s32 transform)
+{
+	(void)output;
+	(void)subpixel;
+	(void)transform;
+	output_wayland_dynamic_t *out = data;
+
+	out->monitor.x = x;
+	out->monitor.y = y;
+	if (physical_width > 0) {
+		out->monitor.physical_width = (u32)physical_width;
+	}
+	if (physical_height > 0) {
+		out->monitor.physical_height = (u32)physical_height;
+	}
+	wayland_output_name(&out->monitor, make, model);
+}
+
+static void wayland_output_mode(void *data, wl_output *output, u32 flags, s32 width, s32 height, s32 refresh)
+{
+	(void)output;
+	output_wayland_dynamic_t *out = data;
+
+	if ((flags & 1u) == 0) {
+		return;
+	}
+	if (width > 0) {
+		out->monitor.width = (u32)width;
+	}
+	if (height > 0) {
+		out->monitor.height = (u32)height;
+	}
+	if (refresh > 0) {
+		out->monitor.refresh_rate = (u32)((refresh + 500) / 1000);
+	}
+}
+
+static void wayland_output_done(void *data, wl_output *output)
+{
+	(void)data;
+	(void)output;
+}
+
+static void wayland_output_scale(void *data, wl_output *output, s32 factor)
+{
+	(void)output;
+	output_wayland_dynamic_t *out = data;
+	if (factor > 0) {
+		out->monitor.scale = (u32)factor * 100;
+	}
+}
+
+static const wl_output_listener wayland_output_listener = {
+	.geometry = wayland_output_geometry,
+	.mode	  = wayland_output_mode,
+	.done	  = wayland_output_done,
+	.scale	  = wayland_output_scale,
+};
+
 static void wayland_registry_global(void *data, wl_registry *registry, u32 name, const char *interface, u32 version)
 {
-	(void)registry;
 	display_wayland_dynamic_t *dwl = data;
+	if (str_eq(interface, wl_output_interface.name)) {
+		output_wayland_dynamic_t *out = arr_add(&dwl->outputs, NULL);
+		if (out == NULL) {
+			log_error("cdisplay", "display_wayland_dynamic", NULL, "failed to allocate Wayland output");
+			return;
+		}
+		mem_set(out, 0, sizeof(*out));
+		out->name	     = name;
+		out->version	     = version;
+		out->used	     = 1;
+		out->monitor.id	     = (u32)dwl->outputs.cnt - 1;
+		out->monitor.scale   = 100;
+		out->monitor.primary = out->monitor.id == 0;
+		out->output = (wl_output *)dwl->wl.proxy_marshal_constructor_versioned((wl_proxy *)registry,
+										       WL_REGISTRY_BIND,
+										       &wl_output_interface,
+										       bind_version(version, wl_output_interface.version),
+										       name,
+										       wl_output_interface.name,
+										       bind_version(version, wl_output_interface.version),
+										       NULL);
+		if (out->output == NULL ||
+		    dwl->wl.proxy_add_listener((wl_proxy *)out->output, (void (**)(void))&wayland_output_listener, out)) {
+			log_error("cdisplay",
+				  "display_wayland_dynamic",
+				  NULL,
+				  "failed to bind Wayland output: name=%u version=%u",
+				  name,
+				  version);
+			if (out->output != NULL) {
+				dwl->wl.proxy_destroy((wl_proxy *)out->output);
+				out->output = NULL;
+			}
+			out->used = 0;
+			return;
+		}
+		out->monitor.native = out->output;
+		log_info("cdisplay",
+			 "display_wayland_dynamic",
+			 NULL,
+			 "found Wayland global: interface=%s name=%u version=%u",
+			 interface,
+			 name,
+			 version);
+		return;
+	}
 	if (str_eq(interface, wl_compositor_interface.name)) {
 		dwl->compositor_name	= name;
 		dwl->compositor_version = version;
@@ -443,9 +596,18 @@ static void wayland_registry_global(void *data, wl_registry *registry, u32 name,
 
 static void wayland_registry_global_remove(void *data, wl_registry *registry, u32 name)
 {
-	(void)data;
 	(void)registry;
-	(void)name;
+	display_wayland_dynamic_t *dwl = data;
+	for (u32 i = 0; i < dwl->outputs.cnt; ++i) {
+		output_wayland_dynamic_t *out = arr_get(&dwl->outputs, i);
+		if (out != NULL && out->used && out->name == name) {
+			if (out->output != NULL) {
+				dwl->wl.proxy_destroy((wl_proxy *)out->output);
+			}
+			out->used = 0;
+			return;
+		}
+	}
 }
 
 static const wl_registry_listener wayland_registry_listener = {
@@ -611,10 +773,11 @@ static int display_wayland_dynamic_init(display_t *display)
 
 	display_wayland_dynamic_t *dwl = display->data;
 	dwl->proc		       = display->proc;
-	if (load_wayland(dwl)) {
+	if (arr_init(&dwl->outputs, 4, sizeof(output_wayland_dynamic_t), display->alloc) == NULL || load_wayland(dwl)) {
 		if (dwl->lib != NULL) {
 			proc_dlclose(dwl->proc, dwl->lib);
 		}
+		arr_free(&dwl->outputs);
 		alloc_free(&display->alloc, display->data, sizeof(display_wayland_dynamic_t));
 		display->data = NULL;
 		return 1;
@@ -624,12 +787,19 @@ static int display_wayland_dynamic_init(display_t *display)
 	if (dwl->display == NULL) {
 		log_error("cdisplay", "display_wayland_dynamic", NULL, "failed to connect to Wayland display");
 		proc_dlclose(dwl->proc, dwl->lib);
+		arr_free(&dwl->outputs);
 		alloc_free(&display->alloc, display->data, sizeof(display_wayland_dynamic_t));
 		display->data = NULL;
 		return 1;
 	}
 
 	if (bind_globals(dwl)) {
+		for (u32 i = 0; i < dwl->outputs.cnt; ++i) {
+			output_wayland_dynamic_t *out = arr_get(&dwl->outputs, i);
+			if (out != NULL && out->used && out->output != NULL) {
+				dwl->wl.proxy_destroy((wl_proxy *)out->output);
+			}
+		}
 		if (dwl->wm_base != NULL) {
 			dwl->wl.proxy_destroy((wl_proxy *)dwl->wm_base);
 		}
@@ -641,6 +811,7 @@ static int display_wayland_dynamic_init(display_t *display)
 		}
 		dwl->wl.display_disconnect(dwl->display);
 		proc_dlclose(dwl->proc, dwl->lib);
+		arr_free(&dwl->outputs);
 		alloc_free(&display->alloc, display->data, sizeof(display_wayland_dynamic_t));
 		display->data = NULL;
 		return 1;
@@ -659,6 +830,12 @@ static int display_wayland_dynamic_free(display_t *display)
 
 	log_info("cdisplay", "display_wayland_dynamic", NULL, "Freeing Wayland...");
 
+	for (u32 i = 0; i < dwl->outputs.cnt; ++i) {
+		output_wayland_dynamic_t *out = arr_get(&dwl->outputs, i);
+		if (out != NULL && out->used && out->output != NULL) {
+			dwl->wl.proxy_destroy((wl_proxy *)out->output);
+		}
+	}
 	if (dwl->wm_base != NULL) {
 		dwl->wl.proxy_destroy((wl_proxy *)dwl->wm_base);
 	}
@@ -675,6 +852,7 @@ static int display_wayland_dynamic_free(display_t *display)
 		proc_dlclose(dwl->proc, dwl->lib);
 	}
 
+	arr_free(&dwl->outputs);
 	alloc_free(&display->alloc, display->data, sizeof(display_wayland_dynamic_t));
 	return 0;
 }
@@ -710,6 +888,45 @@ static int display_wayland_dynamic_native(display_t *display, display_native_t *
 	native->display		       = dwl->display;
 	native->screen		       = 0;
 	return native->display == NULL;
+}
+
+static u32 display_wayland_dynamic_monitor_count(display_t *display)
+{
+	display_wayland_dynamic_t *dwl = display->data;
+	u32 count		       = 0;
+	for (u32 i = 0; i < dwl->outputs.cnt; ++i) {
+		output_wayland_dynamic_t *out = arr_get(&dwl->outputs, i);
+		if (out != NULL && out->used) {
+			count++;
+		}
+	}
+
+	return count;
+}
+
+static int display_wayland_dynamic_monitors(display_t *display, arr_t *monitors)
+{
+	if (display == NULL || display->data == NULL || monitors == NULL) {
+		return 1;
+	}
+
+	display_wayland_dynamic_t *dwl = display->data;
+	u32 count		       = display_wayland_dynamic_monitor_count(display);
+	if (arr_resize(monitors, count)) {
+		return 1;
+	}
+	monitors->cnt = count;
+
+	count = 0;
+	for (u32 i = 0; i < dwl->outputs.cnt; ++i) {
+		output_wayland_dynamic_t *out = arr_get(&dwl->outputs, i);
+		if (out != NULL && out->used) {
+			display_monitor_t *monitor = arr_get(monitors, count++);
+			*monitor		   = out->monitor;
+		}
+	}
+
+	return 0;
 }
 
 static int create_xdg_toplevel(window_t *wnd)
@@ -974,6 +1191,7 @@ static display_driver_t display_wayland_dynamic = {
 	.poll_events	       = display_wayland_dynamic_poll_events,
 	.wait_events	       = display_wayland_dynamic_wait_events,
 	.native		       = display_wayland_dynamic_native,
+	.monitors	       = display_wayland_dynamic_monitors,
 	.window_init	       = display_wayland_dynamic_window_init,
 	.window_free	       = display_wayland_dynamic_window_free,
 	.window_id	       = display_wayland_dynamic_window_id,

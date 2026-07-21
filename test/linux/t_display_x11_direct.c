@@ -562,10 +562,12 @@ static void t_x11_drain_display_init_requests(sock_t *ss, void *peer)
 static void t_x11_drain_open_window_requests(sock_t *ss, void *peer)
 {
 	u8 create_request[44]	= {0};
+	u8 hints_request[96]	= {0};
 	u8 property_request[28] = {0};
 
 	t_x11_drain_display_init_requests(ss, peer);
 	sock_read_all(ss, peer, create_request, sizeof(create_request));
+	sock_read_all(ss, peer, hints_request, sizeof(hints_request));
 	sock_read_all(ss, peer, property_request, sizeof(property_request));
 }
 
@@ -742,6 +744,667 @@ TEST(display_x11_direct_free_null_display)
 	display_driver_t *drv = t_x11_driver();
 	EXPECT_NOT_NULL(drv);
 	EXPECT_EQ(drv->free(NULL), 1);
+
+	END;
+}
+
+TEST(display_x11_direct_monitors_rejects_null_display)
+{
+	START;
+
+	display_driver_t *drv = t_x11_driver();
+	arr_t monitors	      = {0};
+
+	EXPECT_NOT_NULL(drv);
+	EXPECT_EQ(drv->monitors(NULL, &monitors), 1);
+
+	END;
+}
+
+TEST(display_x11_direct_monitors_returns_setup_screen)
+{
+	START;
+
+	display_driver_t *drv = t_x11_driver();
+	fs_t fs		      = {0};
+	proc_t proc	      = {0};
+	sock_t ss	      = {0};
+	display_t display     = {0};
+	void *server	      = NULL;
+	void *peer	      = NULL;
+	u8 response[32]	      = {1};
+	arr_t monitors;
+
+	EXPECT_NOT_NULL(drv);
+	EXPECT_NOT_NULL(arr_init(&monitors, 0, sizeof(display_monitor_t), ALLOC_STD));
+	t_x11_open_display(drv, &fs, &proc, &ss, &display, &server, &peer);
+	sock_write_all(&ss, peer, response, sizeof(response));
+
+	EXPECT_EQ(drv->monitors(&display, &monitors), 0);
+	EXPECT_EQ(monitors.cnt, 1);
+
+	display_monitor_t *monitor = arr_get(&monitors, 0);
+	EXPECT_NOT_NULL(monitor);
+	EXPECT_EQ(monitor->id, 0);
+	EXPECT_EQ(monitor->primary, 1);
+	EXPECT_PTR(monitor->native, (void *)(uintptr_t)0x00000040u);
+
+	arr_free(&monitors);
+	t_x11_close_display(&fs, &proc, &ss, &display, server, peer);
+
+	END;
+}
+
+TEST(display_x11_direct_monitors_returns_randr_monitors)
+{
+	START;
+
+	display_driver_t *drv		    = t_x11_driver();
+	fs_t fs				    = {0};
+	proc_t proc			    = {0};
+	sock_t ss			    = {0};
+	display_t display		    = {0};
+	void *server			    = NULL;
+	void *peer			    = NULL;
+	u8 response[32 + 32 + 56 + 40 + 40] = {0};
+	u8 query_request[16]		    = {0};
+	u8 monitors_request[12]		    = {0};
+	u8 atom_request[8]		    = {0};
+	u8 atom_request2[8]		    = {0};
+	arr_t monitors;
+	size_t off = 0;
+
+	EXPECT_NOT_NULL(drv);
+	EXPECT_NOT_NULL(arr_init(&monitors, 0, sizeof(display_monitor_t), ALLOC_STD));
+	t_x11_open_display(drv, &fs, &proc, &ss, &display, &server, &peer);
+
+	cbuf_set_u8le(response, off + 0, 1);
+	cbuf_set_u8le(response, off + 8, 1);
+	cbuf_set_u8le(response, off + 9, 130);
+	off += 32;
+	cbuf_set_u8le(response, off + 0, 1);
+	cbuf_set_u32le(response, off + 4, 14);
+	cbuf_set_u32le(response, off + 12, 2);
+	cbuf_set_u32le(response, off + 16, 2);
+	off += 32;
+	cbuf_set_u32le(response, off + 0, 0x201);
+	cbuf_set_u8le(response, off + 4, 1);
+	cbuf_set_u16le(response, off + 6, 1);
+	cbuf_set_u16le(response, off + 8, 0);
+	cbuf_set_u16le(response, off + 10, 27);
+	cbuf_set_u16le(response, off + 12, 1920);
+	cbuf_set_u16le(response, off + 14, 1080);
+	cbuf_set_u32le(response, off + 16, 344);
+	cbuf_set_u32le(response, off + 20, 193);
+	cbuf_set_u32le(response, off + 24, 0x42);
+	off += 28;
+	cbuf_set_u32le(response, off + 0, 0x202);
+	cbuf_set_u8le(response, off + 4, 0);
+	cbuf_set_u16le(response, off + 6, 1);
+	cbuf_set_u16le(response, off + 8, 1920);
+	cbuf_set_u16le(response, off + 10, 0);
+	cbuf_set_u16le(response, off + 12, 2560);
+	cbuf_set_u16le(response, off + 14, 1440);
+	cbuf_set_u32le(response, off + 16, 597);
+	cbuf_set_u32le(response, off + 20, 336);
+	cbuf_set_u32le(response, off + 24, 0x48);
+	off += 28;
+	cbuf_set_u8le(response, off + 0, 1);
+	cbuf_set_u32le(response, off + 4, 2);
+	cbuf_set_u16le(response, off + 8, 5);
+	mem_copy(response + off + 32, sizeof(response) - off - 32, "eDP-1", 5);
+	off += 40;
+	cbuf_set_u8le(response, off + 0, 1);
+	cbuf_set_u32le(response, off + 4, 2);
+	cbuf_set_u16le(response, off + 8, 6);
+	mem_copy(response + off + 32, sizeof(response) - off - 32, "DP-2-8", 6);
+	sock_write_all(&ss, peer, response, sizeof(response));
+
+	EXPECT_EQ(drv->monitors(&display, &monitors), 0);
+	EXPECT_EQ(monitors.cnt, 2);
+
+	display_monitor_t *monitor = arr_get(&monitors, 0);
+	EXPECT_NOT_NULL(monitor);
+	EXPECT_EQ(monitor->id, 0);
+	EXPECT_STR(monitor->name, "eDP-1");
+	EXPECT_EQ(monitor->x, 0);
+	EXPECT_EQ(monitor->y, 27);
+	EXPECT_EQ(monitor->width, 1920);
+	EXPECT_EQ(monitor->height, 1080);
+	EXPECT_EQ(monitor->physical_width, 344);
+	EXPECT_EQ(monitor->physical_height, 193);
+	EXPECT_EQ(monitor->primary, 1);
+	EXPECT_PTR(monitor->native, (void *)(uintptr_t)0x42);
+
+	monitor = arr_get(&monitors, 1);
+	EXPECT_NOT_NULL(monitor);
+	EXPECT_EQ(monitor->id, 1);
+	EXPECT_STR(monitor->name, "DP-2-8");
+	EXPECT_EQ(monitor->x, 1920);
+	EXPECT_EQ(monitor->y, 0);
+	EXPECT_EQ(monitor->width, 2560);
+	EXPECT_EQ(monitor->height, 1440);
+	EXPECT_EQ(monitor->physical_width, 597);
+	EXPECT_EQ(monitor->physical_height, 336);
+	EXPECT_EQ(monitor->primary, 0);
+	EXPECT_PTR(monitor->native, (void *)(uintptr_t)0x48);
+
+	sock_read_all(&ss, peer, query_request, sizeof(query_request));
+	sock_read_all(&ss, peer, monitors_request, sizeof(monitors_request));
+	sock_read_all(&ss, peer, atom_request, sizeof(atom_request));
+	sock_read_all(&ss, peer, atom_request2, sizeof(atom_request2));
+	EXPECT_EQ(query_request[0], 98);
+	EXPECT_EQ(query_request[8], 'R');
+	EXPECT_EQ(query_request[9], 'A');
+	EXPECT_EQ(query_request[10], 'N');
+	EXPECT_EQ(query_request[11], 'D');
+	EXPECT_EQ(query_request[12], 'R');
+	EXPECT_EQ(monitors_request[0], 130);
+	EXPECT_EQ(monitors_request[1], 42);
+	EXPECT_EQ(monitors_request[8], 1);
+	EXPECT_EQ(atom_request[0], 17);
+	EXPECT_EQ(atom_request[4], 0x01);
+	EXPECT_EQ(atom_request[5], 0x02);
+	EXPECT_EQ(atom_request2[0], 17);
+	EXPECT_EQ(atom_request2[4], 0x02);
+	EXPECT_EQ(atom_request2[5], 0x02);
+
+	arr_free(&monitors);
+	t_x11_close_display(&fs, &proc, &ss, &display, server, peer);
+
+	END;
+}
+
+TEST(display_x11_direct_monitors_falls_back_on_randr_call_failure)
+{
+	START;
+
+	display_driver_t *drv = t_x11_driver();
+	fs_t fs		      = {0};
+	proc_t proc	      = {0};
+	sock_t ss	      = {0};
+	display_t display     = {0};
+	void *server	      = NULL;
+	void *peer	      = NULL;
+	u8 response[64]	      = {0};
+	arr_t monitors;
+
+	EXPECT_NOT_NULL(drv);
+	EXPECT_NOT_NULL(arr_init(&monitors, 0, sizeof(display_monitor_t), ALLOC_STD));
+	t_x11_open_display(drv, &fs, &proc, &ss, &display, &server, &peer);
+
+	cbuf_set_u8le(response, 0, 1);
+	cbuf_set_u8le(response, 8, 1);
+	cbuf_set_u8le(response, 9, 130);
+	cbuf_set_u8le(response, 32, 0);
+	sock_write_all(&ss, peer, response, sizeof(response));
+
+	log_set_quiet(0, 1);
+	EXPECT_EQ(drv->monitors(&display, &monitors), 0);
+	log_set_quiet(0, 0);
+	EXPECT_EQ(monitors.cnt, 1);
+
+	arr_free(&monitors);
+	t_x11_close_display(&fs, &proc, &ss, &display, server, peer);
+
+	END;
+}
+
+TEST(display_x11_direct_monitors_returns_randr_resize_failure)
+{
+	START;
+
+	display_driver_t *drv = t_x11_driver();
+	fs_t fs		      = {0};
+	proc_t proc	      = {0};
+	sock_t ss	      = {0};
+	display_t display     = {0};
+	void *server	      = NULL;
+	void *peer	      = NULL;
+	u8 response[64]	      = {0};
+	t_alloc_t state	      = {.fail_realloc = 1};
+	arr_t monitors;
+
+	EXPECT_NOT_NULL(drv);
+	EXPECT_NOT_NULL(arr_init(&monitors, 0, sizeof(display_monitor_t), t_alloc(&state)));
+	t_x11_open_display(drv, &fs, &proc, &ss, &display, &server, &peer);
+
+	cbuf_set_u8le(response, 0, 1);
+	cbuf_set_u8le(response, 8, 1);
+	cbuf_set_u8le(response, 9, 130);
+	cbuf_set_u8le(response, 32, 1);
+	cbuf_set_u32le(response, 44, 1);
+	sock_write_all(&ss, peer, response, sizeof(response));
+
+	EXPECT_EQ(drv->monitors(&display, &monitors), 1);
+
+	arr_free(&monitors);
+	t_x11_close_display(&fs, &proc, &ss, &display, server, peer);
+
+	END;
+}
+
+TEST(display_x11_direct_monitors_rejects_truncated_randr_monitor)
+{
+	START;
+
+	display_driver_t *drv = t_x11_driver();
+	fs_t fs		      = {0};
+	proc_t proc	      = {0};
+	sock_t ss	      = {0};
+	display_t display     = {0};
+	void *server	      = NULL;
+	void *peer	      = NULL;
+	u8 response[64]	      = {0};
+	arr_t monitors;
+
+	EXPECT_NOT_NULL(drv);
+	EXPECT_NOT_NULL(arr_init(&monitors, 0, sizeof(display_monitor_t), ALLOC_STD));
+	t_x11_open_display(drv, &fs, &proc, &ss, &display, &server, &peer);
+
+	cbuf_set_u8le(response, 0, 1);
+	cbuf_set_u8le(response, 8, 1);
+	cbuf_set_u8le(response, 9, 130);
+	cbuf_set_u8le(response, 32, 1);
+	cbuf_set_u32le(response, 44, 1);
+	sock_write_all(&ss, peer, response, sizeof(response));
+
+	EXPECT_EQ(drv->monitors(&display, &monitors), 1);
+
+	arr_free(&monitors);
+	t_x11_close_display(&fs, &proc, &ss, &display, server, peer);
+
+	END;
+}
+
+TEST(display_x11_direct_monitors_rejects_truncated_randr_outputs)
+{
+	START;
+
+	display_driver_t *drv	  = t_x11_driver();
+	fs_t fs			  = {0};
+	proc_t proc		  = {0};
+	sock_t ss		  = {0};
+	display_t display	  = {0};
+	void *server		  = NULL;
+	void *peer		  = NULL;
+	u8 response[32 + 32 + 24] = {0};
+	size_t off		  = 0;
+	arr_t monitors;
+
+	EXPECT_NOT_NULL(drv);
+	EXPECT_NOT_NULL(arr_init(&monitors, 0, sizeof(display_monitor_t), ALLOC_STD));
+	t_x11_open_display(drv, &fs, &proc, &ss, &display, &server, &peer);
+
+	cbuf_set_u8le(response, off + 0, 1);
+	cbuf_set_u8le(response, off + 8, 1);
+	cbuf_set_u8le(response, off + 9, 130);
+	off += 32;
+	cbuf_set_u8le(response, off + 0, 1);
+	cbuf_set_u32le(response, off + 4, 6);
+	cbuf_set_u32le(response, off + 12, 1);
+	off += 32;
+	cbuf_set_u16le(response, off + 6, 1);
+	sock_write_all(&ss, peer, response, sizeof(response));
+
+	EXPECT_EQ(drv->monitors(&display, &monitors), 1);
+
+	arr_free(&monitors);
+	t_x11_close_display(&fs, &proc, &ss, &display, server, peer);
+
+	END;
+}
+
+TEST(display_x11_direct_monitors_ignores_randr_monitor_without_name)
+{
+	START;
+
+	display_driver_t *drv	  = t_x11_driver();
+	fs_t fs			  = {0};
+	proc_t proc		  = {0};
+	sock_t ss		  = {0};
+	display_t display	  = {0};
+	void *server		  = NULL;
+	void *peer		  = NULL;
+	u8 response[32 + 32 + 24] = {0};
+	size_t off		  = 0;
+	arr_t monitors;
+
+	EXPECT_NOT_NULL(drv);
+	EXPECT_NOT_NULL(arr_init(&monitors, 0, sizeof(display_monitor_t), ALLOC_STD));
+	t_x11_open_display(drv, &fs, &proc, &ss, &display, &server, &peer);
+
+	cbuf_set_u8le(response, off + 0, 1);
+	cbuf_set_u8le(response, off + 8, 1);
+	cbuf_set_u8le(response, off + 9, 130);
+	off += 32;
+	cbuf_set_u8le(response, off + 0, 1);
+	cbuf_set_u32le(response, off + 4, 6);
+	cbuf_set_u32le(response, off + 12, 1);
+	off += 32;
+	cbuf_set_u16le(response, off + 12, 640);
+	cbuf_set_u16le(response, off + 14, 480);
+	sock_write_all(&ss, peer, response, sizeof(response));
+
+	EXPECT_EQ(drv->monitors(&display, &monitors), 0);
+	EXPECT_EQ(monitors.cnt, 1);
+	display_monitor_t *monitor = arr_get(&monitors, 0);
+	EXPECT_NOT_NULL(monitor);
+	EXPECT_STR(monitor->name, "");
+
+	arr_free(&monitors);
+	t_x11_close_display(&fs, &proc, &ss, &display, server, peer);
+
+	END;
+}
+
+TEST(display_x11_direct_monitors_ignores_atom_name_read_failure)
+{
+	START;
+
+	display_driver_t *drv	  = t_x11_driver();
+	fs_t fs			  = {0};
+	proc_t proc		  = {0};
+	sock_t ss		  = {0};
+	display_t display	  = {0};
+	void *server		  = NULL;
+	void *peer		  = NULL;
+	u8 response[32 + 32 + 24] = {0};
+	size_t off		  = 0;
+	arr_t monitors;
+
+	EXPECT_NOT_NULL(drv);
+	EXPECT_NOT_NULL(arr_init(&monitors, 0, sizeof(display_monitor_t), ALLOC_STD));
+	t_x11_open_display(drv, &fs, &proc, &ss, &display, &server, &peer);
+
+	cbuf_set_u8le(response, off + 0, 1);
+	cbuf_set_u8le(response, off + 8, 1);
+	cbuf_set_u8le(response, off + 9, 130);
+	off += 32;
+	cbuf_set_u8le(response, off + 0, 1);
+	cbuf_set_u32le(response, off + 4, 6);
+	cbuf_set_u32le(response, off + 12, 1);
+	off += 32;
+	cbuf_set_u32le(response, off + 0, 0x201);
+	cbuf_set_u16le(response, off + 12, 640);
+	cbuf_set_u16le(response, off + 14, 480);
+	sock_write_all(&ss, peer, response, sizeof(response));
+
+	log_set_quiet(0, 1);
+	EXPECT_EQ(drv->monitors(&display, &monitors), 0);
+	log_set_quiet(0, 0);
+	display_monitor_t *monitor = arr_get(&monitors, 0);
+	EXPECT_NOT_NULL(monitor);
+	EXPECT_STR(monitor->name, "");
+
+	arr_free(&monitors);
+	t_x11_close_display(&fs, &proc, &ss, &display, server, peer);
+
+	END;
+}
+
+TEST(display_x11_direct_monitors_ignores_empty_atom_name)
+{
+	START;
+
+	display_driver_t *drv	       = t_x11_driver();
+	fs_t fs			       = {0};
+	proc_t proc		       = {0};
+	sock_t ss		       = {0};
+	display_t display	       = {0};
+	void *server		       = NULL;
+	void *peer		       = NULL;
+	u8 response[32 + 32 + 24 + 32] = {0};
+	size_t off		       = 0;
+	arr_t monitors;
+
+	EXPECT_NOT_NULL(drv);
+	EXPECT_NOT_NULL(arr_init(&monitors, 0, sizeof(display_monitor_t), ALLOC_STD));
+	t_x11_open_display(drv, &fs, &proc, &ss, &display, &server, &peer);
+
+	cbuf_set_u8le(response, off + 0, 1);
+	cbuf_set_u8le(response, off + 8, 1);
+	cbuf_set_u8le(response, off + 9, 130);
+	off += 32;
+	cbuf_set_u8le(response, off + 0, 1);
+	cbuf_set_u32le(response, off + 4, 6);
+	cbuf_set_u32le(response, off + 12, 1);
+	off += 32;
+	cbuf_set_u32le(response, off + 0, 0x201);
+	cbuf_set_u16le(response, off + 12, 640);
+	cbuf_set_u16le(response, off + 14, 480);
+	off += 24;
+	cbuf_set_u8le(response, off + 0, 1);
+	sock_write_all(&ss, peer, response, sizeof(response));
+
+	EXPECT_EQ(drv->monitors(&display, &monitors), 0);
+	display_monitor_t *monitor = arr_get(&monitors, 0);
+	EXPECT_NOT_NULL(monitor);
+	EXPECT_STR(monitor->name, "");
+
+	arr_free(&monitors);
+	t_x11_close_display(&fs, &proc, &ss, &display, server, peer);
+
+	END;
+}
+
+TEST(display_x11_direct_monitors_ignores_atom_name_data_read_failure)
+{
+	START;
+
+	display_driver_t *drv	       = t_x11_driver();
+	fs_t fs			       = {0};
+	proc_t proc		       = {0};
+	sock_t ss		       = {0};
+	display_t display	       = {0};
+	void *server		       = NULL;
+	void *peer		       = NULL;
+	u8 response[32 + 32 + 24 + 32] = {0};
+	size_t off		       = 0;
+	arr_t monitors;
+
+	EXPECT_NOT_NULL(drv);
+	EXPECT_NOT_NULL(arr_init(&monitors, 0, sizeof(display_monitor_t), ALLOC_STD));
+	t_x11_open_display(drv, &fs, &proc, &ss, &display, &server, &peer);
+
+	cbuf_set_u8le(response, off + 0, 1);
+	cbuf_set_u8le(response, off + 8, 1);
+	cbuf_set_u8le(response, off + 9, 130);
+	off += 32;
+	cbuf_set_u8le(response, off + 0, 1);
+	cbuf_set_u32le(response, off + 4, 6);
+	cbuf_set_u32le(response, off + 12, 1);
+	off += 32;
+	cbuf_set_u32le(response, off + 0, 0x201);
+	cbuf_set_u16le(response, off + 12, 640);
+	cbuf_set_u16le(response, off + 14, 480);
+	off += 24;
+	cbuf_set_u8le(response, off + 0, 1);
+	cbuf_set_u32le(response, off + 4, 1);
+	cbuf_set_u16le(response, off + 8, 4);
+	sock_write_all(&ss, peer, response, sizeof(response));
+
+	EXPECT_EQ(drv->monitors(&display, &monitors), 0);
+	display_monitor_t *monitor = arr_get(&monitors, 0);
+	EXPECT_NOT_NULL(monitor);
+	EXPECT_STR(monitor->name, "");
+
+	arr_free(&monitors);
+	t_x11_close_display(&fs, &proc, &ss, &display, server, peer);
+
+	END;
+}
+
+TEST(display_x11_direct_monitors_truncates_long_atom_name)
+{
+	START;
+
+	display_driver_t *drv		     = t_x11_driver();
+	fs_t fs				     = {0};
+	proc_t proc			     = {0};
+	sock_t ss			     = {0};
+	display_t display		     = {0};
+	void *server			     = NULL;
+	void *peer			     = NULL;
+	u8 response[32 + 32 + 24 + 32 + 160] = {0};
+	size_t off			     = 0;
+	arr_t monitors;
+
+	EXPECT_NOT_NULL(drv);
+	EXPECT_NOT_NULL(arr_init(&monitors, 0, sizeof(display_monitor_t), ALLOC_STD));
+	t_x11_open_display(drv, &fs, &proc, &ss, &display, &server, &peer);
+
+	cbuf_set_u8le(response, off + 0, 1);
+	cbuf_set_u8le(response, off + 8, 1);
+	cbuf_set_u8le(response, off + 9, 130);
+	off += 32;
+	cbuf_set_u8le(response, off + 0, 1);
+	cbuf_set_u32le(response, off + 4, 6);
+	cbuf_set_u32le(response, off + 12, 1);
+	off += 32;
+	cbuf_set_u32le(response, off + 0, 0x201);
+	cbuf_set_u16le(response, off + 12, 640);
+	cbuf_set_u16le(response, off + 14, 480);
+	off += 24;
+	cbuf_set_u8le(response, off + 0, 1);
+	cbuf_set_u32le(response, off + 4, 40);
+	cbuf_set_u16le(response, off + 8, 140);
+	off += 32;
+	mem_set(&response[off], 'a', sizeof(response) - off);
+	sock_write_all(&ss, peer, response, sizeof(response));
+
+	EXPECT_EQ(drv->monitors(&display, &monitors), 0);
+	display_monitor_t *monitor = arr_get(&monitors, 0);
+	EXPECT_NOT_NULL(monitor);
+	EXPECT_EQ(strv_cstr(monitor->name).len, sizeof(monitor->name) - 1);
+
+	arr_free(&monitors);
+	t_x11_close_display(&fs, &proc, &ss, &display, server, peer);
+
+	END;
+}
+
+TEST(display_x11_direct_monitors_ignores_atom_name_discard_failure)
+{
+	START;
+
+	display_driver_t *drv		     = t_x11_driver();
+	fs_t fs				     = {0};
+	proc_t proc			     = {0};
+	sock_t ss			     = {0};
+	display_t display		     = {0};
+	void *server			     = NULL;
+	void *peer			     = NULL;
+	u8 response[32 + 32 + 24 + 32 + 128] = {0};
+	size_t off			     = 0;
+	arr_t monitors;
+
+	EXPECT_NOT_NULL(drv);
+	EXPECT_NOT_NULL(arr_init(&monitors, 0, sizeof(display_monitor_t), ALLOC_STD));
+	t_x11_open_display(drv, &fs, &proc, &ss, &display, &server, &peer);
+
+	cbuf_set_u8le(response, off + 0, 1);
+	cbuf_set_u8le(response, off + 8, 1);
+	cbuf_set_u8le(response, off + 9, 130);
+	off += 32;
+	cbuf_set_u8le(response, off + 0, 1);
+	cbuf_set_u32le(response, off + 4, 6);
+	cbuf_set_u32le(response, off + 12, 1);
+	off += 32;
+	cbuf_set_u32le(response, off + 0, 0x201);
+	cbuf_set_u16le(response, off + 12, 640);
+	cbuf_set_u16le(response, off + 14, 480);
+	off += 24;
+	cbuf_set_u8le(response, off + 0, 1);
+	cbuf_set_u32le(response, off + 4, 40);
+	cbuf_set_u16le(response, off + 8, 140);
+	off += 32;
+	mem_set(&response[off], 'a', sizeof(response) - off);
+	sock_write_all(&ss, peer, response, sizeof(response));
+
+	EXPECT_EQ(drv->monitors(&display, &monitors), 0);
+	display_monitor_t *monitor = arr_get(&monitors, 0);
+	EXPECT_NOT_NULL(monitor);
+	EXPECT_STR(monitor->name, "");
+
+	arr_free(&monitors);
+	t_x11_close_display(&fs, &proc, &ss, &display, server, peer);
+
+	END;
+}
+
+TEST(display_x11_direct_monitors_limits_atom_name_to_reply_data)
+{
+	START;
+
+	display_driver_t *drv		   = t_x11_driver();
+	fs_t fs				   = {0};
+	proc_t proc			   = {0};
+	sock_t ss			   = {0};
+	display_t display		   = {0};
+	void *server			   = NULL;
+	void *peer			   = NULL;
+	u8 response[32 + 32 + 24 + 32 + 4] = {0};
+	size_t off			   = 0;
+	arr_t monitors;
+
+	EXPECT_NOT_NULL(drv);
+	EXPECT_NOT_NULL(arr_init(&monitors, 0, sizeof(display_monitor_t), ALLOC_STD));
+	t_x11_open_display(drv, &fs, &proc, &ss, &display, &server, &peer);
+
+	cbuf_set_u8le(response, off + 0, 1);
+	cbuf_set_u8le(response, off + 8, 1);
+	cbuf_set_u8le(response, off + 9, 130);
+	off += 32;
+	cbuf_set_u8le(response, off + 0, 1);
+	cbuf_set_u32le(response, off + 4, 6);
+	cbuf_set_u32le(response, off + 12, 1);
+	off += 32;
+	cbuf_set_u32le(response, off + 0, 0x201);
+	cbuf_set_u16le(response, off + 12, 640);
+	cbuf_set_u16le(response, off + 14, 480);
+	off += 24;
+	cbuf_set_u8le(response, off + 0, 1);
+	cbuf_set_u32le(response, off + 4, 1);
+	cbuf_set_u16le(response, off + 8, 6);
+	mem_copy(response + off + 32, sizeof(response) - off - 32, "test", 4);
+	sock_write_all(&ss, peer, response, sizeof(response));
+
+	EXPECT_EQ(drv->monitors(&display, &monitors), 0);
+	display_monitor_t *monitor = arr_get(&monitors, 0);
+	EXPECT_NOT_NULL(monitor);
+	EXPECT_STR(monitor->name, "test");
+
+	arr_free(&monitors);
+	t_x11_close_display(&fs, &proc, &ss, &display, server, peer);
+
+	END;
+}
+
+TEST(display_x11_direct_monitors_returns_resize_failure)
+{
+	START;
+
+	display_driver_t *drv = t_x11_driver();
+	fs_t fs		      = {0};
+	proc_t proc	      = {0};
+	sock_t ss	      = {0};
+	display_t display     = {0};
+	void *server	      = NULL;
+	void *peer	      = NULL;
+	u8 response[32]	      = {1};
+	t_alloc_t state	      = {.fail_realloc = 1};
+	arr_t monitors;
+
+	EXPECT_NOT_NULL(drv);
+	EXPECT_NOT_NULL(arr_init(&monitors, 0, sizeof(display_monitor_t), t_alloc(&state)));
+	t_x11_open_display(drv, &fs, &proc, &ss, &display, &server, &peer);
+	sock_write_all(&ss, peer, response, sizeof(response));
+
+	EXPECT_EQ(drv->monitors(&display, &monitors), 1);
+
+	arr_free(&monitors);
+	t_x11_close_display(&fs, &proc, &ss, &display, server, peer);
 
 	END;
 }
@@ -1021,6 +1684,7 @@ TEST(display_x11_direct_window_init_writes_requests)
 	u8 atom_request7[24]	= {0};
 	u8 atom_request8[32]	= {0};
 	u8 create_request[44]	= {0};
+	u8 hints_request[96]	= {0};
 	u8 property_request[28] = {0};
 	u32 x11_window_id	= 0;
 	u32 parent		= 0;
@@ -1028,6 +1692,12 @@ TEST(display_x11_direct_window_init_writes_requests)
 	u32 property		= 0;
 	u32 property_type	= 0;
 	u32 property_data	= 0;
+	u32 property_length	= 0;
+	u32 hint_flags		= 0;
+	u32 hint_x		= 0;
+	u32 hint_y		= 0;
+	u32 hint_width		= 0;
+	u32 hint_height		= 0;
 	u16 x			= 0;
 	u16 y			= 0;
 	u16 width		= 0;
@@ -1057,6 +1727,7 @@ TEST(display_x11_direct_window_init_writes_requests)
 	sock_read_all(&ss, peer, atom_request7, sizeof(atom_request7));
 	sock_read_all(&ss, peer, atom_request8, sizeof(atom_request8));
 	sock_read_all(&ss, peer, create_request, sizeof(create_request));
+	sock_read_all(&ss, peer, hints_request, sizeof(hints_request));
 	sock_read_all(&ss, peer, property_request, sizeof(property_request));
 
 	EXPECT_EQ(keymap_request[0], 101);
@@ -1088,6 +1759,25 @@ TEST(display_x11_direct_window_init_writes_requests)
 	EXPECT_EQ(width, 333);
 	EXPECT_EQ(height, 444);
 	EXPECT_EQ(event_mask, (1 << 0) | (1 << 1) | (1 << 2) | (1 << 3) | (1 << 6) | (1 << 15) | (1 << 17) | (1 << 21));
+
+	cbuf_get_u32le(hints_request, 8, &property);
+	cbuf_get_u32le(hints_request, 12, &property_type);
+	cbuf_get_u32le(hints_request, 20, &property_length);
+	cbuf_get_u32le(hints_request, 24, &hint_flags);
+	cbuf_get_u32le(hints_request, 28, &hint_x);
+	cbuf_get_u32le(hints_request, 32, &hint_y);
+	cbuf_get_u32le(hints_request, 36, &hint_width);
+	cbuf_get_u32le(hints_request, 40, &hint_height);
+	EXPECT_EQ(hints_request[0], 18);
+	EXPECT_EQ(property, 40);
+	EXPECT_EQ(property_type, 41);
+	EXPECT_EQ(hints_request[16], 32);
+	EXPECT_EQ(property_length, 18);
+	EXPECT_EQ(hint_flags, (1 << 0) | (1 << 1) | (1 << 2) | (1 << 3));
+	EXPECT_EQ(hint_x, 11);
+	EXPECT_EQ(hint_y, 22);
+	EXPECT_EQ(hint_width, 333);
+	EXPECT_EQ(hint_height, 444);
 
 	cbuf_get_u32le(property_request, 8, &property);
 	cbuf_get_u32le(property_request, 12, &property_type);
@@ -1243,6 +1933,7 @@ TEST(display_x11_direct_window_free_custom_visual_writes_request)
 	t_x11_drain_display_init_requests(&ss, peer);
 	sock_read_all(&ss, peer, (u8[16]){0}, 16);
 	sock_read_all(&ss, peer, (u8[48]){0}, 48);
+	sock_read_all(&ss, peer, (u8[96]){0}, 96);
 	sock_read_all(&ss, peer, (u8[28]){0}, 28);
 
 	window_free(&window);
@@ -3715,6 +4406,65 @@ TEST(display_x11_direct_init_invalid_screen_offset)
 	END;
 }
 
+TEST(display_x11_direct_init_rejects_truncated_screen_depth_header)
+{
+	START;
+
+	display_driver_t *drv = t_x11_driver();
+	fs_t fs		      = {0};
+	proc_t proc	      = {0};
+	sock_t ss	      = {0};
+	display_t display     = {0};
+	void *server	      = NULL;
+	u8 setup[72]	      = {0};
+
+	t_x11_env_init(&fs, &proc, &ss);
+	t_x11_set_display(&proc, STRV(":0"));
+	t_x11_set_xauthority(&proc);
+	t_x11_write_authority(&fs);
+	t_x11_listen(&ss, &server);
+	t_x11_setup_data(setup, sizeof(setup), 1, 0);
+	cbuf_set_u8le(setup, 71, 1);
+	t_x11_script_setup_data(&ss, server, 1, setup, sizeof(setup));
+	log_set_quiet(0, 1);
+	EXPECT_NULL(display_init(&display, drv, &fs, &proc, &ss, ALLOC_STD));
+	log_set_quiet(0, 0);
+	sock_close(&ss, server);
+	t_x11_env_free(&fs, &proc, &ss);
+
+	END;
+}
+
+TEST(display_x11_direct_init_rejects_truncated_screen_visuals)
+{
+	START;
+
+	display_driver_t *drv = t_x11_driver();
+	fs_t fs		      = {0};
+	proc_t proc	      = {0};
+	sock_t ss	      = {0};
+	display_t display     = {0};
+	void *server	      = NULL;
+	u8 setup[76]	      = {0};
+
+	t_x11_env_init(&fs, &proc, &ss);
+	t_x11_set_display(&proc, STRV(":0"));
+	t_x11_set_xauthority(&proc);
+	t_x11_write_authority(&fs);
+	t_x11_listen(&ss, &server);
+	t_x11_setup_data(setup, sizeof(setup), 1, 0);
+	cbuf_set_u8le(setup, 71, 1);
+	cbuf_set_u16le(setup, 74, 1);
+	t_x11_script_setup_data(&ss, server, 1, setup, sizeof(setup));
+	log_set_quiet(0, 1);
+	EXPECT_NULL(display_init(&display, drv, &fs, &proc, &ss, ALLOC_STD));
+	log_set_quiet(0, 0);
+	sock_close(&ss, server);
+	t_x11_env_free(&fs, &proc, &ss);
+
+	END;
+}
+
 TEST(display_x11_direct_init_setup_alloc_failure)
 {
 	START;
@@ -4098,6 +4848,40 @@ TEST(display_x11_direct_init_modifier_mapping_alloc_failure)
 	END;
 }
 
+TEST(display_x11_direct_init_modifier_keycodes_alloc_failure)
+{
+	START;
+
+	display_driver_t *drv = t_x11_driver();
+	fs_t fs		      = {0};
+	proc_t proc	      = {0};
+	sock_t ss	      = {0};
+	display_t display     = {0};
+	void *server	      = NULL;
+	u8 setup[72]	      = {0};
+	buf_t mapping	      = {0};
+	t_alloc_t state	      = {.fail_alloc_after = 7};
+
+	t_x11_env_init(&fs, &proc, &ss);
+	t_x11_set_display(&proc, STRV(":0"));
+	t_x11_set_xauthority(&proc);
+	t_x11_write_authority(&fs);
+	t_x11_listen(&ss, &server);
+	t_x11_setup_data(setup, sizeof(setup), 1, 0);
+	buf_init(&mapping, 32 + 33 * 4 + 32 + 16, ALLOC_STD);
+	t_x11_keyboard_mapping(&mapping);
+	t_x11_modifier_mapping(&mapping);
+	t_x11_script_setup_data_keyboard_atoms(&ss, server, 1, setup, sizeof(setup), mapping.data, mapping.used, NULL, 0);
+	log_set_quiet(0, 1);
+	EXPECT_NULL(display_init(&display, drv, &fs, &proc, &ss, t_alloc(&state)));
+	log_set_quiet(0, 0);
+	buf_free(&mapping);
+	sock_close(&ss, server);
+	t_x11_env_free(&fs, &proc, &ss);
+
+	END;
+}
+
 TEST(display_x11_direct_init_empty_modifier_mapping)
 {
 	START;
@@ -4446,7 +5230,7 @@ TEST(display_x11_direct_window_init_wm_protocols_write_failure)
 	u8 atom_request6[24]  = {0};
 	u8 atom_request7[24]  = {0};
 	u8 atom_request8[32]  = {0};
-	size_t rcvbuf	      = 44;
+	size_t rcvbuf	      = 44 + 96;
 
 	t_x11_env_init(&fs, &proc, &ss);
 	t_x11_set_display(&proc, STRV(":0"));
@@ -5289,6 +6073,21 @@ STEST(display_x11_direct)
 	RUN(display_x11_direct_init_null_display);
 	RUN(display_x11_direct_init_alloc_failure);
 	RUN(display_x11_direct_free_null_display);
+	RUN(display_x11_direct_monitors_rejects_null_display);
+	RUN(display_x11_direct_monitors_returns_setup_screen);
+	RUN(display_x11_direct_monitors_returns_randr_monitors);
+	RUN(display_x11_direct_monitors_falls_back_on_randr_call_failure);
+	RUN(display_x11_direct_monitors_returns_randr_resize_failure);
+	RUN(display_x11_direct_monitors_rejects_truncated_randr_monitor);
+	RUN(display_x11_direct_monitors_rejects_truncated_randr_outputs);
+	RUN(display_x11_direct_monitors_ignores_randr_monitor_without_name);
+	RUN(display_x11_direct_monitors_ignores_atom_name_read_failure);
+	RUN(display_x11_direct_monitors_ignores_empty_atom_name);
+	RUN(display_x11_direct_monitors_ignores_atom_name_data_read_failure);
+	RUN(display_x11_direct_monitors_truncates_long_atom_name);
+	RUN(display_x11_direct_monitors_ignores_atom_name_discard_failure);
+	RUN(display_x11_direct_monitors_limits_atom_name_to_reply_data);
+	RUN(display_x11_direct_monitors_returns_resize_failure);
 	RUN(display_x11_direct_window_init_null_window);
 	RUN(display_x11_direct_window_init_rejects_missing_display_data);
 	RUN(display_x11_direct_window_init_slot_alloc_failure);
@@ -5383,6 +6182,8 @@ STEST(display_x11_direct)
 	RUN(display_x11_direct_init_truncated_setup);
 	RUN(display_x11_direct_init_setup_without_screens);
 	RUN(display_x11_direct_init_invalid_screen_offset);
+	RUN(display_x11_direct_init_rejects_truncated_screen_depth_header);
+	RUN(display_x11_direct_init_rejects_truncated_screen_visuals);
 	RUN(display_x11_direct_init_setup_alloc_failure);
 	RUN(display_x11_direct_init_invalid_keycode_range);
 	RUN(display_x11_direct_init_keyboard_mapping_read_failure);
@@ -5395,6 +6196,7 @@ STEST(display_x11_direct)
 	RUN(display_x11_direct_init_modifier_mapping_invalid);
 	RUN(display_x11_direct_init_modifier_mapping_data_read_failure);
 	RUN(display_x11_direct_init_modifier_mapping_alloc_failure);
+	RUN(display_x11_direct_init_modifier_keycodes_alloc_failure);
 	RUN(display_x11_direct_init_empty_modifier_mapping);
 	RUN(display_x11_direct_init_intern_atom_read_failure);
 	RUN(display_x11_direct_init_intern_atom_rejected_reply);

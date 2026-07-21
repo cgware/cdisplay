@@ -16,6 +16,7 @@ typedef struct display_driver_s {
 	int (*wait_events)(display_t *display);
 	int (*native)(display_t *display, display_native_t *native);
 	int (*native_free)(display_t *display, void *data);
+	int (*monitors)(display_t *display, arr_t *monitors);
 	int (*window_init)(window_t *window, const window_config_t *config);
 	int (*window_free)(window_t *window);
 	u32 (*window_id)(window_t *window);
