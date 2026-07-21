@@ -1,4 +1,5 @@
 #include "display_driver.h"
+#include "display_x11_priv.h"
 
 #include "arr.h"
 #include "buf.h"
@@ -59,21 +60,6 @@ typedef struct window_x11_slot_s {
 	int used;
 	window_x11_t window;
 } window_x11_slot_t;
-
-enum {
-	X11_PAD_SIZE		    = 4,
-	X11_CONNECTION_SETUP_SIZE   = 12,
-	X11_SETUP_REPLY_HEADER_SIZE = 8,
-	X11_SETUP_MIN_SIZE	    = 32,
-	X11_FORMAT_SIZE		    = 8,
-	X11_SCREEN_MIN_SIZE	    = 40,
-	X11_REPLY_SIZE		    = 32,
-	X11_EVENT_SIZE		    = 32,
-	X11_EVENT_TYPE_MASK	    = 0x7f,
-	X11_SOCKET_NONBLOCK	    = 04000,
-	X11_EVENT_IGNORED	    = 2,
-	X11_EVENT_NONE		    = 3,
-};
 
 static window_x11_t *display_x11_direct_window_data(window_t *wnd)
 {
@@ -205,16 +191,6 @@ static int bytes_eq(const void *l, size_t l_size, const void *r, size_t r_size)
 	return 0;
 }*/
 
-static size_t pad4(size_t length)
-{
-	return (X11_PAD_SIZE - (length & (X11_PAD_SIZE - 1))) & (X11_PAD_SIZE - 1);
-}
-
-static s32 x11_s16(u16 value)
-{
-	return value <= (u16)S16_MAX ? (s32)value : (s32)value - 0x10000;
-}
-
 static void get_atom_name(display_t *display, u32 atom, char *name, size_t name_size);
 
 static int read_visuals(display_t *display, const buf_t *setup, size_t screen_offset)
@@ -300,22 +276,17 @@ static int read_screens(display_t *display, const buf_t *setup, size_t screen_of
 		size_t off = screen_offset;
 		u32 root   = 0;
 		(void)buf_read_u32le(setup, &off, &root);
-		dx11->monitors[i].id	  = i;
-		dx11->monitors[i].primary = i == 0;
-		dx11->monitors[i].native  = (void *)(uintptr_t)root;
-		off			  = screen_offset + X11_SCREEN_WIDTH_OFFSET;
-		u16 width		  = 0;
-		u16 height		  = 0;
-		u16 physical_width	  = 0;
-		u16 physical_height	  = 0;
+		off		    = screen_offset + X11_SCREEN_WIDTH_OFFSET;
+		u16 width	    = 0;
+		u16 height	    = 0;
+		u16 physical_width  = 0;
+		u16 physical_height = 0;
 		(void)buf_read_u16le(setup, &off, &width);
 		(void)buf_read_u16le(setup, &off, &height);
 		(void)buf_read_u16le(setup, &off, &physical_width);
 		(void)buf_read_u16le(setup, &off, &physical_height);
-		dx11->monitors[i].width		  = width;
-		dx11->monitors[i].height	  = height;
-		dx11->monitors[i].physical_width  = physical_width;
-		dx11->monitors[i].physical_height = physical_height;
+		x11_monitor_set(
+			&dx11->monitors[i], i, 0, 0, width, height, physical_width, physical_height, i == 0, (void *)(uintptr_t)root);
 
 		screen_offset += screen_size(setup, screen_offset);
 	}
@@ -487,8 +458,9 @@ static int open_display(display_t *d)
 	buf_write_u16le(&b, 0);
 
 	if (sock_write_all(d->ss, dx11->sock, b.data, b.used) || sock_write_all(d->ss, dx11->sock, auth_name.data, auth_name.len) ||
-	    sock_write_all(d->ss, dx11->sock, padding, pad4(auth_name.len)) || sock_write_all(d->ss, dx11->sock, cookie, cookie_length) ||
-	    sock_write_all(d->ss, dx11->sock, padding, pad4(cookie_length)) ||
+	    sock_write_all(d->ss, dx11->sock, padding, x11_pad4(auth_name.len)) ||
+	    sock_write_all(d->ss, dx11->sock, cookie, cookie_length) ||
+	    sock_write_all(d->ss, dx11->sock, padding, x11_pad4(cookie_length)) ||
 	    sock_read_all(d->ss, dx11->sock, b.data, X11_SETUP_REPLY_HEADER_SIZE)) {
 		log_error("cdisplay", "display_x11_direct", NULL, "failed to send request");
 		buf_free(&b);
@@ -560,7 +532,8 @@ static int open_display(display_t *d)
 	off = X11_SETUP_MAX_KEYCODE_OFFSET;
 	buf_read_u8le(&b, &off, &dx11->max_keycode);
 
-	size_t screen_offset = X11_SETUP_SCREEN_LIST_OFFSET + vendor_length + pad4(vendor_length) + (size_t)format_count * X11_FORMAT_SIZE;
+	size_t screen_offset =
+		X11_SETUP_SCREEN_LIST_OFFSET + vendor_length + x11_pad4(vendor_length) + (size_t)format_count * X11_FORMAT_SIZE;
 
 	if (screen_count == 0) {
 		log_error("cdisplay", "display_x11_direct", NULL, "no screens found");
@@ -631,58 +604,8 @@ enum {
 };
 
 enum {
-	XA_ATOM		   = 4,
-	XA_WM_NORMAL_HINTS = 40,
-	XA_WM_SIZE_HINTS   = 41,
-	XA_STRING	   = 31,
-};
-
-enum {
-	X_COPY_FROM_PARENT = 0,
-	X_INPUT_OUTPUT	   = 1,
-};
-
-enum {
 	X_CHANGE_PROPERTY_MODE_REPLACE = 0,
 	X_PROPERTY_FORMAT_32	       = 32,
-};
-
-enum {
-	X_CW_BACK_PIXEL	  = 1u << 1,
-	X_CW_BORDER_PIXEL = 1u << 3,
-	X_CW_EVENT_MASK	  = 1u << 11,
-	X_CW_COLORMAP	  = 1u << 13,
-};
-
-enum {
-	X_EVENT_MASK_KEY_PRESS		   = 1u << 0,
-	X_EVENT_MASK_KEY_RELEASE	   = 1u << 1,
-	X_EVENT_MASK_BUTTON_PRESS	   = 1u << 2,
-	X_EVENT_MASK_BUTTON_RELEASE	   = 1u << 3,
-	X_EVENT_MASK_POINTER_MOTION	   = 1u << 6,
-	X_EVENT_MASK_EXPOSURE		   = 1u << 15,
-	X_EVENT_MASK_SUBSTRUCTURE_NOTIFY   = 1u << 19,
-	X_EVENT_MASK_SUBSTRUCTURE_REDIRECT = 1u << 20,
-	X_EVENT_MASK_STRUCTURE		   = 1u << 17,
-	X_EVENT_MASK_FOCUS_CHANGE	   = 1u << 21,
-};
-
-enum {
-	X_EVENT_KEY_PRESS	 = 2,
-	X_EVENT_KEY_RELEASE	 = 3,
-	X_EVENT_BUTTON_PRESS	 = 4,
-	X_EVENT_BUTTON_RELEASE	 = 5,
-	X_EVENT_MOTION_NOTIFY	 = 6,
-	X_EVENT_FOCUS_IN	 = 9,
-	X_EVENT_FOCUS_OUT	 = 10,
-	X_EVENT_EXPOSE		 = 12,
-	X_EVENT_DESTROY_NOTIFY	 = 17,
-	X_EVENT_UNMAP_NOTIFY	 = 18,
-	X_EVENT_MAP_NOTIFY	 = 19,
-	X_EVENT_REPARENT_NOTIFY	 = 21,
-	X_EVENT_CONFIGURE_NOTIFY = 22,
-	X_EVENT_CLIENT_MESSAGE	 = 33,
-	X_EVENT_MAPPING_NOTIFY	 = 34,
 };
 
 enum {
@@ -733,25 +656,6 @@ enum {
 };
 
 enum {
-	MOTIF_WM_HINTS_FIELD_COUNT	= 5,
-	MOTIF_WM_HINTS_DECORATIONS_FLAG = 1u << 1,
-	MOTIF_WM_DECOR_ALL		= 1,
-};
-
-enum {
-	X_SIZE_HINT_US_POSITION = 1 << 0,
-	X_SIZE_HINT_US_SIZE	= 1 << 1,
-	X_SIZE_HINT_P_POSITION	= 1 << 2,
-	X_SIZE_HINT_P_SIZE	= 1 << 3,
-	X_SIZE_HINT_FIELD_COUNT = 18,
-};
-
-enum {
-	NET_WM_STATE_REMOVE = 0,
-	NET_WM_STATE_ADD    = 1,
-};
-
-enum {
 	X_WINDOW_ID_REQUEST_SIZE  = 8,
 	X_WINDOW_ID_REQUEST_WORDS = X_WINDOW_ID_REQUEST_SIZE / X11_PAD_SIZE,
 };
@@ -781,96 +685,6 @@ enum {
 	X_GET_MODIFIER_MAPPING_REQUEST_WORDS	    = X_GET_MODIFIER_MAPPING_REQUEST_SIZE / X11_PAD_SIZE,
 	X_GET_MODIFIER_MAPPING_KEYCODE_COUNT_OFFSET = 1,
 	X_GET_MODIFIER_MAPPING_LENGTH_OFFSET	    = 4,
-	X_MODIFIER_COUNT			    = 8,
-};
-
-enum {
-	XK_APOSTROPHE	 = 0x0027,
-	XK_COMMA	 = 0x002c,
-	XK_MINUS	 = 0x002d,
-	XK_PERIOD	 = 0x002e,
-	XK_SLASH	 = 0x002f,
-	XK_SEMICOLON	 = 0x003b,
-	XK_EQUAL	 = 0x003d,
-	XK_LEFT_BRACKET	 = 0x005b,
-	XK_BACKSLASH	 = 0x005c,
-	XK_RIGHT_BRACKET = 0x005d,
-	XK_GRAVE	 = 0x0060,
-	XK_BACKSPACE	 = 0xff08,
-	XK_TAB		 = 0xff09,
-	XK_RETURN	 = 0xff0d,
-	XK_PAUSE	 = 0xff13,
-	XK_SCROLL_LOCK	 = 0xff14,
-	XK_ESCAPE	 = 0xff1b,
-	XK_HOME		 = 0xff50,
-	XK_LEFT		 = 0xff51,
-	XK_UP		 = 0xff52,
-	XK_RIGHT	 = 0xff53,
-	XK_DOWN		 = 0xff54,
-	XK_PAGE_UP	 = 0xff55,
-	XK_PAGE_DOWN	 = 0xff56,
-	XK_END		 = 0xff57,
-	XK_PRINT	 = 0xff61,
-	XK_INSERT	 = 0xff63,
-	XK_MENU		 = 0xff67,
-	XK_KP_ENTER	 = 0xff8d,
-	XK_KP_HOME	 = 0xff95,
-	XK_KP_LEFT	 = 0xff96,
-	XK_KP_UP	 = 0xff97,
-	XK_KP_RIGHT	 = 0xff98,
-	XK_KP_DOWN	 = 0xff99,
-	XK_KP_PAGE_UP	 = 0xff9a,
-	XK_KP_PAGE_DOWN	 = 0xff9b,
-	XK_KP_END	 = 0xff9c,
-	XK_KP_BEGIN	 = 0xff9d,
-	XK_KP_INSERT	 = 0xff9e,
-	XK_KP_DELETE	 = 0xff9f,
-	XK_KP_MULTIPLY	 = 0xffaa,
-	XK_KP_ADD	 = 0xffab,
-	XK_KP_SUBTRACT	 = 0xffad,
-	XK_KP_DECIMAL	 = 0xffae,
-	XK_KP_DIVIDE	 = 0xffaf,
-	XK_KP_0		 = 0xffb0,
-	XK_KP_1		 = 0xffb1,
-	XK_KP_2		 = 0xffb2,
-	XK_KP_3		 = 0xffb3,
-	XK_KP_4		 = 0xffb4,
-	XK_KP_5		 = 0xffb5,
-	XK_KP_6		 = 0xffb6,
-	XK_KP_7		 = 0xffb7,
-	XK_KP_8		 = 0xffb8,
-	XK_KP_9		 = 0xffb9,
-	XK_F1		 = 0xffbe,
-	XK_F2		 = 0xffbf,
-	XK_F3		 = 0xffc0,
-	XK_F4		 = 0xffc1,
-	XK_F5		 = 0xffc2,
-	XK_F6		 = 0xffc3,
-	XK_F7		 = 0xffc4,
-	XK_F8		 = 0xffc5,
-	XK_F9		 = 0xffc6,
-	XK_F10		 = 0xffc7,
-	XK_F11		 = 0xffc8,
-	XK_F12		 = 0xffc9,
-	XK_SHIFT_L	 = 0xffe1,
-	XK_SHIFT_R	 = 0xffe2,
-	XK_CONTROL_L	 = 0xffe3,
-	XK_CONTROL_R	 = 0xffe4,
-	XK_CAPS_LOCK	 = 0xffe5,
-	XK_NUM_LOCK	 = 0xff7f,
-	XK_DELETE	 = 0xffff,
-	XK_ALT_L	 = 0xffe9,
-	XK_ALT_R	 = 0xffea,
-	XK_SUPER_L	 = 0xffeb,
-	XK_SUPER_R	 = 0xffec,
-};
-
-enum {
-	X_MODIFIER_BUTTON1 = 1u << 8,
-	X_MODIFIER_BUTTON2 = 1u << 9,
-	X_MODIFIER_BUTTON3 = 1u << 10,
-	X_MODIFIER_BUTTON4 = 1u << 11,
-	X_MODIFIER_BUTTON5 = 1u << 12,
 };
 
 enum {
@@ -963,7 +777,7 @@ static buf_t *request_buffer(display_t *display, size_t size)
 static int request_pad4(buf_t *request, size_t length)
 {
 	static const u8 padding[X11_PAD_SIZE] = {0};
-	return buf_add(request, pad4(length), padding, NULL);
+	return buf_add(request, x11_pad4(length), padding, NULL);
 }
 
 static int write_request_header(buf_t *request, u8 opcode, u8 detail, size_t size)
@@ -1018,7 +832,7 @@ static int query_extension(display_ext_t *ext, strv_t name, int log_unavailable)
 		return 1;
 	}
 
-	size_t request_size = 8 + name.len + pad4(name.len);
+	size_t request_size = 8 + name.len + x11_pad4(name.len);
 	buf_t *request	    = request_buffer(ext->display, request_size);
 	if (request == NULL) {
 		return 1;
@@ -1187,22 +1001,16 @@ static int display_x11_direct_randr_monitors(display_t *display, arr_t *monitors
 			return 1;
 		}
 
-		display_monitor_t *monitor = arr_get(monitors, i);
-		mem_set(monitor, 0, sizeof(*monitor));
-		monitor->id		 = i;
-		monitor->x		 = x11_s16(x);
-		monitor->y		 = x11_s16(y);
-		monitor->width		 = width;
-		monitor->height		 = height;
-		monitor->physical_width	 = physical_width;
-		monitor->physical_height = physical_height;
-		monitor->primary	 = primary != 0;
 		(void)automatic;
+		void *native = NULL;
 		if (output_count > 0) {
 			u32 output = 0;
 			cbuf_get_u32le(reply.data, off, &output);
-			monitor->native = (void *)(uintptr_t)output;
+			native = (void *)(uintptr_t)output;
 		}
+
+		display_monitor_t *monitor = arr_get(monitors, i);
+		x11_monitor_set(monitor, i, x11_s16(x), x11_s16(y), width, height, physical_width, physical_height, primary != 0, native);
 		off += output_size;
 		get_atom_name(display, atom, monitor->name, sizeof(monitor->name));
 	}
@@ -1356,11 +1164,11 @@ static int intern_atom(display_t *display, strv_t name, u32 *atom)
 
 	cbuf_write_u8le(request, &off, X_INTERN_ATOM);
 	cbuf_write_u8le(request, &off, 0);
-	cbuf_write_u16le(request, &off, (u16)(X_INTERN_ATOM_REQUEST_SIZE / X11_PAD_SIZE + (name.len + pad4(name.len)) / X11_PAD_SIZE));
+	cbuf_write_u16le(request, &off, (u16)(X_INTERN_ATOM_REQUEST_SIZE / X11_PAD_SIZE + (name.len + x11_pad4(name.len)) / X11_PAD_SIZE));
 	cbuf_write_u16le(request, &off, name.len);
 	cbuf_write_u16le(request, &off, 0);
 	mem_copy(&request[off], sizeof(request) - off, name.data, name.len);
-	off += name.len + pad4(name.len);
+	off += name.len + x11_pad4(name.len);
 
 	display_x11_direct_t *dx11 = display->data;
 	if (sock_write_all(display->ss, dx11->sock, request, off) || sock_read_all(display->ss, dx11->sock, reply, sizeof(reply))) {
@@ -1456,7 +1264,7 @@ static int init_atoms(display_t *display)
 static int set_property_text(window_t *wnd, u32 property, u32 type, strv_t text)
 {
 	size_t data_size    = text.len;
-	size_t request_size = X_CHANGE_PROPERTY_HEADER_SIZE + data_size + pad4(data_size);
+	size_t request_size = X_CHANGE_PROPERTY_HEADER_SIZE + data_size + x11_pad4(data_size);
 
 	buf_t *request = request_buffer(wnd->display, request_size);
 	if (request == NULL) {
@@ -1608,228 +1416,6 @@ static int set_wm_protocols(window_t *wnd)
 	return 0;
 }
 
-static display_key_t key_from_keysym(u32 keysym)
-{
-	if (keysym >= 'a' && keysym <= 'z') {
-		return (display_key_t)(DISPLAY_KEY_A + keysym - 'a');
-	}
-
-	if (keysym >= 'A' && keysym <= 'Z') {
-		return (display_key_t)(DISPLAY_KEY_A + keysym - 'A');
-	}
-
-	if (keysym >= '0' && keysym <= '9') {
-		return (display_key_t)(DISPLAY_KEY_0 + keysym - '0');
-	}
-
-	if (keysym >= XK_KP_0 && keysym <= XK_KP_9) {
-		return (display_key_t)(DISPLAY_KEY_KP_0 + keysym - XK_KP_0);
-	}
-
-	if (keysym >= XK_F1 && keysym <= XK_F12) {
-		return (display_key_t)(DISPLAY_KEY_F1 + keysym - XK_F1);
-	}
-
-	switch (keysym) {
-	case XK_GRAVE:
-		return DISPLAY_KEY_GRAVE;
-	case XK_MINUS:
-		return DISPLAY_KEY_MINUS;
-	case XK_EQUAL:
-		return DISPLAY_KEY_EQUAL;
-	case XK_LEFT_BRACKET:
-		return DISPLAY_KEY_LEFT_BRACKET;
-	case XK_RIGHT_BRACKET:
-		return DISPLAY_KEY_RIGHT_BRACKET;
-	case XK_BACKSLASH:
-		return DISPLAY_KEY_BACKSLASH;
-	case XK_SEMICOLON:
-		return DISPLAY_KEY_SEMICOLON;
-	case XK_APOSTROPHE:
-		return DISPLAY_KEY_APOSTROPHE;
-	case XK_COMMA:
-		return DISPLAY_KEY_COMMA;
-	case XK_PERIOD:
-		return DISPLAY_KEY_PERIOD;
-	case XK_SLASH:
-		return DISPLAY_KEY_SLASH;
-	case ' ':
-		return DISPLAY_KEY_SPACE;
-	case XK_RETURN:
-		return DISPLAY_KEY_ENTER;
-	case XK_TAB:
-		return DISPLAY_KEY_TAB;
-	case XK_BACKSPACE:
-		return DISPLAY_KEY_BACKSPACE;
-	case XK_ESCAPE:
-		return DISPLAY_KEY_ESCAPE;
-	case XK_CAPS_LOCK:
-		return DISPLAY_KEY_CAPS_LOCK;
-	case XK_NUM_LOCK:
-		return DISPLAY_KEY_NUM_LOCK;
-	case XK_SCROLL_LOCK:
-		return DISPLAY_KEY_SCROLL_LOCK;
-	case XK_PAUSE:
-		return DISPLAY_KEY_PAUSE;
-	case XK_PRINT:
-		return DISPLAY_KEY_PRINT_SCREEN;
-	case XK_INSERT:
-		return DISPLAY_KEY_INSERT;
-	case XK_DELETE:
-		return DISPLAY_KEY_DELETE;
-	case XK_HOME:
-		return DISPLAY_KEY_HOME;
-	case XK_END:
-		return DISPLAY_KEY_END;
-	case XK_PAGE_UP:
-		return DISPLAY_KEY_PAGE_UP;
-	case XK_PAGE_DOWN:
-		return DISPLAY_KEY_PAGE_DOWN;
-	case XK_UP:
-		return DISPLAY_KEY_UP;
-	case XK_DOWN:
-		return DISPLAY_KEY_DOWN;
-	case XK_LEFT:
-		return DISPLAY_KEY_LEFT;
-	case XK_RIGHT:
-		return DISPLAY_KEY_RIGHT;
-	case XK_SHIFT_L:
-		return DISPLAY_KEY_LEFT_SHIFT;
-	case XK_SHIFT_R:
-		return DISPLAY_KEY_RIGHT_SHIFT;
-	case XK_CONTROL_L:
-		return DISPLAY_KEY_LEFT_CONTROL;
-	case XK_CONTROL_R:
-		return DISPLAY_KEY_RIGHT_CONTROL;
-	case XK_ALT_L:
-		return DISPLAY_KEY_LEFT_ALT;
-	case XK_ALT_R:
-		return DISPLAY_KEY_RIGHT_ALT;
-	case XK_SUPER_L:
-		return DISPLAY_KEY_LEFT_SUPER;
-	case XK_SUPER_R:
-		return DISPLAY_KEY_RIGHT_SUPER;
-	case XK_MENU:
-		return DISPLAY_KEY_MENU;
-	case XK_KP_INSERT:
-		return DISPLAY_KEY_KP_0;
-	case XK_KP_END:
-		return DISPLAY_KEY_KP_1;
-	case XK_KP_DOWN:
-		return DISPLAY_KEY_KP_2;
-	case XK_KP_PAGE_DOWN:
-		return DISPLAY_KEY_KP_3;
-	case XK_KP_LEFT:
-		return DISPLAY_KEY_KP_4;
-	case XK_KP_BEGIN:
-		return DISPLAY_KEY_KP_5;
-	case XK_KP_RIGHT:
-		return DISPLAY_KEY_KP_6;
-	case XK_KP_HOME:
-		return DISPLAY_KEY_KP_7;
-	case XK_KP_UP:
-		return DISPLAY_KEY_KP_8;
-	case XK_KP_PAGE_UP:
-		return DISPLAY_KEY_KP_9;
-	case XK_KP_DELETE:
-		return DISPLAY_KEY_KP_DECIMAL;
-	case XK_KP_DECIMAL:
-		return DISPLAY_KEY_KP_DECIMAL;
-	case XK_KP_DIVIDE:
-		return DISPLAY_KEY_KP_DIVIDE;
-	case XK_KP_MULTIPLY:
-		return DISPLAY_KEY_KP_MULTIPLY;
-	case XK_KP_SUBTRACT:
-		return DISPLAY_KEY_KP_SUBTRACT;
-	case XK_KP_ADD:
-		return DISPLAY_KEY_KP_ADD;
-	case XK_KP_ENTER:
-		return DISPLAY_KEY_KP_ENTER;
-	default:
-		return DISPLAY_KEY_UNKNOWN;
-	}
-}
-
-static display_modifier_t modifier_from_key(display_key_t key)
-{
-	switch (key) {
-	case DISPLAY_KEY_LEFT_SHIFT:
-	case DISPLAY_KEY_RIGHT_SHIFT:
-		return DISPLAY_MOD_SHIFT;
-	case DISPLAY_KEY_CAPS_LOCK:
-		return DISPLAY_MOD_CAPS_LOCK;
-	case DISPLAY_KEY_LEFT_CONTROL:
-	case DISPLAY_KEY_RIGHT_CONTROL:
-		return DISPLAY_MOD_CONTROL;
-	case DISPLAY_KEY_LEFT_ALT:
-	case DISPLAY_KEY_RIGHT_ALT:
-		return DISPLAY_MOD_ALT;
-	case DISPLAY_KEY_NUM_LOCK:
-		return DISPLAY_MOD_NUM_LOCK;
-	case DISPLAY_KEY_LEFT_SUPER:
-	case DISPLAY_KEY_RIGHT_SUPER:
-		return DISPLAY_MOD_SUPER;
-	default:
-		return DISPLAY_MOD_NONE;
-	}
-}
-
-static display_mouse_t mouse_from_button(u8 button)
-{
-	switch (button) {
-	case 1:
-		return DISPLAY_MOUSE_LEFT;
-	case 2:
-		return DISPLAY_MOUSE_MIDDLE;
-	case 3:
-		return DISPLAY_MOUSE_RIGHT;
-	case 4:
-		return DISPLAY_MOUSE_WHEEL_UP;
-	case 5:
-		return DISPLAY_MOUSE_WHEEL_DOWN;
-	case 6:
-		return DISPLAY_MOUSE_WHEEL_LEFT;
-	case 7:
-		return DISPLAY_MOUSE_WHEEL_RIGHT;
-	case 8:
-		return DISPLAY_MOUSE_BACK;
-	case 9:
-		return DISPLAY_MOUSE_FORWARD;
-	default:
-		log_warn("cdisplay", "display_x11_direct", NULL, "unknown X11 mouse button: %u", button);
-		return DISPLAY_MOUSE_UNKNOWN;
-	}
-}
-
-static display_modifier_t modifiers_from_state(display_x11_direct_t *dx11, u16 state)
-{
-	display_modifier_t modifiers = DISPLAY_MOD_NONE;
-
-	for (u8 i = 0; i < X_MODIFIER_COUNT; i++) {
-		if (state & (1u << i)) {
-			modifiers = (display_modifier_t)(modifiers | dx11->modifiers[i]);
-		}
-	}
-
-	if (state & X_MODIFIER_BUTTON1) {
-		modifiers = (display_modifier_t)(modifiers | DISPLAY_MOD_MOUSE_LEFT);
-	}
-	if (state & X_MODIFIER_BUTTON2) {
-		modifiers = (display_modifier_t)(modifiers | DISPLAY_MOD_MOUSE_MIDDLE);
-	}
-	if (state & X_MODIFIER_BUTTON3) {
-		modifiers = (display_modifier_t)(modifiers | DISPLAY_MOD_MOUSE_RIGHT);
-	}
-	if (state & X_MODIFIER_BUTTON4) {
-		modifiers = (display_modifier_t)(modifiers | DISPLAY_MOD_MOUSE_WHEEL_UP);
-	}
-	if (state & X_MODIFIER_BUTTON5) {
-		modifiers = (display_modifier_t)(modifiers | DISPLAY_MOD_MOUSE_WHEEL_DOWN);
-	}
-
-	return modifiers;
-}
-
 static int init_keys(display_t *display)
 {
 	display_x11_direct_t *dx11 = display->data;
@@ -1887,7 +1473,7 @@ static int init_keys(display_t *display)
 		for (u8 j = 0; j < keysyms_per_keycode; j++) {
 			u32 keysym;
 			cbuf_get_u32le(data, ((size_t)i * keysyms_per_keycode + j) * sizeof(u32), &keysym);
-			display_key_t key = key_from_keysym(keysym);
+			display_key_t key = x11_key_from_keysym(keysym);
 			if (key != DISPLAY_KEY_UNKNOWN) {
 				dx11->keys[dx11->min_keycode + i] = key;
 				break;
@@ -1953,7 +1539,7 @@ static int init_modifiers(display_t *display)
 			if (keycode == 0) {
 				continue;
 			}
-			dx11->modifiers[i] = (display_modifier_t)(dx11->modifiers[i] | modifier_from_key(dx11->keys[keycode]));
+			dx11->modifiers[i] = (display_modifier_t)(dx11->modifiers[i] | x11_modifier_from_key(dx11->keys[keycode]));
 		}
 	}
 
@@ -1986,7 +1572,7 @@ static int parse_x11_event(display_t *display, const u8 *data, display_event_t *
 		cbuf_read_u16le(data, &off, &event->y);
 		off = X_KEY_BUTTON_EVENT_STATE_OFFSET;
 		cbuf_read_u16le(data, &off, &modifiers);
-		event->modifiers = modifiers_from_state(dx11, modifiers);
+		event->modifiers = x11_modifiers_from_state(dx11->modifiers, modifiers);
 		if (type == X_EVENT_KEY_PRESS || type == X_EVENT_KEY_RELEASE) {
 			event->type = type == X_EVENT_KEY_PRESS ? DISPLAY_EVENT_KEY_DOWN : DISPLAY_EVENT_KEY_UP;
 			event->key  = dx11->keys[data[X_KEY_BUTTON_EVENT_DETAIL_OFFSET]];
@@ -1999,7 +1585,7 @@ static int parse_x11_event(display_t *display, const u8 *data, display_event_t *
 			}
 		} else {
 			event->type   = type == X_EVENT_BUTTON_PRESS ? DISPLAY_EVENT_MOUSE_DOWN : DISPLAY_EVENT_MOUSE_UP;
-			event->button = mouse_from_button(data[X_KEY_BUTTON_EVENT_DETAIL_OFFSET]);
+			event->button = x11_mouse_from_button(data[X_KEY_BUTTON_EVENT_DETAIL_OFFSET], "display_x11_direct");
 		}
 		return 0;
 	}
@@ -2013,7 +1599,7 @@ static int parse_x11_event(display_t *display, const u8 *data, display_event_t *
 		cbuf_read_u16le(data, &off, &event->y);
 		off = X_MOTION_EVENT_STATE_OFFSET;
 		cbuf_read_u16le(data, &off, &modifiers);
-		event->modifiers = modifiers_from_state(dx11, modifiers);
+		event->modifiers = x11_modifiers_from_state(dx11->modifiers, modifiers);
 		event->type	 = DISPLAY_EVENT_MOUSE_MOVE;
 		return 0;
 	}
