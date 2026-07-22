@@ -435,7 +435,8 @@ TEST(display_poll_events_returns_driver_result)
 
 	t_display_reset();
 	t_display_poll_events_ret = 1;
-	display_t display	  = {
+
+	display_t display = {
 		.drv = &t_display_driver,
 	};
 
@@ -488,7 +489,8 @@ TEST(display_wait_events_returns_driver_result)
 
 	t_display_reset();
 	t_display_wait_events_ret = 1;
-	display_t display	  = {
+
+	display_t display = {
 		.drv = &t_display_driver,
 	};
 

@@ -536,16 +536,16 @@ static void wayland_registry_global(void *data, wl_registry *registry, u32 name,
 		out->monitor.id	     = (u32)dwl->outputs.cnt - 1;
 		out->monitor.scale   = 100;
 		out->monitor.primary = out->monitor.id == 0;
-		out->output = (wl_output *)dwl->wl.proxy_marshal_constructor_versioned((wl_proxy *)registry,
-										       WL_REGISTRY_BIND,
-										       &wl_output_interface,
-										       bind_version(version, wl_output_interface.version),
-										       name,
-										       wl_output_interface.name,
-										       bind_version(version, wl_output_interface.version),
-										       NULL);
+		out->output	     = (wl_output *)dwl->wl.proxy_marshal_constructor_versioned((wl_proxy *)registry,
+											WL_REGISTRY_BIND,
+											&wl_output_interface,
+											bind_version(version, wl_output_interface.version),
+											name,
+											wl_output_interface.name,
+											bind_version(version, wl_output_interface.version),
+											NULL);
 		if (out->output == NULL ||
-		    dwl->wl.proxy_add_listener((wl_proxy *)out->output, (void (**)(void))&wayland_output_listener, out)) {
+		    dwl->wl.proxy_add_listener((wl_proxy *)out->output, (void (**)(void)) & wayland_output_listener, out)) {
 			log_error("cdisplay",
 				  "display_wayland_dynamic",
 				  NULL,
@@ -697,7 +697,7 @@ static int bind_globals(display_wayland_dynamic_t *dwl)
 		log_error("cdisplay", "display_wayland_dynamic", NULL, "failed to get Wayland registry");
 		return 1;
 	}
-	if (dwl->wl.proxy_add_listener((wl_proxy *)dwl->registry, (void (**)(void))&wayland_registry_listener, dwl)) {
+	if (dwl->wl.proxy_add_listener((wl_proxy *)dwl->registry, (void (**)(void)) & wayland_registry_listener, dwl)) {
 		log_error("cdisplay", "display_wayland_dynamic", NULL, "failed to listen to Wayland registry");
 		return 1;
 	}
@@ -743,7 +743,7 @@ static int bind_globals(display_wayland_dynamic_t *dwl)
 			  bind_version(dwl->wm_base_version, xdg_wm_base_interface.version));
 		return 1;
 	}
-	if (dwl->wl.proxy_add_listener((wl_proxy *)dwl->wm_base, (void (**)(void))&wayland_wm_base_listener, dwl)) {
+	if (dwl->wl.proxy_add_listener((wl_proxy *)dwl->wm_base, (void (**)(void)) & wayland_wm_base_listener, dwl)) {
 		log_error("cdisplay", "display_wayland_dynamic", NULL, "failed to listen to xdg_wm_base");
 		return 1;
 	}
@@ -943,7 +943,7 @@ static int create_xdg_toplevel(window_t *wnd)
 		log_error("cdisplay", "display_wayland_dynamic", NULL, "failed to create xdg_surface");
 		return 1;
 	}
-	if (dwl->wl.proxy_add_listener((wl_proxy *)wwayland->xdg_surface, (void (**)(void))&wayland_xdg_surface_listener, wnd)) {
+	if (dwl->wl.proxy_add_listener((wl_proxy *)wwayland->xdg_surface, (void (**)(void)) & wayland_xdg_surface_listener, wnd)) {
 		log_error("cdisplay", "display_wayland_dynamic", NULL, "failed to listen to xdg_surface");
 		return 1;
 	}
@@ -954,7 +954,7 @@ static int create_xdg_toplevel(window_t *wnd)
 		log_error("cdisplay", "display_wayland_dynamic", NULL, "failed to create xdg_toplevel");
 		return 1;
 	}
-	if (dwl->wl.proxy_add_listener((wl_proxy *)wwayland->xdg_toplevel, (void (**)(void))&wayland_xdg_toplevel_listener, wnd)) {
+	if (dwl->wl.proxy_add_listener((wl_proxy *)wwayland->xdg_toplevel, (void (**)(void)) & wayland_xdg_toplevel_listener, wnd)) {
 		log_error("cdisplay", "display_wayland_dynamic", NULL, "failed to listen to xdg_toplevel");
 		return 1;
 	}
@@ -996,7 +996,7 @@ static int display_wayland_dynamic_window_init(window_t *wnd, const window_confi
 	wwayland->width			   = config->width;
 	wwayland->height		   = config->height;
 	wwayland->surface		   = (wl_surface *)dwl->wl.proxy_marshal_constructor_versioned(
-		(wl_proxy *)dwl->compositor, WL_COMPOSITOR_CREATE_SURFACE, &wl_surface_interface, wl_surface_interface.version);
+		 (wl_proxy *)dwl->compositor, WL_COMPOSITOR_CREATE_SURFACE, &wl_surface_interface, wl_surface_interface.version);
 	if (wwayland->surface == NULL || create_xdg_toplevel(wnd)) {
 		destroy_xdg_toplevel(wnd);
 		if (wwayland->surface != NULL) {

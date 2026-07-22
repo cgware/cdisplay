@@ -1191,7 +1191,8 @@ TEST(display_x11_dynamic_monitors_returns_xrandr_metrics)
 	t_x11_reset();
 	t_x11.xrandr_outputs[0]	   = 0x77u;
 	t_x11.xrandr_monitor_count = 1;
-	t_x11.xrandr_monitors[0]   = (t_x11_monitor_info_t){
+
+	t_x11.xrandr_monitors[0] = (t_x11_monitor_info_t){
 		.name	 = 1,
 		.primary = 1,
 		.noutput = 1,
@@ -1272,7 +1273,8 @@ TEST(display_x11_dynamic_monitors_ignores_name_without_atom_symbol)
 
 	t_x11_reset();
 	t_x11.xrandr_monitor_count = 1;
-	t_x11.xrandr_monitors[0]   = (t_x11_monitor_info_t){
+
+	t_x11.xrandr_monitors[0] = (t_x11_monitor_info_t){
 		.name = 1,
 	};
 	t_x11_dynamic_env_init(&fs, &proc, &ss);
@@ -1304,7 +1306,8 @@ TEST(display_x11_dynamic_monitors_ignores_null_atom_name)
 
 	t_x11_reset();
 	t_x11.xrandr_monitor_count = 1;
-	t_x11.xrandr_monitors[0]   = (t_x11_monitor_info_t){
+
+	t_x11.xrandr_monitors[0] = (t_x11_monitor_info_t){
 		.name = 0,
 	};
 	t_x11_dynamic_env_init(&fs, &proc, &ss);

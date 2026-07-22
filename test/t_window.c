@@ -806,7 +806,8 @@ TEST(window_get_title_returns_driver_result)
 
 	t_window_reset();
 	t_window_get_title_ret = 1;
-	display_t display      = {
+
+	display_t display = {
 		.drv = &t_window_driver,
 	};
 	window_t window = {
@@ -990,7 +991,8 @@ TEST(window_get_position_returns_driver_result)
 
 	t_window_reset();
 	t_window_get_position_ret = 1;
-	display_t display	  = {
+
+	display_t display = {
 		.drv = &t_window_driver,
 	};
 	window_t window = {
@@ -1175,7 +1177,8 @@ TEST(window_get_size_returns_driver_result)
 
 	t_window_reset();
 	t_window_get_size_ret = 1;
-	display_t display     = {
+
+	display_t display = {
 		.drv = &t_window_driver,
 	};
 	window_t window = {
@@ -1293,7 +1296,8 @@ TEST(window_get_borderless_sets_borderless)
 
 	t_window_reset();
 	t_window_borderless = 1;
-	display_t display   = {
+
+	display_t display = {
 		.drv = &t_window_driver,
 	};
 	window_t window = {
@@ -1315,7 +1319,8 @@ TEST(window_get_borderless_returns_driver_result)
 
 	t_window_reset();
 	t_window_get_borderless_ret = 1;
-	display_t display	    = {
+
+	display_t display = {
 		.drv = &t_window_driver,
 	};
 	window_t window = {
@@ -1432,7 +1437,8 @@ TEST(window_get_fullscreen_sets_fullscreen)
 
 	t_window_reset();
 	t_window_fullscreen = 1;
-	display_t display   = {
+
+	display_t display = {
 		.drv = &t_window_driver,
 	};
 	window_t window = {
@@ -1454,7 +1460,8 @@ TEST(window_get_fullscreen_returns_driver_result)
 
 	t_window_reset();
 	t_window_get_fullscreen_ret = 1;
-	display_t display	    = {
+
+	display_t display = {
 		.drv = &t_window_driver,
 	};
 	window_t window = {
