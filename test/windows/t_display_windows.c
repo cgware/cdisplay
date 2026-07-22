@@ -933,6 +933,65 @@ TEST(display_windows_window_show_calls_user32)
 	END;
 }
 
+TEST(display_windows_wndproc_resize_emits_event)
+{
+	START;
+
+	t_windows_reset();
+	fs_t fs	    = {0};
+	proc_t proc = {0};
+	sock_t ss   = {0};
+	t_windows_env_init(&fs, &proc, &ss);
+	display_t display = {0};
+	window_t window	  = {0};
+
+	EXPECT_EQ(t_windows_open(&display, &window, &fs, &proc, &ss), 0);
+	EXPECT_NOT_NULL(t_windows.wndproc);
+
+	t_windows.wndproc(t_windows.hwnd, WM_SIZE, 0, t_windows_point(800, 600));
+
+	EXPECT_EQ(t_windows_event_calls, 1);
+	EXPECT_EQ(t_windows_event.type, DISPLAY_EVENT_RESIZE);
+	EXPECT_EQ(t_windows_event.window, (u32)(uintptr_t)t_windows.hwnd);
+	EXPECT_EQ(t_windows_event.width, 800);
+	EXPECT_EQ(t_windows_event.height, 600);
+
+	window_free(&window);
+	display_free(&display);
+	t_windows_env_free(&fs, &proc, &ss);
+
+	END;
+}
+
+TEST(display_windows_poll_event_returns_resize_once)
+{
+	START;
+
+	t_windows_reset();
+	fs_t fs	    = {0};
+	proc_t proc = {0};
+	sock_t ss   = {0};
+	t_windows_env_init(&fs, &proc, &ss);
+	display_t display = {0};
+	window_t window	  = {0};
+
+	EXPECT_EQ(t_windows_open(&display, &window, &fs, &proc, &ss), 0);
+	t_windows_push(t_windows.hwnd, WM_SIZE, 0, t_windows_point(800, 600));
+
+	EXPECT_EQ(display_poll_events(&display), 0);
+	EXPECT_EQ(t_windows_event_calls, 1);
+	EXPECT_EQ(t_windows_event.type, DISPLAY_EVENT_RESIZE);
+	EXPECT_EQ(t_windows_event.width, 800);
+	EXPECT_EQ(t_windows_event.height, 600);
+	EXPECT_EQ(t_windows.dispatch_message_calls, 1);
+
+	window_free(&window);
+	display_free(&display);
+	t_windows_env_free(&fs, &proc, &ss);
+
+	END;
+}
+
 TEST(display_windows_poll_event_returns_key)
 {
 	START;
@@ -1246,6 +1305,8 @@ STEST(display_windows)
 	RUN(display_windows_window_set_fullscreen_uses_monitor);
 	RUN(display_windows_window_get_fullscreen_returns_fullscreen);
 	RUN(display_windows_window_show_calls_user32);
+	RUN(display_windows_wndproc_resize_emits_event);
+	RUN(display_windows_poll_event_returns_resize_once);
 	RUN(display_windows_poll_event_returns_key);
 	RUN(display_windows_poll_event_returns_mouse_move);
 	RUN(display_windows_poll_event_returns_mouse_button);

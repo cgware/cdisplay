@@ -128,6 +128,18 @@ static void display_windows_wndproc_emit_close(display_t *display, HWND hwnd)
 	display_windows_emit_event(display, &event);
 }
 
+static void display_windows_wndproc_emit_resize(display_t *display, HWND hwnd, LPARAM lparam)
+{
+	display_event_t event = {
+		.type	= DISPLAY_EVENT_RESIZE,
+		.window = (u32)(uintptr_t)hwnd,
+		.width	= LOWORD(lparam),
+		.height = HIWORD(lparam),
+	};
+
+	display_windows_emit_event(display, &event);
+}
+
 static LRESULT CALLBACK display_windows_wndproc(HWND hwnd, UINT message, WPARAM wparam, LPARAM lparam)
 {
 	display_windows_t *dwindows = NULL;
@@ -155,6 +167,12 @@ static LRESULT CALLBACK display_windows_wndproc(HWND hwnd, UINT message, WPARAM 
 			display_windows_wndproc_emit_close(wnd->display, hwnd);
 		}
 		return 0;
+	}
+	if (dwindows != NULL && message == WM_SIZE) {
+		window_t *wnd = (window_t *)dwindows->GetWindowLongPtrA(hwnd, GWLP_USERDATA);
+		if (wnd != NULL) {
+			display_windows_wndproc_emit_resize(wnd->display, hwnd, lparam);
+		}
 	}
 
 	if (message == WM_NCDESTROY && dwindows != NULL && dwindows->SetWindowLongPtrA != NULL) {
